@@ -1,0 +1,2442 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, viewport-fit=cover" />
+<meta name="theme-color" content="#1B1230" />
+<meta name="mobile-web-app-capable" content="yes" />
+<meta name="apple-mobile-web-app-capable" content="yes" />
+<title>Viewfinder</title>
+<link rel="manifest" href="./manifest.json" />
+<link rel="icon" type="image/png" sizes="32x32" href="./icons/favicon-32.png" />
+<link rel="apple-touch-icon" href="./icons/icon-180.png" />
+<meta name="apple-mobile-web-app-title" content="Viewfinder" />
+<style>
+  :root{
+    --bg:#1B1230; --card:rgba(255,255,255,0.05); --card2:rgba(255,255,255,0.08); --border:rgba(255,255,255,0.13);
+    --text:#F4F1EA; --muted:#B8B4C9; --muted2:#8B899C;
+    --coral:#FF5D73; --lime:#D4F14C; --amber:#FFB020; --blue:#4C6EF5; --green:#3ECF8E;
+  }
+  *{box-sizing:border-box;}
+  html,body{margin:0;padding:0;background:var(--bg);color:var(--text);font-family:-apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif;}
+  button{font-family:inherit;cursor:pointer;border:none;background:none;color:inherit;}
+  input,textarea,select{font-family:inherit;color:inherit;background:transparent;}
+  ::-webkit-scrollbar{width:6px;height:6px}
+  ::-webkit-scrollbar-thumb{background:#4C3D66;border-radius:3px}
+
+  header{position:sticky;top:0;z-index:10;background:rgba(27,18,48,0.97);border-bottom:1px solid var(--border);
+    padding:14px 18px;display:flex;align-items:center;justify-content:space-between;}
+  .brand{display:flex;align-items:center;gap:8px;font-weight:700;font-size:18px;letter-spacing:-0.02em;}
+  .dot-ring{width:26px;height:26px;border-radius:50%;border:2px solid var(--coral);display:flex;align-items:center;justify-content:center;}
+  .dot-ring i{width:8px;height:8px;border-radius:50%;background:var(--lime);}
+  .count{font-size:12px;color:var(--muted);}
+
+  nav{display:flex;gap:6px;padding:12px 16px 0;overflow-x:auto;}
+  nav button{padding:8px 14px;border-radius:999px;font-size:13px;white-space:nowrap;color:var(--muted);transition:background .15s;}
+  nav button.active{background:var(--coral);color:var(--bg);font-weight:600;}
+  nav button:not(.active):hover{background:rgba(255,255,255,0.06);}
+
+  main{padding:16px;padding-bottom:80px;max-width:560px;margin:0 auto;}
+  .hint{text-align:center;color:var(--muted2);font-size:14px;margin-top:32px;}
+  .label{font-size:11px;text-transform:uppercase;letter-spacing:.06em;color:var(--muted2);margin-bottom:8px;}
+  .sublabel{font-size:12px;color:var(--muted2);margin:-6px 0 14px;line-height:1.5;}
+  h2.section{font-size:16px;font-weight:700;margin:26px 0 4px;padding-top:14px;border-top:1px solid var(--border);}
+  h2.section:first-child{margin-top:0;padding-top:0;border-top:none;}
+
+  .upload-zone{width:100%;border:2px dashed rgba(255,255,255,0.2);border-radius:18px;padding:28px 10px;
+    display:flex;flex-direction:column;align-items:center;gap:8px;color:var(--muted);margin-bottom:16px;transition:.15s;}
+  .upload-zone:hover{border-color:rgba(255,93,115,0.6);color:var(--coral);}
+
+  .grid2{display:grid;grid-template-columns:1fr 1fr;gap:12px;}
+  .thumb{position:relative;aspect-ratio:1/1;border-radius:12px;overflow:hidden;cursor:pointer;}
+  .thumb img{width:100%;height:100%;object-fit:cover;display:block;}
+  .thumb .del,.thumb .fav{position:absolute;top:6px;background:rgba(0,0,0,0.6);border-radius:999px;padding:6px;opacity:0;transition:.15s;}
+  .thumb .del{right:6px;} .thumb .fav{left:6px;}
+  .thumb:hover .del,.thumb:hover .fav{opacity:1;}
+  .thumb .fav.active{opacity:1;color:var(--amber);}
+  .thumb .tags{position:absolute;bottom:0;left:0;right:0;background:linear-gradient(transparent,rgba(0,0,0,0.75));
+    padding:14px 6px 5px;font-size:10px;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+
+  .vf{position:relative;}
+  .vf .corner{position:absolute;width:20px;height:20px;border-color:var(--amber);}
+  .vf .tl{top:0;left:0;border-top:2px solid;border-left:2px solid;border-top-left-radius:4px;}
+  .vf .tr{top:0;right:0;border-top:2px solid;border-right:2px solid;border-top-right-radius:4px;}
+  .vf .bl{bottom:0;left:0;border-bottom:2px solid;border-left:2px solid;border-bottom-left-radius:4px;}
+  .vf .br{bottom:0;right:0;border-bottom:2px solid;border-right:2px solid;border-bottom-right-radius:4px;}
+
+  .pillrow{display:flex;gap:8px;flex-wrap:wrap;}
+  .pill{padding:7px 14px;border-radius:999px;font-size:13px;border:1px solid rgba(255,255,255,0.15);color:var(--muted);}
+  .pill.active{background:var(--lime);color:var(--bg);border-color:var(--lime);font-weight:600;}
+  .badge{display:inline-block;font-size:10px;padding:2px 8px;border-radius:999px;background:rgba(76,110,245,0.2);color:#8FA6FF;}
+
+  textarea,input[type=text],select{width:100%;background:var(--card);border:1px solid var(--border);border-radius:10px;
+    padding:9px 12px;font-size:14px;outline:none;resize:none;}
+  textarea:focus,input[type=text]:focus,select:focus{border-color:var(--coral);}
+  input[type=range]{width:100%;accent-color:var(--coral);}
+  input[type=checkbox]{width:16px;height:16px;accent-color:var(--coral);}
+
+  .btn-primary{width:100%;background:var(--coral);color:var(--bg);font-weight:600;border-radius:999px;padding:13px;
+    display:flex;align-items:center;justify-content:center;gap:8px;font-size:15px;}
+  .btn-primary:hover{filter:brightness(1.08);}
+  .btn-secondary{width:100%;background:rgba(76,110,245,0.18);color:#8FA6FF;font-weight:600;border-radius:999px;padding:10px;
+    display:flex;align-items:center;justify-content:center;gap:8px;font-size:14px;}
+  .btn-small{background:var(--card);border-radius:8px;padding:6px 10px;font-size:12px;display:inline-flex;align-items:center;gap:5px;}
+  .btn-ghost{flex:1;background:var(--card);border-radius:999px;padding:9px;font-size:13px;
+    display:flex;align-items:center;justify-content:center;gap:6px;}
+  .btn-ghost.active{background:var(--lime);color:var(--bg);font-weight:600;}
+
+  .card{background:var(--card);border:1px solid var(--border);border-radius:14px;padding:14px;}
+  .module-card{background:var(--card);border:1px solid var(--border);border-radius:12px;padding:12px;margin-bottom:8px;}
+  .module-head{display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:6px;}
+  .module-title{font-weight:600;font-size:14px;}
+  .module-cat{font-size:10px;color:var(--muted2);}
+  .module-content{font-size:13px;color:var(--muted);white-space:pre-wrap;line-height:1.5;}
+
+  .history-card{background:var(--card);border:1px solid var(--border);border-radius:12px;padding:12px;margin-bottom:10px;}
+  .history-top{display:flex;justify-content:space-between;align-items:center;font-size:12px;color:var(--muted2);margin-bottom:6px;}
+
+  .slider-block{margin-bottom:14px;}
+  .slider-block .row{display:flex;justify-content:space-between;font-size:12px;color:var(--muted);margin-bottom:4px;}
+  .field{margin-bottom:12px;}
+  .field label{display:block;font-size:12px;color:var(--muted);margin-bottom:5px;}
+
+  canvas{width:100%;height:auto;display:block;background:#000;border-radius:12px;touch-action:none;cursor:crosshair;}
+  pre{white-space:pre-wrap;font-size:12px;color:var(--muted);max-height:240px;overflow-y:auto;margin:0;font-family:ui-monospace,monospace;}
+  svg{display:inline-block;vertical-align:middle;flex-shrink:0;}
+</style>
+</head>
+<body>
+<header>
+  <div class="brand"><span class="dot-ring"><i></i></span><span>Viewfinder</span></div>
+  <span class="count" id="imgCount">0 visuel</span>
+</header>
+<nav id="nav"></nav>
+<main id="main"></main>
+
+<script>
+/* ============================================================
+   STOCKAGE LOCAL
+============================================================ */
+const LS = {
+  get(key, fallback){ try{ const v = localStorage.getItem(key); return v===null? fallback : JSON.parse(v);}catch(e){return fallback;} },
+  set(key, val){ try{ localStorage.setItem(key, JSON.stringify(val)); }catch(e){ console.error(e); } }
+};
+const uid = () => `${Date.now()}-${Math.random().toString(36).slice(2,8)}`;
+const nowStr = () => new Date().toLocaleDateString("fr-FR",{day:"2-digit",month:"2-digit",year:"numeric"});
+
+/* ============================================================
+   CONFIGURATION — plateformes, formats, catégories de connaissance
+============================================================ */
+const ASPECTS = {
+  "1:1": { w: 1080, h: 1080 },
+  "4:5": { w: 1080, h: 1350 },
+  "4:3": { w: 1200, h: 900 },
+  "9:16": { w: 1080, h: 1920 },
+  "16:9": { w: 1920, h: 1080 },
+};
+
+const PLATFORMS = ["Instagram","Facebook","Google Business","Article Blog Wix"];
+
+const PLATFORM_ASPECT = { "Instagram":"4:5", "Facebook":"1:1", "Google Business":"4:3", "Article Blog Wix":"16:9" };
+const PLATFORM_OVERLAY = { "Instagram":"léger", "Facebook":"léger", "Google Business":"aucun", "Article Blog Wix":"aucun" };
+const PLATFORM_MAXCHARS = { "Instagram":40, "Facebook":50, "Google Business":0, "Article Blog Wix":0 };
+const PLATFORM_NOTE = {
+  "Instagram": "Format portrait, texte léger toléré sur l'image (accroche courte).",
+  "Facebook": "Format carré, texte léger toléré sur l'image.",
+  "Google Business": "Aucun texte sur l'image (recommandation Google) — le texte porte tout le SEO.",
+  "Article Blog Wix": "Image de couverture épurée, sans texte incrusté — le titre est géré par la mise en page Wix.",
+};
+const TEXT_STRUCTURE = {
+  "Instagram": "Réponds avec :\n1) Légende (2 à 4 phrases)\n2) 5 à 8 hashtags\n3) Une suggestion d'alt text (accessibilité)",
+  "Facebook": "Réponds avec :\n1) Texte du post\n2) 2 à 4 hashtags optionnels\n3) Une suggestion d'alt text",
+  "Google Business": "Réponds avec :\n1) Texte du post (150 à 300 mots, sans hashtags, mots-clés SEO locaux intégrés naturellement)\n2) Un bouton d'action suggéré (Réserver, En savoir plus, Acheter...)\n3) Un alt text descriptif SEO pour l'image",
+  "Article Blog Wix": "Réponds avec :\n1) Titre SEO (H1)\n2) Meta description (155 caractères max)\n3) Slug d'URL suggéré\n4) Introduction\n5) 2 à 3 sections avec sous-titres H2\n6) Conclusion avec appel à l'action\n7) 5 mots-clés SEO\n8) Catégorie suggérée",
+};
+/* MASTER SDZ et CODEX SDZ sont les documents de plus haute autorité : toujours injectés,
+   quelle que soit la plateforme ou la mission — c'est le socle non négociable de la marque. */
+const ALWAYS_ON_CATEGORIES = ["MASTER SDZ","CODEX SDZ"];
+
+const TEXT_MODULE_MAP = {
+  "Instagram": ["Univers de marque","Règles rédactionnelles","Instagram","Interdits","À ne jamais faire","À faire",
+    "Vocabulaire autorisé","Vocabulaire interdit","Exemples excellents","Exemples validés","Exemples refusés",
+    "Erreurs fréquentes","Leçons apprises","Prestations","Offres","CTA","Psychologie client","Personae",
+    "Objections clients","Saisonnalité","Missions"],
+  "Facebook": ["Univers de marque","Règles rédactionnelles","Facebook","Interdits","À ne jamais faire","À faire",
+    "Vocabulaire autorisé","Vocabulaire interdit","Exemples excellents","Exemples validés","Exemples refusés",
+    "Erreurs fréquentes","Leçons apprises","Prestations","Offres","CTA","Psychologie client","Personae",
+    "Objections clients","Saisonnalité","Missions"],
+  "Google Business": ["SEO","Google Business","Prestations","Offres","Règles rédactionnelles","Interdits",
+    "À ne jamais faire","À faire","Vocabulaire autorisé","Vocabulaire interdit","Erreurs fréquentes","Leçons apprises",
+    "CTA","Psychologie client","Objections clients","Saisonnalité","Missions"],
+  "Article Blog Wix": ["SEO","Blog Wix","Prestations","Offres","Règles rédactionnelles","Glossaire","Interdits",
+    "À ne jamais faire","À faire","Vocabulaire autorisé","Vocabulaire interdit","Erreurs fréquentes","Leçons apprises",
+    "CTA","Psychologie client","Personae","Objections clients","Saisonnalité","Missions"],
+};
+/* Story : image uniquement dans le mode campagne, donc pas de map texte — elle ne charge jamais SEO. */
+const IMAGE_MODULE_CATS = ["Charte graphique","Direction artistique","Logo","Palette","Typographies",
+  "Exemples validés","Exemples refusés","Bibliothèque d'idées"];
+/* "Interdits" / "À ne jamais faire" / "À faire" sont volontairement exclus du prompt image : ce sont des
+   règles rédactionnelles déjà couvertes par le prompt texte, et l'image dispose de son propre garde-fou
+   permanent (SAFETY_GUARDRAIL). Les injecter aussi ici ne ferait que dupliquer le même contenu dans les
+   deux prompts sans rien apporter — exactement ce que le moteur doit désormais éviter. */
+const CATEGORIES = ["MASTER SDZ","CODEX SDZ","Univers de marque","Direction artistique","Charte graphique","Logo","Palette","Typographies",
+  "Prestations","Offres","SEO","Google Business","Instagram","Facebook","Stories","Blog Wix",
+  "Psychologie client","Personae","Missions","CTA","Objections clients","Saisonnalité",
+  "Vocabulaire autorisé","Vocabulaire interdit","À faire","À ne jamais faire","Interdits","Règles rédactionnelles",
+  "Glossaire","Erreurs fréquentes","Décisions importantes","Exemples excellents","Exemples validés","Exemples refusés",
+  "Leçons apprises","Bibliothèque d'idées"];
+/* Bibliothèque de styles et Base de prompts restent des systèmes dédiés (onglets Styles / Base de prompts)
+   plutôt que des catégories de modules texte, pour éviter de dupliquer une structure qui existe déjà. */
+
+/* Ordre de priorité du moteur de contexte : en cas de budget limité, les catégories en tête
+   sont toujours conservées en premier, les catégories en fin de liste sont les premières sacrifiées. */
+const HIERARCHY_ORDER = ["MASTER SDZ","CODEX SDZ","Direction artistique","Charte graphique","Logo","Palette","Typographies",
+  "Univers de marque","Prestations","Offres","Missions",
+  "Instagram","Facebook","Google Business","Stories","Blog Wix","SEO","CTA",
+  "Psychologie client","Personae","Objections clients","Saisonnalité",
+  "Vocabulaire autorisé","Vocabulaire interdit","À faire","À ne jamais faire","Interdits",
+  "Règles rédactionnelles","Glossaire","Erreurs fréquentes","Décisions importantes",
+  "Exemples excellents","Exemples validés","Exemples refusés","Leçons apprises","Bibliothèque d'idées"];
+
+/* Budget de contexte : au-delà de ce volume de caractères, le moteur arrête d'ajouter des modules
+   (en respectant la hiérarchie ci-dessus) plutôt que de tout concaténer. Qualité > quantité. */
+/* Niveau de détail adaptatif (étape 7) : Instagram reste court et percutant, un article de blog
+   a droit à beaucoup plus d'espace pour un vrai développement SEO. */
+const PLATFORM_TEXT_BUDGET = {
+  "Instagram": 2600,
+  "Facebook": 3000,
+  "Google Business": 3200,
+  "Article Blog Wix": 6000,
+};
+const TEXT_CONTEXT_BUDGET = 4500; // valeur de repli si la plateforme n'a pas de budget dédié
+const IMAGE_CONTEXT_BUDGET = 2600;
+
+const DEFAULT_MODULES = [
+  { id: uid(), category:"Charte graphique", title:"Ton & identité visuelle", enabled:true, content:
+`Ton de marque : chaleureux, direct, jamais ampoulé. On tutoie la communauté.
+Style visuel : contrastes marqués, couleurs vives mais jamais criardes, pas de filtres "vieillis".
+Signature : toujours mentionner discrètement le nom/handle, jamais en majuscules complètes.` },
+  { id: uid(), category:"Interdits", title:"Interdits généraux", enabled:true, content:
+`Ne jamais inventer de chiffres, dates ou faits non fournis.
+Ne jamais utiliser plus de 3 emojis par post.
+Ne jamais copier une légende ou un visuel existant : contenu original uniquement.
+Pas de superlatifs vides ("le meilleur", "incroyable" sans preuve).` },
+  { id: uid(), category:"Règles rédactionnelles", title:"Structure générale", enabled:true, content:
+"Toujours proposer un appel à l'action concret à la fin du texte. Adapter longueur et structure à la plateforme visée." },
+  { id: uid(), category:"Direction artistique", title:"Style par défaut", enabled:true, content:
+"Photographie naturelle, lumière douce, couleurs chaleureuses, compositions épurées, peu d'éléments parasites." },
+  { id: uid(), category:"Univers de marque", title:"Présentation de la marque", enabled:true, content:
+"À compléter : histoire, valeurs, ton, prestations phares, ce qui distingue la marque. Utilise le bouton d'import ChatGPT pour le remplir automatiquement." },
+];
+
+const DEFAULT_DA = {
+  objectif:"", emotion:"", ambiance:"", luxe:5, creativite:5, sobriete:5, intensite:5,
+  stylePhoto:"", styleGraphique:"", palette:"", textures:"", composition:"", realisme:"Réaliste",
+  eclairage:"", presenceTexte:false, presenceLogo:false, cible:"",
+  angle:"", distance:"", profondeurChamp:"", contraste:"", elementsInterdits:"",
+};
+
+/* ---------- Missions : chaque mission oriente réseau, ton, CTA, structure ---------- */
+const MISSIONS = {
+  "Remplir le planning": { reseau:"Google Business", ton:"Direct, incitatif", cta:"Réserver maintenant", structure:"Urgence douce + disponibilité + CTA fort" },
+  "Promouvoir une prestation": { reseau:"Instagram", ton:"Descriptif, sensoriel", cta:"Découvrir la prestation", structure:"Bénéfice concret + expérience vécue + CTA" },
+  "Vendre des bons cadeaux": { reseau:"Facebook", ton:"Chaleureux, festif", cta:"Offrir un bon cadeau", structure:"Occasion + émotion du cadeau + CTA achat" },
+  "Améliorer le SEO": { reseau:"Article Blog Wix", ton:"Informatif, expert", cta:"En savoir plus", structure:"Article long, mots-clés, structure H2, maillage" },
+  "Humaniser le cabinet": { reseau:"Instagram", ton:"Authentique, personnel", cta:"Venez nous rencontrer", structure:"Storytelling humain, coulisses, visage de la marque" },
+  "Rassurer les nouveaux clients": { reseau:"Google Business", ton:"Rassurant, professionnel", cta:"Prendre rendez-vous", structure:"Preuve de sérieux + clarté du déroulé + CTA doux" },
+  "Fidéliser": { reseau:"Facebook", ton:"Complice, reconnaissant", cta:"Merci de votre fidélité", structure:"Remerciement + avantage fidélité + CTA" },
+  "Annoncer une actualité": { reseau:"Instagram", ton:"Enthousiaste", cta:"Découvrir la nouveauté", structure:"Annonce + détails concrets + CTA" },
+  "Faire découvrir un soin": { reseau:"Instagram", ton:"Sensoriel, pédagogique", cta:"Réserver ce soin", structure:"Explication accessible + bénéfices + CTA" },
+  "Créer une campagne complète": { reseau:"Toutes", ton:"Cohérent sur toutes les plateformes", cta:"Adapté à chaque plateforme", structure:"Déclinaison complète coordonnée" },
+};
+
+/* ---------- Bibliothèque de styles visuels réutilisables ---------- */
+const DEFAULT_STYLES = [
+  { id: uid(), name:"Luxe Silencieux", description:"Épure, matières nobles, palette neutre, lumière douce, silence visuel, aucun élément superflu." },
+  { id: uid(), name:"Massage Zébré", description:"Signature de la maison : chaleureux, sensoriel, ambiance feutrée, tons chauds, présence discrète du motif zébré." },
+  { id: uid(), name:"Reiki", description:"Ambiance apaisante et éthérée, lumière douce et diffuse, palette claire, sensation d'énergie et de calme." },
+  { id: uid(), name:"Biorésonance", description:"Esthétique clinique et rassurante, précision technologique, tons neutres et lumineux." },
+  { id: uid(), name:"PSIO", description:"Ambiance immersive, lumière colorée douce, sensation de détente technologique et sensorielle." },
+  { id: uid(), name:"Google Business", description:"Visuel clair et net, sans texte incrusté, lisible en petit format, orienté confiance et sérieux." },
+  { id: uid(), name:"Instagram Premium", description:"Esthétique soignée et désirable, cadrage travaillé, légère touche éditoriale, pensé pour le feed." },
+  { id: uid(), name:"Story", description:"Format vertical immersif, composition simple et lisible en un coup d'œil, énergie plus spontanée." },
+  { id: uid(), name:"Blog / Wix", description:"Image de couverture épurée, sans texte, laissant la place au titre géré par la mise en page du site." },
+  { id: uid(), name:"Saisonnier", description:"Ambiance adaptée à la saison en cours, éléments visuels évocateurs, tons cohérents avec la période." },
+  { id: uid(), name:"Bons cadeaux", description:"Ambiance festive et généreuse, packaging soigné, tons chauds et précieux." },
+];
+
+/* ============================================================
+   NETTOYAGE UNIQUE — purge ciblée par nom exact, jamais un reset global.
+   S'exécute une seule fois (verrou vf-cleanup-2026-07) puis ne touche plus rien.
+   Ne supprime QUE les entrées explicitement listées ci-dessous ; tout le reste
+   (styles SDZ, modules importés, historique, audits, réglages) reste intact.
+============================================================ */
+(function runOneTimeCleanup(){
+  const FLAG = "vf-cleanup-2026-07";
+  if(LS.get(FLAG, false)) return;
+
+  const DELETE_STYLE_NAMES = ["noir & or","editorial","éditorial","cinématique","refuge",
+    "énergétique","energetique","nature","montagne","été","ete","mystique premium"];
+  try{
+    const styles = LS.get("vf-styles", null);
+    if(Array.isArray(styles)){
+      const seen = new Set();
+      const cleaned = [];
+      styles.forEach(s=>{
+        const norm = (s.name||"").trim().toLowerCase();
+        if(DELETE_STYLE_NAMES.includes(norm)) return;      // style à supprimer explicitement
+        if(seen.has(norm)) return;                          // doublon (ex: "Luxe silencieux" en double)
+        seen.add(norm);
+        cleaned.push(s);
+      });
+      if(cleaned.length !== styles.length) LS.set("vf-styles", cleaned);
+    }
+  }catch(e){ console.error("Nettoyage styles échoué :", e); }
+
+  const DELETE_MODULES = [
+    { category:"Charte graphique", title:"Ton & identité visuelle" },
+    { category:"Interdits", title:"Interdits généraux" },
+    { category:"Règles rédactionnelles", title:"Structure générale" },
+    { category:"Direction artistique", title:"Style par défaut" },
+    { category:"Univers de marque", title:"Présentation de la marque" },
+  ];
+  try{
+    const modules = LS.get("vf-modules", null);
+    if(Array.isArray(modules)){
+      const cleaned = modules.filter(m =>
+        !DELETE_MODULES.some(d => d.category===m.category && d.title===m.title)
+      );
+      if(cleaned.length !== modules.length) LS.set("vf-modules", cleaned);
+    }
+  }catch(e){ console.error("Nettoyage modules échoué :", e); }
+
+  LS.set(FLAG, true);
+})();
+
+/* ============================================================
+   ÉTAT
+============================================================ */
+const state = {
+  tab: "accueil",
+  images: LS.get("vf-images", []),
+  librarySearch: "",
+  libraryAssetFilter: false,
+  selectedId: null,
+  aspect: "1:1",
+  filters: { brightness: 100, contrast: 105, saturate: 110, grayscale: 0 },
+  overlay: { text: "", x: 50, y: 85, size: 56, color: "#F4F1EA" },
+  logoOverlay: { assetId: "", x: 50, y: 88, size: 16 },
+  modules: LS.get("vf-modules", DEFAULT_MODULES),
+  newModule: { category: CATEGORIES[0], title:"", content:"" },
+  moduleFilter: "Toutes",
+  configPrompt: "", configPasted: "",
+  da: LS.get("vf-da", DEFAULT_DA),
+  network: "Instagram",
+  mission: "",
+  prestationName: "",
+  styleId: "",
+  topic: "",
+  imagePrompt: "", textPrompt: "",
+  textPromptOptimized: null, imagePromptOptimized: null,
+  textPasted: "",
+  feedbackComment: "",
+  qualityScores: { charte:7, coherence:7, adaptation:7, originalite:7, clarte:7, conversion:7 },
+  styles: LS.get("vf-styles", DEFAULT_STYLES),
+  campaign: LS.get("vf-campaign", []),
+  viewMode: "expert",
+  apiProviders: LS.get("vf-api-providers", []),
+  selectedProviderId: "",
+  lab: LS.get("vf-lab", []),
+  labFilter: "Toutes",
+  includeApiKeysInExport: false,
+  productionModes: LS.get("vf-modes", []),
+  history: LS.get("vf-history", []),
+  historyFilter: "Toutes",
+  lastGenerated: null,
+  auditPrompt: "",
+  auditPasted: "",
+  auditHistory: LS.get("vf-audit", []),
+  auditFilter: "Toutes",
+};
+state.selectedId = state.images[0] ? state.images[0].id : null;
+(function setDefaultStyle(){
+  const luxe = state.styles.find(s => (s.name||"").trim().toLowerCase()==="luxe silencieux");
+  if(luxe) state.styleId = luxe.id;
+})();
+
+/* ============================================================
+   HELPERS DOM
+============================================================ */
+function el(tag, attrs={}, children=[]){
+  const e = document.createElement(tag);
+  for(const [k,v] of Object.entries(attrs)){
+    if(k==="class") e.className = v;
+    else if(k==="html") e.innerHTML = v;
+    else if(k.startsWith("on")) e.addEventListener(k.slice(2), v);
+    else if(k==="checked"){ e.checked = v; }
+    else e.setAttribute(k, v);
+  }
+  (Array.isArray(children)?children:[children]).forEach(c=>{
+    if(c==null) return;
+    e.appendChild(typeof c === "string" ? document.createTextNode(c) : c);
+  });
+  return e;
+}
+function svgIcon(pathHtml, size=16){
+  const s = document.createElementNS("http://www.w3.org/2000/svg","svg");
+  s.setAttribute("viewBox","0 0 24 24"); s.setAttribute("width",size); s.setAttribute("height",size);
+  s.setAttribute("fill","none"); s.setAttribute("stroke","currentColor"); s.setAttribute("stroke-width","2");
+  s.setAttribute("stroke-linecap","round"); s.setAttribute("stroke-linejoin","round");
+  s.innerHTML = pathHtml;
+  return s;
+}
+const ICONS = {
+  upload: '<path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/>',
+  trash: '<polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/><path d="M10 11v6"/><path d="M14 11v6"/>',
+  download: '<path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/>',
+  x: '<line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>',
+  plus: '<line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/>',
+  copy: '<rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/>',
+  star: '<polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/>',
+  sparkles: '<path d="M12 3v4M12 17v4M3 12h4M17 12h4M5.6 5.6l2.8 2.8M15.6 15.6l2.8 2.8M18.4 5.6l-2.8 2.8M8.4 15.6l-2.8 2.8"/>',
+  wand: '<path d="M15 4V2M15 16v-2M8 9h2M20 9h2M17.8 11.8 19 13M15 9h0M17.8 6.2 19 5M3 21l9-9M12.2 6.2 11 5"/>',
+  down: '<path d="M12 5v14M19 12l-7 7-7-7"/>',
+};
+function vfWrap(child){
+  return el("div", { class:"vf" }, [
+    el("div",{class:"corner tl"}), el("div",{class:"corner tr"}),
+    el("div",{class:"corner bl"}), el("div",{class:"corner br"}), child
+  ]);
+}
+function copyBtnFor(getText){
+  const btn = el("button",{class:"btn-secondary", style:"margin:10px 0;"}, [svgIcon(ICONS.copy,14), el("span",{},"Copier")]);
+  btn.addEventListener("click", async ()=>{
+    try{ await navigator.clipboard.writeText(getText());
+      btn.querySelector("span").textContent = "Copié !";
+      setTimeout(()=>{ btn.querySelector("span").textContent = "Copier"; }, 1800);
+    }catch(e){}
+  });
+  return btn;
+}
+function resizeImageFile(file, maxDim=1600, quality=0.85){
+  return new Promise((resolve, reject)=>{
+    const reader = new FileReader();
+    reader.onload = () => {
+      const img = new Image();
+      img.onload = () => {
+        let {width,height} = img;
+        if(width>maxDim || height>maxDim){
+          if(width>height){ height = Math.round(height*maxDim/width); width = maxDim; }
+          else { width = Math.round(width*maxDim/height); height = maxDim; }
+        }
+        const c = document.createElement("canvas"); c.width=width; c.height=height;
+        c.getContext("2d").drawImage(img,0,0,width,height);
+        resolve(c.toDataURL("image/jpeg", quality));
+      };
+      img.onerror = reject;
+      img.src = reader.result;
+    };
+    reader.onerror = reject;
+    reader.readAsDataURL(file);
+  });
+}
+function loadImage(src){
+  return new Promise((resolve,reject)=>{
+    const img = new Image();
+    img.onload = ()=>resolve(img);
+    img.onerror = reject;
+    img.src = src;
+  });
+}
+
+/* ============================================================
+   MOTEUR DE SÉLECTION INTELLIGENT
+============================================================ */
+function selectModules(categories){
+  return state.modules.filter(m=>m.enabled && categories.includes(m.category));
+}
+function modulesToText(mods){
+  return mods.map(m=>`### ${m.category} — ${m.title}\n${m.content}`).join("\n\n");
+}
+/* Garantit des prompts propres : pas de lignes vides multiples, pas d'espaces parasites en début/fin.
+   Tous les générateurs de prompt (texte, image, audit, config) passent par ici avant d'être copiés. */
+function cleanPrompt(text){
+  return String(text||"").replace(/[ \t]+\n/g, "\n").replace(/\n{3,}/g, "\n\n").trim();
+}
+/* Liste fixe des prestations reconnues individuellement par le sélecteur.
+   Modifiable ici sans toucher au reste du moteur si de nouvelles prestations apparaissent. */
+const KNOWN_PRESTATIONS = [
+  "Massage Zébré","Massage Ayurvédique Abhyanga","Massage Balinais","Massage Thaï traditionnel",
+  "Massage Femme enceinte","Massage Enfant","Réflexologie plantaire thaïlandaise",
+  "Massage japonais du visage","Massage lymphatique expert","Soin énergétique","Reiki",
+  "Luminothérapie PSIO®","Biorésonance quantique","Soin minceur","Offre Sylver","Offre Gold","Massage dos/zone",
+];
+
+/* Fusionne le contenu de tous les modules "Prestations" activés, en éliminant les doublons exacts
+   (si le même texte a été collé dans plusieurs modules). Ne modifie jamais les modules eux-mêmes. */
+function getMergedPrestationsText(){
+  const mods = state.modules.filter(m=>m.enabled && m.category==="Prestations");
+  const seen = new Set();
+  const parts = [];
+  mods.forEach(m=>{
+    const c = (m.content||"").trim();
+    if(c && !seen.has(c)){ seen.add(c); parts.push(c); }
+  });
+  return parts.join("\n\n");
+}
+/* Repère, dans le texte fusionné, où commence chaque prestation connue et découpe le texte
+   entre deux noms de prestations consécutifs pour isoler le bloc de détails de chacune. */
+function extractPrestationBlocks(text){
+  const found = [];
+  KNOWN_PRESTATIONS.forEach(name=>{
+    const idx = text.indexOf(name);
+    if(idx !== -1) found.push({name, idx});
+  });
+  found.sort((a,b)=>a.idx-b.idx);
+  const blocks = {};
+  found.forEach((f,i)=>{
+    const end = i+1<found.length ? found[i+1].idx : text.length;
+    blocks[f.name] = text.slice(f.idx, end).trim();
+  });
+  return blocks;
+}
+function extractField(block, patterns){
+  for(const re of patterns){ const m = block.match(re); if(m) return m[1].trim(); }
+  return null;
+}
+const DURATION_PATTERNS = [/dur[ée]e\s*[:\-]\s*([^\n]+)/i, /(\d+\s*(?:min|minutes|h|heures)\b[^\n]*)/i];
+const PRICE_PATTERNS = [/tarifs?\s*[:\-]\s*([^\n]+)/i, /prix\s*[:\-]\s*([^\n]+)/i, /(\d+[\.,]?\d*\s*€[^\n]*)/];
+/* Champs de la "fiche prestation" enrichie : reconnus automatiquement s'ils sont écrits
+   sous la forme "Label : contenu" dans le bloc de la prestation. Ceux non trouvés sont
+   simplement omis — le bloc brut complet est de toute façon toujours transmis en renfort. */
+const PRESTATION_FICHE_LABELS = ["histoire","émotion","psychologie","codes visuels","matières",
+  "textures","lumière","composition","vocabulaire","cta","interdits","scène visuelle"];
+function extractFicheFields(block){
+  const found = {};
+  PRESTATION_FICHE_LABELS.forEach(label=>{
+    const re = new RegExp(label.replace(/[.*+?^${}()|[\]\\]/g,"\\$&")+"\\s*[:\\-]\\s*([^\\n]+)","i");
+    const m = block.match(re);
+    if(m) found[label] = m[1].trim();
+  });
+  return found;
+}
+
+/* Retourne les infos de la prestation actuellement sélectionnée, ou null si aucune. */
+function getSelectedPrestationInfo(){
+  if(!state.prestationName) return null;
+  const blocks = extractPrestationBlocks(getMergedPrestationsText());
+  const block = blocks[state.prestationName] || "";
+  return {
+    name: state.prestationName,
+    block,
+    duree: block ? extractField(block, DURATION_PATTERNS) : null,
+    tarif: block ? extractField(block, PRICE_PATTERNS) : null,
+    fiche: block ? extractFicheFields(block) : {},
+  };
+}
+function getSelectedStyle(){
+  return state.styles.find(s=>s.id===state.styleId) || null;
+}
+
+/* Saison actuelle (hémisphère nord), utilisée comme contexte pour prioriser les modules "Saisonnalité". */
+function getCurrentSeasonFR(){
+  const month = new Date().getMonth() + 1;
+  if([12,1,2].includes(month)) return "Hiver";
+  if([3,4,5].includes(month)) return "Printemps";
+  if([6,7,8].includes(month)) return "Été";
+  return "Automne";
+}
+
+/* ---------- MOTEUR DE CONTEXTE ----------
+   Sélectionne les modules pertinents pour les catégories demandées, fusionne les doublons stricts
+   (même titre + même contenu dans deux modules), trie selon la hiérarchie SDZ, puis applique un
+   budget de caractères pour ne garder que ce qui a un réel impact — qualité plutôt que quantité. */
+/* ---------- Paliers de priorité par catégorie ----------
+   "always" : ADN de marque, ton, direction artistique, règles dures, CTA, mission, et catégories déjà
+              spécifiques à la plateforme (via TEXT_MODULE_MAP) — jamais sacrifiées en premier.
+   "rare"   : contenus de fond (glossaire, historique de décisions, exemples, leçons) — utiles mais
+              plafonnés en nombre pour éviter le remplissage systématique.
+   "context": tout le reste — inclus seulement s'il est réellement pertinent maintenant (voir plus bas). */
+function moduleTier(category){
+  const ALWAYS = ["MASTER SDZ","CODEX SDZ","Univers de marque","Charte graphique","Direction artistique",
+    "Règles rédactionnelles","CTA","Missions","Interdits","À ne jamais faire","À faire",
+    "Vocabulaire autorisé","Vocabulaire interdit","Logo","Palette","Typographies",
+    "Instagram","Facebook","Google Business","Stories","Blog Wix","SEO"];
+  const RARE = ["Décisions importantes","Glossaire","Erreurs fréquentes","Exemples excellents",
+    "Exemples validés","Exemples refusés","Leçons apprises","Bibliothèque d'idées"];
+  if(ALWAYS.includes(category)) return "always";
+  if(RARE.includes(category)) return "rare";
+  return "context";
+}
+/* Pertinence contextuelle réelle, calculée automatiquement (aucun réglage manuel ajouté à l'interface) :
+   une connaissance "context" n'est injectée que si elle correspond à la situation actuelle. */
+function isContextRelevantNow(m){
+  if(m.category==="Saisonnalité"){
+    const season = getCurrentSeasonFR().toLowerCase();
+    return m.content.toLowerCase().includes(season);
+  }
+  if(m.category==="Offres"){
+    const t = `${state.topic||""} ${state.prestationName||""} ${state.mission||""}`.toLowerCase();
+    return t.includes("cadeau") || t.includes("offre") || state.mission==="Vendre des bons cadeaux";
+  }
+  return true; // Prestations, Psychologie client, Personae, Objections clients : pertinents dès qu'ils existent
+}
+/* Quasi-déduplication : au sein d'une même catégorie, deux connaissances au contenu très proche
+   (ex : "Univers SDZ" et "Fondation SDZ" qui disent la même chose) ne sont injectées qu'une fois —
+   on garde la plus complète des deux. Basé sur une similarité de mots, pas seulement un texte identique. */
+function quasiDedup(mods){
+  const kept = [];
+  let removed = 0;
+  mods.forEach(m=>{
+    const dupIdx = kept.findIndex(k=> k.category===m.category && textSimilarity(k.content, m.content) > 0.6);
+    if(dupIdx===-1){ kept.push(m); return; }
+    removed++;
+    if(m.content.length > kept[dupIdx].content.length) kept[dupIdx] = m;
+  });
+  return { kept, removed };
+}
+
+function selectModulesOrdered(categories, budgetChars){
+  const allCats = [...new Set([...ALWAYS_ON_CATEGORIES, ...categories])];
+  let mods = selectModules(allCats);
+  const totalAvailable = mods.length;
+  const lengthBefore = mods.reduce((s,m)=>s+m.content.length, 0);
+
+  // 1. doublons stricts (contenu identique)
+  const seen = new Set();
+  let strictDuplicates = 0;
+  mods = mods.filter(m=>{
+    const key = m.category+"|"+m.title+"|"+m.content.trim();
+    if(seen.has(key)){ strictDuplicates++; return false; }
+    seen.add(key);
+    return true;
+  });
+  // 2. quasi-doublons (idée très proche exprimée deux fois)
+  const dedupResult = quasiDedup(mods);
+  mods = dedupResult.kept;
+  const duplicatesRemoved = strictDuplicates + dedupResult.removed;
+
+  // 3. tri selon la hiérarchie SDZ
+  const rank = c => { const i = HIERARCHY_ORDER.indexOf(c); return i===-1 ? HIERARCHY_ORDER.length : i; };
+  mods = mods.map((m,i)=>({m,i})).sort((a,b)=> rank(a.m.category)-rank(b.m.category) || a.i-b.i).map(x=>x.m);
+
+  // 4. paliers de priorité + pertinence contextuelle
+  const always = mods.filter(m=> moduleTier(m.category)==="always");
+  const contextAll = mods.filter(m=> moduleTier(m.category)==="context");
+  const rareAll = mods.filter(m=> moduleTier(m.category)==="rare");
+  const contextRelevant = contextAll.filter(isContextRelevantNow);
+  const contextSkipped = contextAll.filter(m=>!isContextRelevantNow(m));
+
+  // 5. construction budgétée : toujours en premier, puis contexte pertinent, puis rare (plafonné à 2)
+  const kept = []; const ignored = [];
+  let total = 0;
+  const tryAdd = (m)=>{
+    const len = m.content.length;
+    if(kept.length===0 || total+len<=budgetChars){ kept.push(m); total+=len; return true; }
+    ignored.push(m); return false;
+  };
+  always.forEach(tryAdd);
+  contextRelevant.forEach(tryAdd);
+  let rareAdded = 0;
+  rareAll.forEach(m=>{
+    if(rareAdded>=2){ ignored.push(m); return; }
+    if(tryAdd(m)) rareAdded++;
+  });
+  ignored.push(...contextSkipped);
+
+  const lengthAfter = kept.reduce((s,m)=>s+m.content.length, 0);
+  const gainPercent = lengthBefore>0 ? Math.round((1 - lengthAfter/lengthBefore)*100) : 0;
+  const tokensSaved = Math.max(0, Math.round((lengthBefore-lengthAfter)/4));
+  // Indice de pertinence : part du contenu injecté qui est "toujours" ou "contexte pertinent" (par opposition au "rare")
+  const highValueCount = always.filter(m=>kept.includes(m)).length + contextRelevant.filter(m=>kept.includes(m)).length;
+  const relevanceIndex = kept.length>0 ? Math.round((highValueCount/kept.length)*100) : 100;
+
+  return { kept, ignored, totalAvailable, totalKept: kept.length, duplicatesRemoved,
+    lengthBefore, lengthAfter, gainPercent, tokensSaved, relevanceIndex };
+}
+function textModulesFor(platform){
+  const cats = TEXT_MODULE_MAP[platform] || [];
+  const budget = PLATFORM_TEXT_BUDGET[platform] || TEXT_CONTEXT_BUDGET;
+  const { kept } = selectModulesOrdered(cats, budget);
+  /* Si une prestation précise est choisie, son détail est injecté séparément (voir prestationPromptBlock) :
+     on retire donc les modules "Prestations" génériques pour éviter la redondance. */
+  return state.prestationName ? kept.filter(m=> m.category!=="Prestations") : kept;
+}
+function imageModulesFor(){
+  const { kept } = selectModulesOrdered(IMAGE_MODULE_CATS, IMAGE_CONTEXT_BUDGET);
+  return kept;
+}
+/* Détail complet (utilisé/ignoré/statistiques) pour l'étape "Auditer" — sans dupliquer la logique de sélection. */
+function textModulesDetail(platform){
+  const budget = PLATFORM_TEXT_BUDGET[platform] || TEXT_CONTEXT_BUDGET;
+  return selectModulesOrdered(TEXT_MODULE_MAP[platform] || [], budget);
+}
+function imageModulesDetail(){
+  return selectModulesOrdered(IMAGE_MODULE_CATS, IMAGE_CONTEXT_BUDGET);
+}
+
+function missionBlock(missionKey){
+  if(!missionKey || !MISSIONS[missionKey]) return "";
+  const m = MISSIONS[missionKey];
+  return `MISSION : ${missionKey}\nTon recommandé : ${m.ton}\nCTA recommandé : ${m.cta}\nStructure recommandée : ${m.structure}\n`;
+}
+function seasonBlock(){
+  return `Saison actuelle : ${getCurrentSeasonFR()}\n`;
+}
+/* Injecte automatiquement nom, durée, tarif, fiche et détails de la prestation choisie, quand disponibles. */
+function prestationPromptBlock(){
+  const info = getSelectedPrestationInfo();
+  if(!info) return "";
+  let out = `PRESTATION CONCERNÉE : ${info.name}\n`;
+  if(info.duree) out += `Durée : ${info.duree}\n`;
+  if(info.tarif) out += `Tarif : ${info.tarif}\n`;
+  const ficheKeys = Object.keys(info.fiche);
+  if(ficheKeys.length){
+    out += `Fiche prestation :\n`;
+    ficheKeys.forEach(k=>{ out += `- ${k.charAt(0).toUpperCase()+k.slice(1)} : ${info.fiche[k]}\n`; });
+  }
+  out += `Détails / spécificités complètes :\n${info.block || "(non documentée dans la base de connaissances — utilise uniquement le nom)"}\n`;
+  return out;
+}
+function styleBlock(style){
+  return style ? `STYLE VISUEL SÉLECTIONNÉ : ${style.name}\n${style.description}\n` : "";
+}
+/* Garde-fou permanent, toujours inclus dans tout prompt image, quel que soit le sujet.
+   Politique générale de sécurité — jamais de description visuelle détaillée générée automatiquement
+   pour un sujet sensible : c'est à l'utilisateur de rédiger le champ "Scène visuelle" de la fiche
+   prestation (base de connaissances) s'il le souhaite ; ce garde-fou s'applique dans tous les cas. */
+const SAFETY_GUARDRAIL = `CONTRAINTE DE SÉCURITÉ PERMANENTE : toute personne représentée doit être habillée de façon appropriée et professionnelle. Si la scène implique un mineur, il doit être entièrement habillé et accompagné visuellement d'un adulte responsable, dans un contexte familial explicite et non ambigu, sans aucune connotation. Si la scène implique une grossesse, la personne doit être habillée de façon pudique, sans exposition du corps. Si la scène implique un contact corporel (réflexologie, massage des pieds...), le cadrage doit rester professionnel et clinique, jamais suggestif. Si la scène évoque une pratique énergétique (reiki...), rester sobre et crédible, sans effets surnaturels exagérés. Aucune promesse médicale ou thérapeutique ne doit être suggérée visuellement. Aucune nudité, aucune sexualisation, aucune violence.`;
+
+/* Catégories de sujets à traiter avec prudence (pas de description détaillée ici — juste une alerte
+   pour inviter l'utilisateur à renseigner un champ "Scène visuelle" dans la fiche de la prestation). */
+const RISK_KEYWORDS = {
+  "mineur / enfant": ["enfant","mineur","bébé","bebe"],
+  "grossesse": ["grossesse","enceinte","femme enceinte"],
+  "corps / nudité": ["nudité","nudite","nu ","poitrine","seins","ventre nu"],
+  "minceur / poids": ["minceur","perte de poids","amincissant","amaigrissement"],
+  "promesse médicale": ["guérison","guerison","thérapeutique","therapeutique","soigne","traite une maladie"],
+  "contact corporel sensible": ["réflexologie","reflexologie","pieds","palpation","pression corporelle"],
+  "promesse ésotérique": ["reiki","énergie","energie","spirituel","surnaturel","aura","chakra"],
+  "sexualisation": ["sexy","sexuel","érotique","erotique","suggestif"],
+  "violence": ["violence","violent","agression","coup","douleur intense"],
+};
+function detectRisks(text){
+  const t = (text||"").toLowerCase();
+  const found = [];
+  Object.entries(RISK_KEYWORDS).forEach(([label, kws])=>{
+    if(kws.some(kw=> t.includes(kw))) found.push(label);
+  });
+  return found;
+}
+function currentRiskFlags(){
+  const info = getSelectedPrestationInfo();
+  const text = [state.topic, state.prestationName, info?.block||""].join(" ");
+  return detectRisks(text);
+}
+function brandAssetsBlock(){
+  const assets = state.images.filter(i=>i.assetType);
+  if(!assets.length) return "";
+  const names = assets.map(a=>`${a.assetType} (${a.name})`).join(", ");
+  return `ACTIFS DE MARQUE DISPONIBLES : ${names}\nSi cet outil accepte les pièces jointes, utilise le vrai logo/actif fourni en pièce jointe plutôt que d'en dessiner un nouveau. Sinon, ne dessine AUCUN logo ni texte de marque — il sera surimposé manuellement après génération.\n`;
+}
+function daLinesText(){
+  const da = state.da;
+  return [
+    da.objectif && `Objectif : ${da.objectif}`,
+    da.emotion && `Émotion recherchée : ${da.emotion}`,
+    da.ambiance && `Ambiance : ${da.ambiance}`,
+    `Niveau de luxe : ${da.luxe}/10`, `Niveau de créativité : ${da.creativite}/10`,
+    `Niveau de sobriété : ${da.sobriete}/10`, `Intensité : ${da.intensite}/10`,
+    da.stylePhoto && `Style photographique : ${da.stylePhoto}`,
+    da.styleGraphique && `Style graphique : ${da.styleGraphique}`,
+    da.palette && `Palette de couleurs : ${da.palette}`,
+    da.textures && `Textures : ${da.textures}`,
+    da.composition && `Composition : ${da.composition}`,
+    da.angle && `Angle de prise de vue : ${da.angle}`,
+    da.distance && `Distance / cadrage : ${da.distance}`,
+    da.profondeurChamp && `Profondeur de champ : ${da.profondeurChamp}`,
+    da.contraste && `Contraste : ${da.contraste}`,
+    `Rendu : ${da.realisme}`,
+    da.eclairage && `Éclairage : ${da.eclairage}`,
+    da.cible && `Cible : ${da.cible}`,
+    da.elementsInterdits && `Éléments interdits dans l'image : ${da.elementsInterdits}`,
+  ].filter(Boolean).join("\n");
+}
+
+/* ---------- anti-répétition : s'appuie sur l'historique + leçons apprises ---------- */
+function buildAntiRepeatNote(platform, kind){
+  const recent = state.history.filter(h=>h.platform===platform && (kind==="texte" ? h.textResult : true)).slice(-6);
+  if(!recent.length) return "";
+  if(kind==="texte"){
+    return `\nÉVITE ABSOLUMENT de reproduire, sur ce contenu :\n- les mêmes accroches / premières phrases\n- les mêmes CTA\n- les mêmes structures de texte\n- les mêmes émotions mises en avant\n- les mêmes formulations\nVoici des extraits déjà utilisés récemment pour cette plateforme, à ne pas reproduire :\n${recent.filter(h=>h.textResult).map(h=>`- "${h.textResult.slice(0,70).replace(/\n/g," ")}..."`).join("\n")}\n`;
+  }
+  return `\nÉVITE ABSOLUMENT de reproduire une composition, une idée visuelle ou un sujet déjà traité récemment sur cette plateforme :\n${recent.map(h=>`- ${h.topic}`).join("\n")}\nPropose un angle visuel différent tout en restant fidèle à la charte.\n`;
+}
+
+function buildTextPromptFull(platform, topic, missionKey){
+  const mods = textModulesFor(platform);
+  const modText = mods.length ? modulesToText(mods) : "(Aucun module de connaissance activé pour cette plateforme — active-en dans l'onglet Connaissances.)";
+  return cleanPrompt(`Tu es le rédacteur officiel de cette marque. Utilise uniquement les informations ci-dessous : ce sont les seules pertinentes pour ce contenu, n'en invente pas d'autres.
+
+${modText}
+
+${missionBlock(missionKey)}${prestationPromptBlock()}${seasonBlock()}${buildAntiRepeatNote(platform, "texte")}
+Plateforme : ${platform}
+Sujet : ${topic}
+
+${TEXT_STRUCTURE[platform]}`);
+}
+/* Certains générateurs d'image (Midjourney, Stability, Ideogram, Flux, Fal) donnent de meilleurs résultats
+   avec une liste de mots-clés séparés par des virgules plutôt que des phrases. Ceci ne reformule rien :
+   ça condense mécaniquement des champs déjà renseignés (style, palette, éclairage...), sans invention. */
+const KEYWORD_STYLE_PROVIDERS = ["Stability","Ideogram","Flux","Fal","Midjourney (préparation future)"];
+function keywordVariantBlock(style, aspectKey){
+  const da = state.da;
+  const parts = [
+    style?.name, da.stylePhoto, da.styleGraphique, da.palette, da.eclairage, da.composition,
+    da.ambiance, da.realisme, PLATFORM_ASPECT ? `format ${aspectKey}` : null,
+  ].filter(Boolean);
+  if(!parts.length) return "";
+  return `\nVERSION MOTS-CLÉS (pour générateurs préférant ce format) : ${parts.join(", ")}\n`;
+}
+function buildImagePromptFull(platform, topic, aspectKey, missionKey){
+  const mods = imageModulesFor();
+  const modText = mods.length ? modulesToText(mods) : "(Aucun module visuel activé — active-en dans l'onglet Connaissances.)";
+  const style = getSelectedStyle();
+  const overlayRule = PLATFORM_OVERLAY[platform]==="aucun"
+    ? "Pas de texte incrusté sur l'image."
+    : `Texte léger toléré sur l'image (accroche courte, ${PLATFORM_MAXCHARS[platform]} caractères max).`;
+  const logoRule = state.da.presenceLogo ? "Le logo de la marque doit apparaître, discrètement." : "Pas de logo sur cette image.";
+  const selectedProvider = state.apiProviders.find(p=>p.id===state.selectedProviderId);
+  const wantsKeywords = selectedProvider && KEYWORD_STYLE_PROVIDERS.includes(selectedProvider.label);
+  return cleanPrompt(`Génère une image pour cette marque en respectant strictement :
+
+${modText}
+
+${missionBlock(missionKey)}${prestationPromptBlock()}${brandAssetsBlock()}DIRECTION ARTISTIQUE :
+${daLinesText() || "(non définie — configure-la dans l'onglet Direction artistique)"}
+${styleBlock(style)}
+Plateforme : ${platform} — format ${aspectKey} (${ASPECTS[aspectKey].w}x${ASPECTS[aspectKey].h})
+${overlayRule}
+${logoRule}
+Sujet : ${topic}
+${seasonBlock()}${buildAntiRepeatNote(platform, "image")}
+${SAFETY_GUARDRAIL}
+Le rendu doit rester cohérent avec les visuels précédents de la marque (mêmes tons, même ambiance).${wantsKeywords ? keywordVariantBlock(style, aspectKey) : ""}`);
+}
+
+/* ---------- score qualité : mesure automatique + auto-évaluation guidée ---------- */
+function textSimilarity(a, b){
+  const words = s => new Set(s.toLowerCase().split(/\W+/).filter(w=>w.length>3));
+  const wa = words(a), wb = words(b);
+  if(!wa.size || !wb.size) return 0;
+  let inter = 0; wa.forEach(w=>{ if(wb.has(w)) inter++; });
+  return inter / Math.min(wa.size, wb.size);
+}
+function computeRepetitionRisk(platform, text){
+  if(!text || !text.trim()) return 0;
+  const recents = state.history.filter(h=>h.platform===platform && h.textResult).slice(-6);
+  if(!recents.length) return 0;
+  let max = 0;
+  recents.forEach(h=>{ const sim = textSimilarity(text, h.textResult); if(sim>max) max=sim; });
+  return Math.round(max*100);
+}
+
+/* ---------- campagne complète : décline le sujet sur tous les formats ---------- */
+const CAMPAIGN_ITEMS = [
+  { label:"Google Business", platform:"Google Business" },
+  { label:"Instagram", platform:"Instagram" },
+  { label:"Facebook", platform:"Facebook" },
+  { label:"Story", platform:"Instagram", aspectOverride:"9:16", imageOnly:true },
+  { label:"Article Blog Wix", platform:"Article Blog Wix" },
+];
+/* ============================================================
+   PARAMÈTRES API — appels directs navigateur → fournisseur.
+   Les clés restent uniquement dans localStorage de ce navigateur, jamais envoyées à Netlify
+   ni à aucun serveur intermédiaire : chaque appel part directement d'ici vers le fournisseur.
+   Limite technique réelle : certains fournisseurs bloquent les appels directs depuis un navigateur
+   (CORS) — dans ce cas l'appel échoue proprement et le mode manuel (copier/coller) reste disponible.
+============================================================ */
+const PROVIDER_KINDS = {
+  "openai-compatible": { label:"Compatible OpenAI (OpenAI, OpenRouter, Groq, Mistral...)", needsBaseUrl:true, callable:true },
+  "anthropic": { label:"Anthropic (Claude)", needsBaseUrl:false, callable:true },
+  "google-gemini": { label:"Google AI Studio (Gemini)", needsBaseUrl:false, callable:true },
+  "manual-reference": { label:"Référence uniquement (pas d'appel direct pour l'instant)", needsBaseUrl:false, callable:false },
+};
+/* Fiches de départ, purement indicatives — l'utilisateur peut ajouter n'importe quel autre
+   fournisseur via "Ajouter un fournisseur personnalisé", aucun nom n'est figé dans le moteur. */
+const PROVIDER_PRESETS = [
+  { label:"OpenAI", kind:"openai-compatible", mediaType:"texte", baseUrl:"https://api.openai.com/v1", model:"gpt-4o-mini",
+    speed:"Rapide", maxContext:"128K tokens", strengths:"Polyvalent, bonne qualité rédactionnelle", weaknesses:"Coût variable selon le modèle",
+    formats:"Texte, JSON", docUrl:"https://platform.openai.com/docs" },
+  { label:"OpenRouter", kind:"openai-compatible", mediaType:"texte", baseUrl:"https://openrouter.ai/api/v1", model:"openai/gpt-4o-mini",
+    speed:"Variable selon le modèle relayé", maxContext:"Variable", strengths:"Accès à de nombreux modèles via une seule clé", weaknesses:"Latence additionnelle",
+    formats:"Texte", docUrl:"https://openrouter.ai/docs" },
+  { label:"Groq", kind:"openai-compatible", mediaType:"texte", baseUrl:"https://api.groq.com/openai/v1", model:"llama-3.1-70b-versatile",
+    speed:"Très rapide", maxContext:"128K tokens", strengths:"Vitesse d'inférence", weaknesses:"Choix de modèles plus limité",
+    formats:"Texte", docUrl:"https://console.groq.com/docs" },
+  { label:"Mistral", kind:"openai-compatible", mediaType:"texte", baseUrl:"https://api.mistral.ai/v1", model:"mistral-large-latest",
+    speed:"Rapide", maxContext:"32K tokens", strengths:"Bon rapport qualité/prix, français soigné", weaknesses:"Moins de contexte que d'autres",
+    formats:"Texte", docUrl:"https://docs.mistral.ai" },
+  { label:"Anthropic (Claude)", kind:"anthropic", mediaType:"texte", baseUrl:"", model:"claude-sonnet-4-6",
+    speed:"Rapide", maxContext:"200K tokens", strengths:"Rédaction nuancée, respect fin des consignes", weaknesses:"Accès navigateur direct déconseillé en production",
+    formats:"Texte", docUrl:"https://docs.claude.com" },
+  { label:"Google AI Studio (Gemini)", kind:"google-gemini", mediaType:"texte", baseUrl:"", model:"gemini-1.5-flash",
+    speed:"Rapide", maxContext:"1M tokens", strengths:"Très grand contexte, gratuit en petit volume", weaknesses:"Qualité rédactionnelle variable en français",
+    formats:"Texte", docUrl:"https://ai.google.dev/docs" },
+  { label:"Stability", kind:"manual-reference", mediaType:"image", baseUrl:"", model:"",
+    speed:"Rapide", maxContext:"—", strengths:"Bon rendu photographique, open-weight", weaknesses:"Peut nécessiter des retouches sur les visages",
+    sensitiveWords:"Contenu médical explicite, nudité", formats:"PNG, JPEG", docUrl:"https://platform.stability.ai/docs" },
+  { label:"Ideogram", kind:"manual-reference", mediaType:"image", baseUrl:"", model:"",
+    speed:"Moyenne", maxContext:"—", strengths:"Excellent rendu de texte incrusté", weaknesses:"Moins flexible en styles très artistiques",
+    sensitiveWords:"Marques déposées, visages de personnalités", formats:"PNG", docUrl:"https://ideogram.ai" },
+  { label:"Flux", kind:"manual-reference", mediaType:"image", baseUrl:"", model:"",
+    speed:"Moyenne", maxContext:"—", strengths:"Rendu artistique et cinématique", weaknesses:"Moins précis sur les détails fins",
+    sensitiveWords:"Nudité, violence", formats:"PNG, JPEG", docUrl:"https://blackforestlabs.ai" },
+  { label:"Fal", kind:"manual-reference", mediaType:"image", baseUrl:"", model:"",
+    speed:"Très rapide", maxContext:"—", strengths:"Hébergement de nombreux modèles image rapides", weaknesses:"Qualité dépend du modèle choisi",
+    sensitiveWords:"Variable selon le modèle hébergé", formats:"PNG, JPEG", docUrl:"https://fal.ai/docs" },
+  { label:"Midjourney (préparation future)", kind:"manual-reference", mediaType:"image", baseUrl:"", model:"",
+    speed:"Moyenne", maxContext:"—", strengths:"Esthétique très reconnaissable, premium", weaknesses:"Pas d'API officielle stable à ce jour",
+    sensitiveWords:"Nudité, marques déposées", formats:"PNG", docUrl:"https://docs.midjourney.com" },
+];
+
+/* Recommande un fournisseur selon la tâche — suggestion non contraignante, l'utilisateur choisit toujours librement. */
+const ROUTER_RULES = [
+  { match: (ctx)=> ctx.platform==="Article Blog Wix", suggestion:"Anthropic (Claude)", reason:"Rédaction longue et nuancée, bon respect du SEO structuré." },
+  { match: (ctx)=> ctx.platform==="Instagram" || ctx.platform==="Facebook", suggestion:"OpenAI", reason:"Formulations courtes et engageantes, rapide." },
+  { match: (ctx)=> ctx.platform==="Google Business", suggestion:"OpenAI", reason:"Texte factuel, concis, orienté SEO local." },
+];
+function suggestProviderFor(ctx){
+  const rule = ROUTER_RULES.find(r=>r.match(ctx));
+  return rule || null;
+}
+
+/* Empreinte simple (djb2) pour détecter un prompt identique déjà généré — évite un appel API inutile. */
+function hashPrompt(text){
+  let h = 5381;
+  for(let i=0;i<text.length;i++){ h = ((h*33) ^ text.charCodeAt(i)) >>> 0; }
+  return h.toString(36);
+}
+function findCachedResult(providerLabel, promptText){
+  const hash = hashPrompt(promptText);
+  return state.lab.find(l=> l.provider===providerLabel && l.promptHash===hash && l.status==="accepted") || null;
+}
+
+/* Tous les appels passent désormais par les fonctions serveur du même site Netlify
+   (/.netlify/functions/generate-text et /.netlify/functions/generate-image), qui contactent
+   elles-mêmes le fournisseur avec la clé API stockée côté serveur (variables d'environnement
+   Netlify). Le navigateur ne détient plus aucune clé et ne contacte jamais le fournisseur
+   directement — ça évite le blocage CORS et sécurise les clés. */
+async function callProviderText(provider, systemPrompt, userPrompt){
+  const res = await fetch("/.netlify/functions/generate-text", {
+    method:"POST",
+    headers: { "Content-Type":"application/json" },
+    body: JSON.stringify({ kind: provider.kind, model: provider.model, baseUrl: provider.baseUrl, systemPrompt, userPrompt }),
+  });
+  const data = await res.json();
+  if(!res.ok || data.error) throw new Error(data.error || `Erreur ${res.status}`);
+  return data.text || "";
+}
+async function callProviderImage(prompt, size){
+  const res = await fetch("/.netlify/functions/generate-image", {
+    method:"POST",
+    headers: { "Content-Type":"application/json" },
+    body: JSON.stringify({ prompt, size }),
+  });
+  const data = await res.json();
+  if(!res.ok || data.error) throw new Error(data.error || `Erreur ${res.status}`);
+  if(data.b64) return `data:image/png;base64,${data.b64}`;
+  if(data.url) return data.url;
+  throw new Error("Aucune image reçue du fournisseur.");
+}
+
+/* Estimation grossière (≈4 caractères/token) — précision dépendante des tarifs que l'utilisateur renseigne. */
+function estimateCost(provider, promptText){
+  if(!provider || (!provider.priceIn && !provider.priceOut)) return null;
+  const inTokens = Math.ceil(promptText.length / 4);
+  const outTokens = 400; // estimation forfaitaire de la réponse
+  const cost = (inTokens/1000)*(provider.priceIn||0) + (outTokens/1000)*(provider.priceOut||0);
+  return cost;
+}
+function logToLab(entry){
+  state.lab.push({ id: uid(), date: nowStr(), ...entry });
+  LS.set("vf-lab", state.lab);
+}
+
+/* ---------- SCORE QUALITÉ (avant génération) ----------
+   Heuristique locale basée sur des signaux structurels disponibles (présence de modules,
+   longueur, budget de contexte, risques détectés, historique récent). Ce n'est PAS un jugement
+   sémantique — pour une vraie évaluation qualitative, utiliser l'onglet Audit IA (ChatGPT). */
+function computeQualityScore({ platform, textPrompt, textMods, imageMods, totalTextAvailable, missionKey }){
+  const dims = {};
+  const hasMasterCodex = state.modules.some(m=>m.enabled && (m.category==="MASTER SDZ"||m.category==="CODEX SDZ"));
+  dims["Respect SDZ"] = hasMasterCodex ? 100 : 60;
+  dims["Respect plateforme"] = textMods.some(m=>[platform,"Instagram","Facebook","Google Business","Blog Wix"].includes(m.category)) ? 100 : 75;
+  const needsSEO = platform==="Google Business" || platform==="Article Blog Wix";
+  dims["Respect SEO"] = !needsSEO ? 100 : (textMods.some(m=>m.category==="SEO") ? 100 : 45);
+  dims["Respect conversion"] = (missionKey && MISSIONS[missionKey]) || textMods.some(m=>m.category==="CTA") ? 100 : 65;
+  dims["Respect DA"] = daLinesText().length > 40 ? 100 : 55;
+  const len = textPrompt.length;
+  dims["Longueur"] = len<300 ? 50 : len>7000 ? 55 : 100;
+  dims["Doublons"] = 100; // la fusion sans doublons est déjà appliquée en amont
+  const risks = currentRiskFlags();
+  dims["Risque API"] = Math.max(30, 100 - risks.length*20);
+  dims["Lisibilité"] = len>0 && len<6000 ? 90 : 65;
+  dims["Clarté"] = (missionKey ? 15 : 0) + (state.prestationName ? 15 : 0) + 70;
+  const recentSame = state.history.filter(h=>h.platform===platform).slice(-5);
+  dims["Originalité"] = recentSame.length>3 ? 70 : 95;
+
+  const values = Object.values(dims).map(v=>Math.min(100,v));
+  const global = Math.round(values.reduce((a,b)=>a+b,0) / values.length);
+  const weakPoints = Object.entries(dims).filter(([,v])=>v<75).map(([k])=>k);
+  return { global, dims, weakPoints };
+}
+
+function generateCampaign(topic, missionKey){
+  return CAMPAIGN_ITEMS.map(item=>{
+    const aspect = item.aspectOverride || PLATFORM_ASPECT[item.platform];
+    return {
+      id: uid(),
+      label: item.label,
+      platform: item.platform,
+      aspect,
+      imageOnly: !!item.imageOnly,
+      imagePrompt: buildImagePromptFull(item.platform, topic, aspect, missionKey),
+      textPrompt: item.imageOnly ? null : buildTextPromptFull(item.platform, topic, missionKey),
+      textPasted: "",
+    };
+  });
+}
+
+/* ============================================================
+   AUDIT IA — construit le prompt d'analyse et parse le rapport
+============================================================ */
+function buildAuditPromptText(ctx){
+  const allMods = [...ctx.textMods, ...ctx.imageMods];
+  const modText = allMods.length ? modulesToText(allMods) : "(aucun module actif)";
+  return cleanPrompt(`Tu es directeur artistique et consultant en communication senior. Analyse ce contenu produit pour cette marque et rends un audit structuré et honnête, sans complaisance.
+
+MISSION : ${ctx.missionKey || "non spécifiée"}
+PLATEFORME : ${ctx.platform}
+SUJET : ${ctx.topic}
+PRESTATION CONCERNÉE : ${ctx.prestation ? ctx.prestation.name : "non spécifiée"}
+STYLE VISUEL : ${ctx.style ? ctx.style.name : "aucun"}
+
+--- CONNAISSANCES ET RÈGLES UTILISÉES POUR LA GÉNÉRATION ---
+${modText}
+
+--- DIRECTION ARTISTIQUE APPLIQUÉE ---
+${daLinesText() || "(non définie)"}
+
+--- CONTRAINTE ANTI-RÉPÉTITION APPLIQUÉE ---
+${ctx.antiRepeatTextNote || "(aucune)"}${ctx.antiRepeatImageNote || ""}
+
+--- PROMPT IMAGE UTILISÉ ---
+${ctx.imagePrompt}
+
+--- PROMPT TEXTE UTILISÉ ---
+${ctx.textPrompt || "(pas de texte pour ce format)"}
+
+--- CONTENU TEXTE FINAL PRODUIT (à auditer) ---
+${ctx.textPasted && ctx.textPasted.trim() ? ctx.textPasted : "(non renseigné — pour un audit fiable, colle le texte final obtenu avant de générer ce prompt)"}
+
+Si l'image générée est visible dans cette conversation, analyse-la aussi. Sinon, base ton jugement visuel sur le prompt image ci-dessus.
+
+Réponds STRICTEMENT dans ce format, sans aucun texte avant ou après :
+
+RESPECT_CHARTE: x/10
+COHERENCE_MARQUE: x/10
+RESPECT_PLATEFORME: x/10
+SEO: x/10
+CONVERSION: x/10
+CLARTE: x/10
+QUALITE_REDACTIONNELLE: x/10
+QUALITE_DA: x/10
+ORIGINALITE: x/10
+RISQUE_REPETITION: x/10
+SCORE_GLOBAL: x/10
+POINTS_FORTS:
+- ...
+POINTS_FAIBLES:
+- ...
+RECOMMANDATIONS:
+- ...`);
+}
+function parseAuditReport(text){
+  const num = (key)=>{ const m = text.match(new RegExp(key+"\\s*:\\s*([0-9.]+)")); return m ? parseFloat(m[1]) : null; };
+  const section = (label, stops)=>{
+    const re = new RegExp(label+"\\s*:\\s*([\\s\\S]*?)(?="+stops.join("|")+"|$)", "i");
+    const m = text.match(re);
+    if(!m) return [];
+    return m[1].split("\n").map(l=>l.trim()).filter(l=>l.startsWith("-")).map(l=>l.replace(/^-+\s*/,"").trim()).filter(Boolean);
+  };
+  return {
+    charte:num("RESPECT_CHARTE"), coherence:num("COHERENCE_MARQUE"), plateforme:num("RESPECT_PLATEFORME"),
+    seo:num("SEO"), conversion:num("CONVERSION"), clarte:num("CLARTE"), redaction:num("QUALITE_REDACTIONNELLE"),
+    da:num("QUALITE_DA"), originalite:num("ORIGINALITE"), repetition:num("RISQUE_REPETITION"), global:num("SCORE_GLOBAL"),
+    pointsForts: section("POINTS_FORTS", ["POINTS_FAIBLES","RECOMMANDATIONS"]),
+    pointsFaibles: section("POINTS_FAIBLES", ["RECOMMANDATIONS","POINTS_FORTS"]),
+    recommandations: section("RECOMMANDATIONS", ["POINTS_FORTS","POINTS_FAIBLES"]),
+    raw: text,
+  };
+}
+
+/* ============================================================
+   NAVIGATION
+============================================================ */
+const TABS = [
+  {id:"accueil", label:"Accueil"},
+  {id:"library", label:"Bibliothèque"},
+  {id:"editor", label:"Éditeur"},
+  {id:"knowledge", label:"Connaissances"},
+  {id:"da", label:"Direction artistique"},
+  {id:"styles", label:"Styles"},
+  {id:"post", label:"Créer un post"},
+  {id:"audit", label:"Audit IA"},
+  {id:"lab", label:"Laboratoire IA"},
+  {id:"api", label:"Paramètres API"},
+  {id:"history", label:"Base de prompts"},
+  {id:"settings", label:"Réglages"},
+];
+function renderNav(){
+  const nav = document.getElementById("nav");
+  nav.innerHTML = "";
+  TABS.forEach(t=>{
+    nav.appendChild(el("button", {
+      class: state.tab===t.id ? "active":"",
+      onclick: ()=>{ state.tab=t.id; renderNav(); renderMain(); }
+    }, t.label));
+  });
+}
+function updateCount(){
+  document.getElementById("imgCount").textContent = `${state.images.length} visuel${state.images.length!==1?"s":""}`;
+}
+
+/* ============================================================
+   ONGLET ACCUEIL — accès en un clic aux actions clés
+============================================================ */
+function quickAction(iconPath, title, subtitle, onclick){
+  return el("button",{class:"card", style:"width:100%;text-align:left;display:flex;align-items:center;gap:14px;margin-bottom:10px;", onclick},[
+    el("div",{style:"width:40px;height:40px;border-radius:12px;background:rgba(255,93,115,0.15);display:flex;align-items:center;justify-content:center;flex-shrink:0;color:var(--coral);"},[svgIcon(iconPath,20)]),
+    el("div",{},[
+      el("div",{style:"font-weight:600;font-size:14px;margin-bottom:2px;"}, title),
+      el("div",{style:"font-size:12px;color:var(--muted2);"}, subtitle),
+    ]),
+  ]);
+}
+function buildAccueilTab(){
+  const frag = el("div",{});
+  const activeModules = state.modules.filter(m=>m.enabled).length;
+  const avgQuality = (()=>{
+    const withGlobal = state.auditHistory.filter(a=>a.global!=null);
+    if(!withGlobal.length) return null;
+    return (withGlobal.reduce((s,a)=>s+a.global,0)/withGlobal.length).toFixed(1);
+  })();
+
+  frag.appendChild(el("div",{style:"display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-bottom:22px;"},[
+    el("div",{class:"card", style:"text-align:center;padding:12px 6px;"},[el("div",{style:"font-size:20px;font-weight:700;"},String(state.images.length)),el("div",{style:"font-size:10px;color:var(--muted2);"},"visuels")]),
+    el("div",{class:"card", style:"text-align:center;padding:12px 6px;"},[el("div",{style:"font-size:20px;font-weight:700;"},String(activeModules)),el("div",{style:"font-size:10px;color:var(--muted2);"},"modules actifs")]),
+    el("div",{class:"card", style:"text-align:center;padding:12px 6px;"},[el("div",{style:"font-size:20px;font-weight:700;color:var(--lime);"},avgQuality!=null?`${avgQuality}/10`:"—"),el("div",{style:"font-size:10px;color:var(--muted2);"},"score moyen")]),
+  ]));
+
+  frag.appendChild(el("p",{class:"label"},"Actions rapides"));
+  frag.appendChild(quickAction(ICONS.wand, "Créer une image", "Génère un prompt image guidé par ta charte et ton style", ()=>{
+    state.tab="post"; renderNav(); renderMain();
+  }));
+  frag.appendChild(quickAction(ICONS.sparkles, "Créer un post", "Image + texte adaptés à une plateforme", ()=>{
+    state.mission=""; state.tab="post"; renderNav(); renderMain();
+  }));
+  frag.appendChild(quickAction(ICONS.copy, "Créer une campagne complète", "5 formats générés en une fois", ()=>{
+    state.mission="Créer une campagne complète"; state.tab="post"; renderNav(); renderMain();
+  }));
+  frag.appendChild(quickAction(ICONS.star, "Lancer un audit", state.lastGenerated ? "Analyser le dernier contenu généré" : "Génère d'abord un post pour pouvoir l'auditer", ()=>{
+    state.tab="audit"; renderNav(); renderMain();
+  }));
+  frag.appendChild(quickAction(ICONS.upload, "Importer des connaissances", "Depuis ChatGPT ou manuellement", ()=>{
+    state.tab="knowledge"; renderNav(); renderMain();
+  }));
+
+  return frag;
+}
+
+/* ============================================================
+   ONGLET BIBLIOTHÈQUE
+============================================================ */
+function buildLibraryTab(){
+  const frag = el("div", {});
+  const fileInput = el("input", { type:"file", accept:"image/*", multiple:"multiple", style:"display:none" });
+  fileInput.addEventListener("change", async (e)=>{
+    const files = Array.from(e.target.files||[]);
+    if(!files.length) return;
+    for(const file of files){
+      const dataUrl = await resizeImageFile(file);
+      state.images.push({id: uid(), name:file.name, dataUrl, tags:[], favorite:false});
+    }
+    LS.set("vf-images", state.images);
+    if(state.images.length && !state.selectedId) state.selectedId = state.images[0].id;
+    updateCount(); renderMain();
+    fileInput.value = "";
+  });
+  frag.appendChild(fileInput);
+  frag.appendChild(el("button", { class:"upload-zone", onclick: ()=>fileInput.click() }, [
+    svgIcon(ICONS.upload, 22), el("span",{},"Ajouter des photos")
+  ]));
+
+  const searchInput = el("input",{type:"text", value:state.librarySearch, placeholder:"Rechercher par nom ou tag..."});
+  searchInput.addEventListener("input", e=>{ state.librarySearch = e.target.value; renderLibraryGrid(); });
+  frag.appendChild(el("div",{style:"margin-bottom:10px;"}, searchInput));
+
+  frag.appendChild(el("p",{class:"sublabel", style:"margin-top:0;"},
+    "Astuce : marque tes actifs de marque (logo, signature, filigrane, texture, cadre, motif) via le sélecteur sous chaque vignette — ils seront automatiquement mentionnés dans les prompts image, pour que l'IA les utilise tels quels au lieu d'en recréer."));
+
+  const ASSET_TYPES = ["", "logo", "signature", "filigrane", "texture", "cadre", "motif"];
+  const ASSET_LABELS = { "": "Pas un actif de marque", logo:"Logo", signature:"Signature", filigrane:"Filigrane", texture:"Texture", cadre:"Cadre", motif:"Motif" };
+
+  const filterRow = el("div",{class:"pillrow", style:"margin-bottom:14px;"});
+  filterRow.appendChild(el("button",{class:"pill"+(!state.libraryAssetFilter?" active":""), onclick:()=>{ state.libraryAssetFilter=false; renderLibraryGrid(); }}, "Toutes les photos"));
+  filterRow.appendChild(el("button",{class:"pill"+(state.libraryAssetFilter?" active":""), onclick:()=>{ state.libraryAssetFilter=true; renderLibraryGrid(); }}, "Actifs de marque"));
+  frag.appendChild(filterRow);
+
+  const gridHolder = el("div",{id:"libGridHolder"});
+  frag.appendChild(gridHolder);
+
+  function renderLibraryGrid(){
+    gridHolder.innerHTML = "";
+    const q = state.librarySearch.trim().toLowerCase();
+    const filtered = state.images.filter(img=>{
+      if(state.libraryAssetFilter && !img.assetType) return false;
+      if(!q) return true;
+      return img.name.toLowerCase().includes(q) || (img.tags||[]).some(t=>t.toLowerCase().includes(q));
+    });
+    if(state.images.length===0){
+      gridHolder.appendChild(el("p",{class:"hint"}, "Ta bibliothèque est vide. Ajoute tes premières photos pour commencer."));
+      return;
+    }
+    if(filtered.length===0){
+      gridHolder.appendChild(el("p",{class:"hint"}, "Aucune photo ne correspond à ce filtre."));
+      return;
+    }
+    const grid = el("div", {class:"grid2"});
+    filtered.forEach(img=>{
+      const favBtn = el("button",{class:"fav"+(img.favorite?" active":""), onclick:(e)=>{
+        e.stopPropagation(); img.favorite = !img.favorite; LS.set("vf-images", state.images); renderLibraryGrid();
+      }}, svgIcon(ICONS.star, 14));
+      const delBtn = el("button", {class:"del", onclick:(e)=>{
+        e.stopPropagation();
+        state.images = state.images.filter(i=>i.id!==img.id);
+        LS.set("vf-images", state.images);
+        if(state.selectedId===img.id) state.selectedId = null;
+        updateCount(); renderLibraryGrid();
+      }}, svgIcon(ICONS.trash, 14));
+      const tagsRow = el("div",{class:"tags"}, (img.tags||[]).map(t=>`#${t}`).join(" ") || "");
+      const thumb = el("div", {class:"thumb", onclick: ()=>{ state.selectedId=img.id; state.tab="editor"; renderNav(); renderMain(); }}, [
+        el("img", {src:img.dataUrl, alt:img.name}), favBtn, delBtn, tagsRow
+      ]);
+      const assetSelect = el("select",{style:"width:100%;margin-top:4px;font-size:11px;padding:5px 6px;"},
+        ASSET_TYPES.map(t=> el("option",{value:t}, ASSET_LABELS[t])));
+      assetSelect.value = img.assetType || "";
+      assetSelect.addEventListener("click", e=> e.stopPropagation());
+      assetSelect.addEventListener("change", e=>{
+        img.assetType = e.target.value || null;
+        LS.set("vf-images", state.images);
+      });
+      grid.appendChild(el("div",{},[vfWrap(thumb), assetSelect]));
+    });
+    gridHolder.appendChild(grid);
+  }
+  renderLibraryGrid();
+  return frag;
+}
+
+/* ============================================================
+   ONGLET ÉDITEUR
+============================================================ */
+let canvasEl = null;
+function drawCanvas(){
+  if(!canvasEl) return;
+  const img = state.images.find(i=>i.id===state.selectedId);
+  if(!img) return;
+  const {w,h} = ASPECTS[state.aspect];
+  canvasEl.width = w; canvasEl.height = h;
+  const ctx = canvasEl.getContext("2d");
+  ctx.clearRect(0,0,w,h);
+  loadImage(img.dataUrl).then(async image=>{
+    const srcRatio = image.width/image.height, dstRatio = w/h;
+    let sx,sy,sw,sh;
+    if(srcRatio>dstRatio){ sh=image.height; sw=sh*dstRatio; sx=(image.width-sw)/2; sy=0; }
+    else { sw=image.width; sh=sw/dstRatio; sx=0; sy=(image.height-sh)/2; }
+    ctx.filter = `brightness(${state.filters.brightness}%) contrast(${state.filters.contrast}%) saturate(${state.filters.saturate}%) grayscale(${state.filters.grayscale}%)`;
+    ctx.drawImage(image, sx,sy,sw,sh, 0,0,w,h);
+    ctx.filter = "none";
+    if(state.overlay.text.trim()){
+      const fontSize = (state.overlay.size/100)*(w/10);
+      ctx.font = `700 ${fontSize}px Georgia, serif`;
+      ctx.fillStyle = state.overlay.color;
+      ctx.textAlign = "center"; ctx.textBaseline = "middle";
+      ctx.shadowColor = "rgba(0,0,0,0.55)"; ctx.shadowBlur = fontSize*0.15;
+      ctx.fillText(state.overlay.text, (state.overlay.x/100)*w, (state.overlay.y/100)*h);
+      ctx.shadowBlur = 0;
+    }
+    if(state.logoOverlay.assetId){
+      const asset = state.images.find(i=>i.id===state.logoOverlay.assetId);
+      if(asset){
+        try{
+          const logoImg = await loadImage(asset.dataUrl);
+          const logoW = w * (state.logoOverlay.size/100);
+          const logoH = logoW * (logoImg.height/logoImg.width);
+          const lx = (state.logoOverlay.x/100)*w - logoW/2;
+          const ly = (state.logoOverlay.y/100)*h - logoH/2;
+          ctx.drawImage(logoImg, lx, ly, logoW, logoH);
+        }catch(e){}
+      }
+    }
+  });
+}
+function buildEditorTab(){
+  const img = state.images.find(i=>i.id===state.selectedId);
+  if(!img) return el("p",{class:"hint"},"Choisis d'abord une photo dans ta bibliothèque.");
+  const frag = el("div",{});
+
+  canvasEl = el("canvas", {});
+  let dragging = false;
+  function posFromEvent(e){
+    const rect = canvasEl.getBoundingClientRect();
+    const cx = e.touches ? e.touches[0].clientX : e.clientX;
+    const cy = e.touches ? e.touches[0].clientY : e.clientY;
+    state.overlay.x = Math.max(0,Math.min(100, ((cx-rect.left)/rect.width)*100));
+    state.overlay.y = Math.max(0,Math.min(100, ((cy-rect.top)/rect.height)*100));
+    drawCanvas();
+  }
+  canvasEl.addEventListener("mousedown", e=>{dragging=true; posFromEvent(e);});
+  canvasEl.addEventListener("mousemove", e=>{ if(dragging) posFromEvent(e); });
+  window.addEventListener("mouseup", ()=>dragging=false);
+  canvasEl.addEventListener("touchstart", e=>{dragging=true; posFromEvent(e);});
+  canvasEl.addEventListener("touchmove", e=>{ if(dragging) posFromEvent(e); });
+  canvasEl.addEventListener("touchend", ()=>dragging=false);
+
+  frag.appendChild(el("div", {style:"max-width:360px;margin:0 auto 20px;"}, [vfWrap(canvasEl)]));
+  setTimeout(drawCanvas, 0);
+
+  frag.appendChild(el("p",{class:"label"},"Format"));
+  const aspectRow = el("div",{class:"pillrow", style:"margin-bottom:16px;"});
+  Object.keys(ASPECTS).forEach(key=>{
+    aspectRow.appendChild(el("button",{
+      class: "pill"+(state.aspect===key?" active":""),
+      onclick: ()=>{ state.aspect=key; renderMain(); }
+    }, key));
+  });
+  frag.appendChild(aspectRow);
+
+  frag.appendChild(el("p",{class:"label"},"Réglages"));
+  const filterLabels = {brightness:"Luminosité", contrast:"Contraste", saturate:"Saturation", grayscale:"Noir & blanc"};
+  Object.keys(state.filters).forEach(key=>{
+    const valSpan = el("span",{}, `${state.filters[key]}%`);
+    const row = el("div",{class:"row"}, [el("span",{},filterLabels[key]), valSpan]);
+    const range = el("input",{type:"range", min:"0", max: key==="grayscale"?"100":"200", value:String(state.filters[key])});
+    range.addEventListener("input", e=>{ state.filters[key] = Number(e.target.value); valSpan.textContent = `${state.filters[key]}%`; drawCanvas(); });
+    frag.appendChild(el("div",{class:"slider-block"},[row, range]));
+  });
+
+  frag.appendChild(el("p",{class:"label", style:"margin-top:8px;"},"Texte (glisse sur l'image pour le positionner)"));
+  const textInput = el("input",{type:"text", value:state.overlay.text, placeholder:"Ton texte..."});
+  textInput.addEventListener("input", e=>{ state.overlay.text = e.target.value; drawCanvas(); });
+  frag.appendChild(el("div",{style:"margin-bottom:10px;"}, textInput));
+
+  const sizeRange = el("input",{type:"range", min:"20", max:"100", value:String(state.overlay.size), style:"flex:1;"});
+  sizeRange.addEventListener("input", e=>{ state.overlay.size = Number(e.target.value); drawCanvas(); });
+  const colorInput = el("input",{type:"color", value: state.overlay.color, style:"width:38px;height:38px;border-radius:10px;border:1px solid var(--border);"});
+  colorInput.addEventListener("input", e=>{ state.overlay.color = e.target.value; drawCanvas(); });
+  frag.appendChild(el("div",{style:"display:flex;gap:12px;align-items:center;margin-bottom:20px;"},[sizeRange, colorInput]));
+
+  const brandAssets = state.images.filter(i=>i.assetType);
+  frag.appendChild(el("p",{class:"label"},"Logo / actif de marque à surimposer"));
+  if(!brandAssets.length){
+    frag.appendChild(el("p",{class:"sublabel"},"Aucun actif de marque enregistré. Marque une photo comme \"Logo\" depuis l'onglet Bibliothèque pour pouvoir l'utiliser ici."));
+  } else {
+    const assetSelect = el("select",{}, [
+      el("option",{value:""}, "Aucun"),
+      ...brandAssets.map(a=> el("option",{value:a.id}, `${a.assetType} — ${a.name}`)),
+    ]);
+    assetSelect.value = state.logoOverlay.assetId;
+    assetSelect.addEventListener("change", e=>{ state.logoOverlay.assetId = e.target.value; drawCanvas(); });
+    frag.appendChild(el("div",{style:"margin-bottom:10px;"}, assetSelect));
+
+    if(state.logoOverlay.assetId){
+      ["x","y","size"].forEach(key=>{
+        const labels = { x:"Position horizontale", y:"Position verticale", size:"Taille" };
+        const valSpan = el("span",{}, `${state.logoOverlay[key]}%`);
+        const row = el("div",{class:"row"},[el("span",{},labels[key]), valSpan]);
+        const range = el("input",{type:"range", min: key==="size"?"5":"0", max: key==="size"?"50":"100", value:String(state.logoOverlay[key])});
+        range.addEventListener("input", e=>{ state.logoOverlay[key]=Number(e.target.value); valSpan.textContent=`${e.target.value}%`; drawCanvas(); });
+        frag.appendChild(el("div",{class:"slider-block"},[row, range]));
+      });
+    }
+  }
+
+  frag.appendChild(el("button",{class:"btn-primary", onclick: ()=>{
+    const link = document.createElement("a");
+    link.download = `post-${state.aspect.replace(":","x")}.jpg`;
+    link.href = canvasEl.toDataURL("image/jpeg", 0.92);
+    link.click();
+  }}, [svgIcon(ICONS.download,16), el("span",{},"Télécharger le visuel")]));
+
+  return frag;
+}
+
+/* ============================================================
+   ONGLET CONNAISSANCES (base de connaissances modulaire)
+============================================================ */
+function buildConfigPromptText(){
+  return cleanPrompt(`Tu me connais déjà à travers nos échanges précédents. En te basant sur tout ce que tu sais de mon activité, propose des modules de connaissance pour structurer ma base de marque.
+
+Réponds STRICTEMENT avec une ligne par module, dans ce format exact (rien d'autre) :
+CATEGORIE | TITRE | CONTENU
+
+Les catégories possibles sont : ${CATEGORIES.join(", ")}.
+Propose au moins un module pour "Univers de marque", "Charte graphique", "Prestations" et "Direction artistique".`);
+}
+function importModulesFromText(text){
+  const lines = text.split("\n").map(l=>l.trim()).filter(Boolean);
+  let count = 0;
+  lines.forEach(line=>{
+    const parts = line.split("|").map(p=>p.trim());
+    if(parts.length>=3 && CATEGORIES.includes(parts[0])){
+      state.modules.push({ id: uid(), category:parts[0], title:parts[1], content:parts.slice(2).join(" | "), enabled:true });
+      count++;
+    }
+  });
+  LS.set("vf-modules", state.modules);
+  return count;
+}
+function buildKnowledgeTab(){
+  const frag = el("div",{});
+
+  frag.appendChild(el("h2",{class:"section"},"Importer depuis ChatGPT"));
+  frag.appendChild(el("p",{class:"sublabel"},"ChatGPT connaît déjà ton activité. Récupère un prompt, colle sa réponse, les modules sont créés automatiquement."));
+  const genBtn = el("button",{class:"btn-secondary", style:"margin-bottom:10px;"}, [svgIcon(ICONS.sparkles,14), el("span",{},"Générer le prompt")]);
+  genBtn.addEventListener("click", ()=>{ state.configPrompt = buildConfigPromptText(); renderMain(); });
+  frag.appendChild(genBtn);
+
+  if(state.configPrompt){
+    frag.appendChild(vfWrap(el("div",{class:"card", style:"margin-bottom:6px;"}, [el("pre",{}, state.configPrompt)])));
+    frag.appendChild(copyBtnFor(()=>state.configPrompt));
+    const pasted = el("textarea",{rows:"5", placeholder:"Colle ici la réponse de ChatGPT (CATEGORIE | TITRE | CONTENU)..."}, state.configPasted);
+    pasted.addEventListener("input", e=>{ state.configPasted = e.target.value; });
+    frag.appendChild(el("div",{style:"margin:10px 0;"}, pasted));
+    frag.appendChild(el("button",{class:"btn-primary", style:"margin-bottom:10px;", onclick: ()=>{
+      if(!state.configPasted.trim()) return;
+      const n = importModulesFromText(state.configPasted);
+      state.configPasted = ""; state.configPrompt = "";
+      renderMain();
+      alert(`${n} module(s) importé(s).`);
+    }}, "Importer les modules"));
+  }
+
+  frag.appendChild(el("h2",{class:"section"},"Ajouter un module"));
+  const catSelect = el("select",{}, CATEGORIES.map(c=>el("option",{value:c}, c)));
+  catSelect.value = state.newModule.category;
+  catSelect.addEventListener("change", e=>{ state.newModule.category = e.target.value; });
+  const titleInput = el("input",{type:"text", placeholder:"Titre du module (ex : Massage Zébré)"});
+  titleInput.addEventListener("input", e=>{ state.newModule.title = e.target.value; });
+  const contentArea = el("textarea",{rows:"4", placeholder:"Contenu détaillé..."});
+  contentArea.addEventListener("input", e=>{ state.newModule.content = e.target.value; });
+  frag.appendChild(el("div",{style:"margin-bottom:8px;"}, catSelect));
+  frag.appendChild(el("div",{style:"margin-bottom:8px;"}, titleInput));
+  frag.appendChild(el("div",{style:"margin-bottom:10px;"}, contentArea));
+  frag.appendChild(el("button",{class:"btn-primary", style:"margin-bottom:20px;", onclick: ()=>{
+    if(!state.newModule.title.trim() || !state.newModule.content.trim()) return;
+    state.modules.push({ id: uid(), category: state.newModule.category, title: state.newModule.title.trim(), content: state.newModule.content.trim(), enabled:true });
+    LS.set("vf-modules", state.modules);
+    state.newModule = { category: CATEGORIES[0], title:"", content:"" };
+    renderMain();
+  }}, [svgIcon(ICONS.plus,16), el("span",{},"Ajouter le module")]));
+
+  frag.appendChild(el("h2",{class:"section"},"Base de connaissances"));
+  const filterRow = el("div",{class:"pillrow", style:"margin-bottom:14px;"});
+  ["Toutes",...CATEGORIES].forEach(c=>{
+    filterRow.appendChild(el("button",{class:"pill"+(state.moduleFilter===c?" active":""), onclick:()=>{ state.moduleFilter=c; renderMain(); }}, c));
+  });
+  frag.appendChild(filterRow);
+
+  const visibleModules = state.modules.filter(m=> state.moduleFilter==="Toutes" || m.category===state.moduleFilter);
+  if(visibleModules.length===0){
+    frag.appendChild(el("p",{class:"hint"},"Aucun module dans cette catégorie."));
+  }
+  visibleModules.forEach(m=>{
+    const enableBox = el("input",{type:"checkbox", checked:m.enabled});
+    enableBox.addEventListener("change", e=>{ m.enabled = e.target.checked; LS.set("vf-modules", state.modules); });
+    const delBtn = el("button",{class:"btn-small", onclick:()=>{
+      state.modules = state.modules.filter(x=>x.id!==m.id); LS.set("vf-modules", state.modules); renderMain();
+    }}, svgIcon(ICONS.trash,12));
+    frag.appendChild(el("div",{class:"module-card"},[
+      el("div",{class:"module-head"},[
+        el("div",{},[el("div",{class:"module-title"}, m.title), el("div",{class:"module-cat"}, m.category)]),
+        el("div",{style:"display:flex;align-items:center;gap:10px;"},[enableBox, delBtn]),
+      ]),
+      el("div",{class:"module-content"}, m.content),
+    ]));
+  });
+
+  return frag;
+}
+
+/* ============================================================
+   ONGLET DIRECTEUR ARTISTIQUE
+============================================================ */
+function buildDaTab(){
+  const frag = el("div",{});
+  frag.appendChild(el("p",{class:"sublabel"},"Ces paramètres sont injectés automatiquement dans chaque prompt d'image généré."));
+
+  function textField(key, label, placeholder){
+    const wrap = el("div",{class:"field"});
+    wrap.appendChild(el("label",{}, label));
+    const input = el("input",{type:"text", value: state.da[key]||"", placeholder: placeholder||""});
+    input.addEventListener("input", e=>{ state.da[key] = e.target.value; LS.set("vf-da", state.da); });
+    wrap.appendChild(input);
+    frag.appendChild(wrap);
+  }
+  function sliderField(key, label){
+    const valSpan = el("span",{}, String(state.da[key]));
+    const row = el("div",{class:"row"},[el("span",{},label), valSpan]);
+    const range = el("input",{type:"range", min:"0", max:"10", value:String(state.da[key])});
+    range.addEventListener("input", e=>{ state.da[key]=Number(e.target.value); valSpan.textContent=e.target.value; LS.set("vf-da", state.da); });
+    frag.appendChild(el("div",{class:"slider-block"},[row, range]));
+  }
+  function checkField(key, label){
+    const box = el("input",{type:"checkbox", checked: state.da[key]});
+    box.addEventListener("change", e=>{ state.da[key]=e.target.checked; LS.set("vf-da", state.da); });
+    frag.appendChild(el("label",{style:"display:flex;align-items:center;gap:8px;margin-bottom:14px;font-size:14px;"},[box, label]));
+  }
+
+  textField("objectif","Objectif", "Ex : mettre en valeur une prestation");
+  textField("emotion","Émotion recherchée", "Ex : apaisement, confiance");
+  textField("ambiance","Ambiance", "Ex : chaleureuse, feutrée");
+  sliderField("luxe","Niveau de luxe");
+  sliderField("creativite","Niveau de créativité");
+  sliderField("sobriete","Niveau de sobriété");
+  sliderField("intensite","Intensité");
+  textField("stylePhoto","Style photographique", "Ex : lumière naturelle, argentique");
+  textField("styleGraphique","Style graphique", "Ex : minimaliste, éditorial");
+  textField("palette","Palette de couleurs", "Ex : tons terreux, camel, blanc cassé");
+  textField("textures","Textures", "Ex : bois brut, lin, pierre");
+  textField("composition","Composition", "Ex : cadrage serré, règle des tiers");
+  textField("angle","Angle de prise de vue", "Ex : légère plongée, hauteur des yeux");
+  textField("distance","Distance / cadrage", "Ex : plan rapproché, plan large");
+  textField("profondeurChamp","Profondeur de champ", "Ex : arrière-plan flou, tout net");
+  textField("contraste","Contraste", "Ex : doux, marqué");
+  textField("eclairage","Type d'éclairage", "Ex : lumière douce en fin de journée");
+  textField("cible","Cible", "Ex : clientèle locale 30-55 ans");
+  textField("elementsInterdits","Éléments interdits dans l'image", "Ex : pas de visage reconnaissable, pas de texte, pas de logo concurrent");
+
+  const realismeRow = el("div",{class:"field"});
+  realismeRow.appendChild(el("label",{},"Réalisme / rendu"));
+  const realismeSelect = el("select",{}, ["Réaliste","Cinématique","Illustration","Stylisé"].map(o=>el("option",{value:o}, o)));
+  realismeSelect.value = state.da.realisme;
+  realismeSelect.addEventListener("change", e=>{ state.da.realisme = e.target.value; LS.set("vf-da", state.da); });
+  realismeRow.appendChild(realismeSelect);
+  frag.appendChild(realismeRow);
+
+  checkField("presenceLogo","Le logo doit apparaître sur l'image");
+
+  return frag;
+}
+
+/* ============================================================
+   ONGLET STYLES
+============================================================ */
+function buildStylesTab(){
+  const frag = el("div",{});
+  frag.appendChild(el("p",{class:"sublabel"},"Ces styles sont sélectionnables lors de la création d'un post ; leur description est injectée dans le prompt image."));
+
+  frag.appendChild(el("h2",{class:"section"},"Ajouter un style"));
+  const nameInput = el("input",{type:"text", placeholder:"Nom du style (ex : Refuge d'hiver)"});
+  const descArea = el("textarea",{rows:"2", placeholder:"Description visuelle du style..."});
+  frag.appendChild(el("div",{style:"margin-bottom:8px;"}, nameInput));
+  frag.appendChild(el("div",{style:"margin-bottom:10px;"}, descArea));
+  frag.appendChild(el("button",{class:"btn-primary", style:"margin-bottom:22px;", onclick: ()=>{
+    if(!nameInput.value.trim() || !descArea.value.trim()) return;
+    state.styles.push({id: uid(), name:nameInput.value.trim(), description:descArea.value.trim()});
+    LS.set("vf-styles", state.styles);
+    renderMain();
+  }}, [svgIcon(ICONS.plus,16), el("span",{},"Ajouter le style")]));
+
+  frag.appendChild(el("h2",{class:"section"},"Styles enregistrés"));
+  state.styles.forEach(s=>{
+    const delBtn = el("button",{class:"btn-small", onclick: ()=>{
+      state.styles = state.styles.filter(x=>x.id!==s.id); LS.set("vf-styles", state.styles);
+      if(state.styleId===s.id) state.styleId="";
+      renderMain();
+    }}, svgIcon(ICONS.trash,12));
+    frag.appendChild(el("div",{class:"module-card"},[
+      el("div",{class:"module-head"},[ el("div",{class:"module-title"}, s.name), delBtn ]),
+      el("div",{class:"module-content"}, s.description),
+    ]));
+  });
+  return frag;
+}
+
+
+/* ---------- envoie le contexte courant vers l'onglet Audit IA ---------- */
+function sendToAudit(ctx){
+  state.lastGenerated = ctx;
+  state.auditPrompt = "";
+  state.auditPasted = "";
+  state.tab = "audit";
+  renderNav();
+  renderMain();
+}
+
+/* ---------- Prompt Inspector : explique comment le prompt a été construit ---------- */
+function buildInspector({ platform, missionKey, prestation, style, textMods, imageMods, textIgnored, imageIgnored, duplicatesRemoved, aspect, overlayRule }){
+  const row = (label, val) => el("div",{style:"display:flex;justify-content:space-between;gap:10px;font-size:12px;padding:4px 0;border-bottom:1px solid var(--border);"},
+    [el("span",{style:"color:var(--muted2);"}, label), el("span",{style:"text-align:right;color:var(--muted);"}, val || "—")]);
+  const modList = (mods) => mods.length
+    ? mods.map(m=>`${m.category} · ${m.title}`).join(", ")
+    : "aucun module activé";
+
+  const details = el("details",{style:"margin-bottom:16px;"});
+  details.appendChild(el("summary",{style:"cursor:pointer;font-size:13px;color:var(--muted);display:flex;align-items:center;gap:6px;"},
+    [svgIcon(ICONS.sparkles,14), el("span",{},"Prompt Inspector — pourquoi ce prompt est construit ainsi")]));
+  const body = el("div",{class:"card", style:"margin-top:8px;"});
+  body.appendChild(row("Plateforme", platform));
+  body.appendChild(row("Mission", missionKey || "aucune sélectionnée"));
+  if(missionKey && MISSIONS[missionKey]) body.appendChild(row("Ton / CTA / structure", `${MISSIONS[missionKey].ton} · ${MISSIONS[missionKey].cta}`));
+  body.appendChild(row("Prestation concernée", prestation ? prestation.name : "non spécifiée"));
+  body.appendChild(row("Style visuel", style ? style.name : "aucun"));
+  body.appendChild(row("Saison actuelle", getCurrentSeasonFR()));
+  body.appendChild(row("Format image", `${aspect} (${ASPECTS[aspect].w}x${ASPECTS[aspect].h})`));
+  body.appendChild(row("Contrainte texte-sur-image", overlayRule));
+  body.appendChild(row("Modules texte injectés", modList(textMods)));
+  body.appendChild(row("Modules texte ignorés (budget de contexte)", textIgnored && textIgnored.length ? modList(textIgnored) : "aucun"));
+  body.appendChild(row("Modules image injectés", modList(imageMods)));
+  body.appendChild(row("Modules image ignorés (budget de contexte)", imageIgnored && imageIgnored.length ? modList(imageIgnored) : "aucun"));
+  if(duplicatesRemoved) body.appendChild(row("Doublons fusionnés automatiquement", String(duplicatesRemoved)));
+  details.appendChild(body);
+  return details;
+}
+
+/* ---------- bloc de retour + score qualité, réutilisé pour post simple et campagne ---------- */
+function buildFeedbackBlock(ctx){
+  const frag = el("div",{});
+  const risk = computeRepetitionRisk(ctx.platform, ctx.getTextResult());
+  frag.appendChild(el("h2",{class:"section"},"Score qualité avant validation"));
+  const riskColor = risk>50 ? "var(--coral)" : risk>25 ? "var(--amber)" : "var(--green)";
+  frag.appendChild(el("p",{style:`font-size:13px;margin-bottom:10px;`},[
+    "Risque de répétition détecté (calcul automatique vs historique) : ",
+    el("strong",{style:`color:${riskColor};`}, `${risk}%`),
+  ]));
+  const dims = [["charte","Respect de la charte"],["coherence","Cohérence marque"],["adaptation","Adaptation plateforme"],
+    ["originalite","Originalité"],["clarte","Clarté"],["conversion","Potentiel de conversion"]];
+  dims.forEach(([key,label])=>{
+    const valSpan = el("span",{}, String(state.qualityScores[key]));
+    const row = el("div",{class:"row"},[el("span",{},label), valSpan]);
+    const range = el("input",{type:"range", min:"0", max:"10", value:String(state.qualityScores[key])});
+    range.addEventListener("input", e=>{ state.qualityScores[key]=Number(e.target.value); valSpan.textContent=e.target.value; });
+    frag.appendChild(el("div",{class:"slider-block"},[row, range]));
+  });
+
+  frag.appendChild(el("h2",{class:"section"},"Retour sur ce contenu"));
+  frag.appendChild(el("p",{class:"sublabel"},"Ton retour devient une nouvelle règle réinjectée dans les prochaines générations."));
+  const commentArea = el("textarea",{rows:"2", placeholder:"Pourquoi ? (optionnel mais utile pour que l'IA apprenne)"}, state.feedbackComment);
+  commentArea.addEventListener("input", e=>{ state.feedbackComment = e.target.value; });
+  frag.appendChild(el("div",{style:"margin-bottom:10px;"}, commentArea));
+
+  const rateRow = el("div",{style:"display:flex;gap:8px;margin-bottom:24px;"});
+  const doRate = (rating)=>{
+    const entry = {
+      id: uid(), date: nowStr(), platform: ctx.platform, topic: ctx.topic,
+      imagePrompt: ctx.imagePrompt, textPrompt: ctx.textPrompt,
+      textResult: ctx.getTextResult(), rating, comment: state.feedbackComment, favorite:false,
+      quality: {...state.qualityScores, repetitionRisk: risk},
+      campaignLabel: ctx.campaignLabel || null,
+    };
+    state.history.push(entry);
+    LS.set("vf-history", state.history);
+    if(rating==="down" || state.feedbackComment.trim()){
+      state.modules.push({ id: uid(), category:"Erreurs fréquentes",
+        title: `Retour ${ctx.platform} — ${nowStr()}`,
+        content: state.feedbackComment.trim() || `Contenu jugé à revoir pour ${ctx.platform} : "${(ctx.getTextResult()||"").slice(0,120)}"`,
+        enabled:true });
+    }
+    if(rating==="up" && ctx.getTextResult().trim()){
+      state.modules.push({ id: uid(), category:"Exemples excellents",
+        title: `Exemple validé ${ctx.platform} — ${nowStr()}`,
+        content: ctx.getTextResult().trim(), enabled:true });
+    }
+    LS.set("vf-modules", state.modules);
+    state.feedbackComment = "";
+    ctx.onSaved && ctx.onSaved();
+    renderMain();
+  };
+  rateRow.appendChild(el("button",{class:"btn-ghost", onclick:()=>doRate("up")}, "👍 Excellent"));
+  rateRow.appendChild(el("button",{class:"btn-ghost", onclick:()=>doRate("mid")}, "👌 Moyen"));
+  rateRow.appendChild(el("button",{class:"btn-ghost", onclick:()=>doRate("down")}, "👎 À revoir"));
+  frag.appendChild(rateRow);
+  return frag;
+}
+
+function buildPostTab(){
+  const frag = el("div",{});
+  const platform = state.network;
+  const isCampaign = state.mission === "Créer une campagne complète";
+
+  const modeRow = el("div",{class:"pillrow", style:"margin-bottom:14px;"});
+  modeRow.appendChild(el("button",{class:"pill"+(state.viewMode==="expert"?" active":""), onclick:()=>{ state.viewMode="expert"; renderMain(); }}, "🔍 Mode Expert"));
+  modeRow.appendChild(el("button",{class:"pill"+(state.viewMode==="production"?" active":""), onclick:()=>{ state.viewMode="production"; renderMain(); }}, "⚡ Mode Production"));
+  frag.appendChild(modeRow);
+  frag.appendChild(el("p",{class:"sublabel"}, state.viewMode==="production"
+    ? "Va droit au but : juste les éléments prêts à copier."
+    : "Affiche le détail de construction du contexte (Prompt Inspector)."));
+
+  frag.appendChild(el("p",{class:"label"},"Mission"));
+  const missionRow = el("div",{class:"pillrow", style:"margin-bottom:8px;"});
+  Object.keys(MISSIONS).forEach(m=>{
+    missionRow.appendChild(el("button",{class:"pill"+(state.mission===m?" active":""), onclick:()=>{
+      state.mission = m;
+      if(MISSIONS[m].reseau!=="Toutes" && PLATFORMS.includes(MISSIONS[m].reseau)) state.network = MISSIONS[m].reseau;
+      renderMain();
+    }}, m));
+  });
+  frag.appendChild(missionRow);
+  if(state.mission) frag.appendChild(el("p",{class:"sublabel"}, `Ton : ${MISSIONS[state.mission].ton} · CTA suggéré : ${MISSIONS[state.mission].cta}`));
+
+  if(!isCampaign){
+    frag.appendChild(el("p",{class:"label"},"Plateforme"));
+    const netRow = el("div",{class:"pillrow", style:"margin-bottom:8px;"});
+    PLATFORMS.forEach(n=>{
+      netRow.appendChild(el("button",{class:"pill"+(state.network===n?" active":""), onclick:()=>{ state.network=n; renderMain(); }}, n));
+    });
+    frag.appendChild(netRow);
+    frag.appendChild(el("p",{class:"sublabel"}, PLATFORM_NOTE[platform]));
+  }
+
+  frag.appendChild(el("p",{class:"label"},"Prestation concernée"));
+  const prestationBlocksAvail = extractPrestationBlocks(getMergedPrestationsText());
+  const presSelect = el("select",{}, [
+    el("option",{value:""}, "Non spécifiée"),
+    ...KNOWN_PRESTATIONS.map(name=> el("option",{value:name}, prestationBlocksAvail[name] ? name : `${name} (non documentée)`)),
+  ]);
+  presSelect.value = state.prestationName;
+  presSelect.addEventListener("change", e=>{ state.prestationName = e.target.value; renderMain(); });
+  frag.appendChild(el("div",{style:"margin-bottom:6px;"}, presSelect));
+  if(state.prestationName && !prestationBlocksAvail[state.prestationName]){
+    frag.appendChild(el("p",{class:"sublabel"},"Aucun détail trouvé pour cette prestation dans la base de connaissances — seul son nom sera transmis à l'IA."));
+  } else {
+    frag.appendChild(el("div",{style:"margin-bottom:14px;"}));
+  }
+
+  frag.appendChild(el("p",{class:"label"},"Style visuel"));
+  const styleRow = el("div",{class:"pillrow", style:"margin-bottom:16px;"});
+  // Le bouton "Aucun" a été retiré : un style par défaut (Luxe Silencieux) est toujours présélectionné.
+  state.styles.forEach(s=>{
+    styleRow.appendChild(el("button",{class:"pill"+(state.styleId===s.id?" active":""), onclick:()=>{ state.styleId=s.id; renderMain(); }}, s.name));
+  });
+  frag.appendChild(styleRow);
+
+  frag.appendChild(el("p",{class:"label"},"Modes de production enregistrés"));
+  const modesRow = el("div",{class:"pillrow", style:"margin-bottom:8px;"});
+  state.productionModes.forEach(mode=>{
+    modesRow.appendChild(el("button",{class:"pill", onclick:()=>{
+      state.network = mode.network; state.styleId = mode.styleId; state.mission = mode.missionKey||"";
+      state.da.creativite = mode.creativite; state.da.sobriete = mode.sobriete;
+      LS.set("vf-da", state.da);
+      renderMain();
+    }}, mode.name));
+  });
+  frag.appendChild(modesRow);
+  const saveModeBtn = el("button",{class:"btn-small", style:"margin-bottom:16px;"}, "+ Enregistrer ce mode (plateforme + style + créativité/sobriété)");
+  saveModeBtn.addEventListener("click", ()=>{
+    const name = prompt("Nom de ce mode (ex : Instagram Premium, Article SEO...)");
+    if(!name || !name.trim()) return;
+    state.productionModes.push({ id: uid(), name: name.trim(), network: state.network, styleId: state.styleId,
+      missionKey: state.mission, creativite: state.da.creativite, sobriete: state.da.sobriete });
+    LS.set("vf-modes", state.productionModes);
+    renderMain();
+  });
+  frag.appendChild(saveModeBtn);
+
+  frag.appendChild(el("p",{class:"label"},"Sujet du post"));
+  const topicArea = el("textarea",{rows:"3", placeholder:"Ex : lancement du Massage Zébré, offre vacances, nouveauté..."}, state.topic);
+  topicArea.addEventListener("input", e=>{ state.topic = e.target.value; });
+  frag.appendChild(el("div",{style:"margin-bottom:6px;"}, topicArea));
+  const topicWarn = el("p",{style:"font-size:12px;color:var(--coral);margin:0 0 12px;min-height:14px;"}, "");
+  frag.appendChild(topicWarn);
+
+  if(isCampaign){
+    frag.appendChild(el("button",{class:"btn-primary", style:"margin-bottom:18px;", onclick: ()=>{
+      if(!state.topic.trim()){ topicWarn.textContent = "Décris d'abord le sujet du post avant de générer."; return; }
+      topicWarn.textContent = "";
+      state.campaign = generateCampaign(state.topic, state.mission);
+      LS.set("vf-campaign", state.campaign);
+      renderMain();
+    }}, [svgIcon(ICONS.sparkles,16), el("span",{},"Générer la campagne complète (5 formats)")]));
+
+    state.campaign.forEach(item=>{
+      frag.appendChild(el("h2",{class:"section"}, item.label));
+      if(state.viewMode==="expert"){
+        const txtDetail = item.imageOnly ? {kept:[],ignored:[],duplicatesRemoved:0} : textModulesDetail(item.platform);
+        const imgDetail = imageModulesDetail();
+        frag.appendChild(buildInspector({
+          platform:item.platform, missionKey:state.mission, prestation:getSelectedPrestationInfo(), style:getSelectedStyle(),
+          textMods: txtDetail.kept, textIgnored: txtDetail.ignored, imageMods: imgDetail.kept, imageIgnored: imgDetail.ignored,
+          duplicatesRemoved: txtDetail.duplicatesRemoved + imgDetail.duplicatesRemoved,
+          aspect:item.aspect, overlayRule: PLATFORM_OVERLAY[item.platform]==="aucun" || item.imageOnly ? "aucun texte sur l'image" : "texte léger toléré",
+        }));
+      }
+      frag.appendChild(vfWrap(el("div",{class:"card", style:"margin-bottom:6px;"},[el("pre",{}, item.imagePrompt)])));
+      frag.appendChild(copyBtnFor(()=>item.imagePrompt));
+
+      const imgFileInput = el("input",{type:"file", accept:"image/*", style:"display:none"});
+      const confirmMsg = el("p",{style:"font-size:12px;color:var(--green);margin:6px 0;min-height:14px;"},"");
+      imgFileInput.addEventListener("change", async (e)=>{
+        const file = e.target.files[0]; if(!file) return;
+        const dataUrl = await resizeImageFile(file);
+        state.images.push({id: uid(), name:file.name, dataUrl, tags:[item.platform, item.label], favorite:false});
+        LS.set("vf-images", state.images); updateCount();
+        confirmMsg.textContent = "Image ajoutée ✓";
+        imgFileInput.value = "";
+      });
+      frag.appendChild(imgFileInput);
+      frag.appendChild(el("button",{class:"btn-secondary", onclick:()=>imgFileInput.click()}, [svgIcon(ICONS.upload,14), el("span",{},"Importer l'image générée")]));
+      frag.appendChild(confirmMsg);
+
+      if(!item.imageOnly){
+        frag.appendChild(vfWrap(el("div",{class:"card", style:"margin:10px 0 6px;"},[el("pre",{}, item.textPrompt)])));
+        frag.appendChild(copyBtnFor(()=>item.textPrompt));
+        const pastedArea = el("textarea",{rows:"4", placeholder:"Colle ici la réponse texte de ChatGPT...", style:"margin:8px 0;"}, item.textPasted);
+        pastedArea.addEventListener("input", e=>{ item.textPasted = e.target.value; LS.set("vf-campaign", state.campaign); });
+        frag.appendChild(pastedArea);
+        frag.appendChild(el("button",{class:"btn-secondary", style:"margin-bottom:10px;", onclick: ()=>{
+          sendToAudit({
+            platform:item.platform, missionKey:state.mission, topic:state.topic,
+            imagePrompt:item.imagePrompt, textPrompt:item.textPrompt,
+            textMods: textModulesFor(item.platform), imageMods: imageModulesFor(),
+            prestation:getSelectedPrestationInfo(), style:getSelectedStyle(),
+            antiRepeatTextNote: buildAntiRepeatNote(item.platform,"texte"), antiRepeatImageNote: buildAntiRepeatNote(item.platform,"image"),
+            textPasted:item.textPasted, campaignLabel:item.label,
+          });
+        }}, [svgIcon(ICONS.sparkles,14), el("span",{},"Analyser avec ChatGPT")]));
+        frag.appendChild(buildFeedbackBlock({
+          platform:item.platform, topic:state.topic, imagePrompt:item.imagePrompt, textPrompt:item.textPrompt,
+          getTextResult: ()=>item.textPasted, campaignLabel:item.label,
+        }));
+      }
+    });
+    return frag;
+  }
+
+  frag.appendChild(el("button",{class:"btn-primary", style:"margin-bottom:14px;", onclick: ()=>{
+    if(!state.topic.trim()){ topicWarn.textContent = "Décris d'abord le sujet du post avant de générer."; return; }
+    topicWarn.textContent = "";
+    state.imagePrompt = buildImagePromptFull(platform, state.topic, PLATFORM_ASPECT[platform], state.mission);
+    state.textPrompt = buildTextPromptFull(platform, state.topic, state.mission);
+    state.textPasted = ""; state.feedbackComment = "";
+    state.textPromptOptimized = null; state.imagePromptOptimized = null;
+    renderMain();
+  }}, [svgIcon(ICONS.wand,16), el("span",{},"Générer image + texte")]));
+
+  if(state.imagePrompt){
+    const txtDetail = textModulesDetail(platform);
+    const imgDetail = imageModulesDetail();
+    if(state.viewMode==="expert") frag.appendChild(buildInspector({
+      platform, missionKey: state.mission, prestation: getSelectedPrestationInfo(), style: getSelectedStyle(),
+      textMods: txtDetail.kept, textIgnored: txtDetail.ignored, imageMods: imgDetail.kept, imageIgnored: imgDetail.ignored,
+      duplicatesRemoved: txtDetail.duplicatesRemoved + imgDetail.duplicatesRemoved,
+      aspect: PLATFORM_ASPECT[platform],
+      overlayRule: PLATFORM_OVERLAY[platform]==="aucun" ? "aucun texte sur l'image" : `texte léger toléré (${PLATFORM_MAXCHARS[platform]} car. max)`,
+    }));
+
+    const risks = currentRiskFlags();
+    const provider = state.apiProviders.find(p=>p.id===state.selectedProviderId) || state.apiProviders[0] || null;
+    const estCost = provider ? estimateCost(provider, state.textPrompt) : null;
+    const SPEED_ESTIMATES = { "Très rapide":"≈2-5 s", "Rapide":"≈5-10 s", "Moyenne":"≈10-20 s" };
+    const estTime = provider ? (SPEED_ESTIMATES[provider.speed] || "variable selon le fournisseur") : null;
+    const qScore = computeQualityScore({ platform, textPrompt: state.textPrompt, textMods: txtDetail.kept, imageMods: imgDetail.kept, missionKey: state.mission });
+    const scoreColor = qScore.global>=80 ? "var(--green)" : qScore.global>=60 ? "var(--amber)" : "var(--coral)";
+    const routerSuggestion = suggestProviderFor({ platform });
+
+    frag.appendChild(el("div",{class:"card", style:"margin-bottom:16px;"},[
+      el("div",{style:"display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;"},[
+        el("p",{class:"label", style:"margin:0;"},"Audit préalable & score qualité"),
+        el("span",{style:`font-size:22px;font-weight:700;color:${scoreColor};`}, `${qScore.global}/100`),
+      ]),
+      el("div",{class:"learning-row"}, `Longueur du prompt texte : ${state.textPrompt.length} caractères ${state.textPrompt.length>4000?"— assez long, vérifie qu'aucune info superflue n'a été injectée":""}`),
+      el("div",{class:"learning-row"},
+        `Connaissances : ${txtDetail.totalAvailable+imgDetail.totalAvailable} disponibles · ${txtDetail.totalKept+imgDetail.totalKept} injectées · ${(txtDetail.ignored.length+imgDetail.ignored.length)} ignorées · ${txtDetail.duplicatesRemoved+imgDetail.duplicatesRemoved} doublons fusionnés`),
+      (()=>{
+        const beforeSum = txtDetail.lengthBefore + imgDetail.lengthBefore;
+        const afterSum = txtDetail.lengthAfter + imgDetail.lengthAfter;
+        const gain = beforeSum>0 ? Math.round((1-afterSum/beforeSum)*100) : 0;
+        const tokensSaved = txtDetail.tokensSaved + imgDetail.tokensSaved;
+        const costSaved = provider ? estimateCost(provider, "x".repeat(tokensSaved*4)) : null;
+        const avgRelevance = Math.round((txtDetail.relevanceIndex + imgDetail.relevanceIndex)/2);
+        return el("div",{class:"learning-row", style:"color:var(--green);"},
+          `Optimisation moteur : ${beforeSum} → ${afterSum} caractères (−${gain}%) · ≈${tokensSaved} tokens économisés${costSaved!=null?` · ≈$${costSaved.toFixed(4)} économisés`:""} · indice de pertinence : ${avgRelevance}/100`);
+      })(),
+      risks.length
+        ? el("div",{class:"learning-row", style:"color:var(--amber);"}, `⚠ Sujets à traiter avec prudence : ${risks.join(", ")}. Un garde-fou générique est déjà inclus dans le prompt image ; pour un résultat plus précis, renseigne un champ "Scène visuelle" dans la fiche de cette prestation (onglet Connaissances).`)
+        : el("div",{class:"learning-row"}, "Aucun sujet sensible détecté."),
+      qScore.weakPoints.length
+        ? el("div",{class:"learning-row", style:"color:var(--coral);"}, `Points faibles détectés : ${qScore.weakPoints.join(", ")}.`)
+        : el("div",{class:"learning-row", style:"color:var(--green);"}, "Aucun point faible détecté sur les critères mesurables."),
+      el("div",{class:"learning-row"}, provider
+        ? `Coût estimé (${provider.label}) : ${estCost!=null ? "$"+estCost.toFixed(4) : "non estimé — renseigne les tarifs dans Paramètres API"} · Temps estimé : ${estTime}`
+        : "Aucun fournisseur API configuré — mode manuel (copier/coller)."),
+      routerSuggestion ? el("div",{class:"learning-row", style:"color:#8FA6FF;"}, `Moteur recommandé pour ce type de contenu : ${routerSuggestion.suggestion} — ${routerSuggestion.reason} (suggestion libre, tu choisis toujours toi-même dans le sélecteur ci-dessous).`) : null,
+      el("p",{style:"font-size:11px;color:var(--muted2);margin-top:6px;"},"Score heuristique local basé sur des signaux structurels, pas un jugement sémantique — pour une vraie évaluation qualitative, utilise l'onglet Audit IA."),
+    ]));
+
+    if(qScore.global < 70){
+      frag.appendChild(el("button",{class:"btn-secondary", style:"margin-bottom:16px;", onclick: ()=>{
+        const optimizedText = buildTextPromptFull(platform, state.topic, state.mission);
+        const optimizedImage = buildImagePromptFull(platform, state.topic, PLATFORM_ASPECT[platform], state.mission);
+        state.textPromptOptimized = optimizedText;
+        state.imagePromptOptimized = optimizedImage;
+        renderMain();
+      }}, "🛠 Optimiser le prompt (score sous le seuil de 70)"));
+    }
+    if(state.textPromptOptimized){
+      frag.appendChild(el("div",{class:"card", style:"margin-bottom:16px;"},[
+        el("p",{class:"label"},"Comparaison — version actuelle vs optimisée"),
+        el("p",{style:"font-size:12px;color:var(--muted2);margin-bottom:8px;"},"La reconstruction applique la même logique de sélection avec le contexte le plus à jour (modules activés, historique récent). Choisis la version à utiliser."),
+        el("div",{style:"display:flex;gap:8px;"},[
+          el("button",{class:"btn-ghost", onclick:()=>{ state.textPromptOptimized=null; state.imagePromptOptimized=null; renderMain(); }}, "Garder l'actuelle"),
+          el("button",{class:"btn-ghost active", onclick:()=>{ state.textPrompt=state.textPromptOptimized; state.imagePrompt=state.imagePromptOptimized; state.textPromptOptimized=null; state.imagePromptOptimized=null; renderMain(); }}, "Utiliser l'optimisée"),
+        ]),
+      ]));
+    }
+
+    if(provider && provider.apiKey){
+      const cached = findCachedResult(provider.label, state.textPrompt);
+      if(cached){
+        frag.appendChild(el("div",{class:"card", style:"margin-bottom:16px;border-color:#8FA6FF;"},[
+          el("p",{style:"font-size:13px;margin-bottom:8px;"}, `Un résultat identique existe déjà (généré le ${cached.date} via ${cached.provider}) — évite un appel payant inutile.`),
+          el("div",{style:"display:flex;gap:8px;"},[
+            el("button",{class:"btn-ghost", onclick:()=>{ state.textPasted = cached.result||""; renderMain(); }}, "Réutiliser"),
+            el("button",{class:"btn-ghost", onclick:()=>{ /* laisse générer via le bouton API plus bas */ }}, "Régénérer quand même"),
+          ]),
+        ]));
+      }
+    }
+
+    frag.appendChild(el("h2",{class:"section"}, state.viewMode==="production" ? "Image à copier dans ChatGPT" : "Prompt image"));
+    frag.appendChild(vfWrap(el("div",{class:"card", style:"margin-bottom:6px;"},[el("pre",{}, state.imagePrompt)])));
+    frag.appendChild(copyBtnFor(()=>state.imagePrompt));
+    frag.appendChild(el("p",{class:"sublabel"},"Colle ce prompt dans ChatGPT Plus (génération d'image), puis importe le résultat dans ta bibliothèque — ou génère-la directement ci-dessous si OpenAI est configuré."));
+
+    const openaiProvider = state.apiProviders.find(p=>p.kind==="openai-compatible" && (p.baseUrl||"").includes("api.openai.com"));
+    if(openaiProvider){
+      const imgApiStatus = el("p",{style:"font-size:12px;color:var(--muted2);min-height:16px;margin:4px 0 8px;"},"");
+      const imgApiBtn = el("button",{class:"btn-secondary", style:"margin-bottom:10px;"}, [svgIcon(ICONS.wand,14), el("span",{},"Générer l'image via l'API (OpenAI)")]);
+      imgApiBtn.addEventListener("click", async ()=>{
+        if(!confirm("Lancer la génération d'image via OpenAI ? Ceci consomme du crédit API.")) return;
+        imgApiStatus.textContent = "Génération en cours (peut prendre 10-20 s)...";
+        const t0 = Date.now();
+        const ratio = ASPECTS[PLATFORM_ASPECT[platform]].w / ASPECTS[PLATFORM_ASPECT[platform]].h;
+        const size = ratio > 1.15 ? "1792x1024" : ratio < 0.85 ? "1024x1792" : "1024x1024";
+        try{
+          const dataUrl = await callProviderImage(state.imagePrompt, size);
+          const id = uid();
+          state.images.push({ id, name:`${platform}-${nowStr()}.png`, dataUrl, tags:[platform], favorite:false });
+          LS.set("vf-images", state.images);
+          updateCount();
+          state.selectedId = id;
+          logToLab({ provider:"OpenAI", model:"gpt-image-1", type:"image", prompt: state.imagePrompt, promptHash: hashPrompt(state.imagePrompt), cost:null, durationMs: Date.now()-t0, status:"accepted" });
+          imgApiStatus.textContent = "Image générée et ajoutée à ta bibliothèque ✓";
+          renderMain();
+        }catch(err){
+          logToLab({ provider:"OpenAI", model:"gpt-image-1", type:"image", prompt: state.imagePrompt, promptHash: hashPrompt(state.imagePrompt), cost:null, durationMs: Date.now()-t0, status:"refused", reason:String(err.message||err) });
+          imgApiStatus.textContent = `Échec (${err.message||err}) — utilise l'import manuel ci-dessous à la place.`;
+        }
+      });
+      frag.appendChild(imgApiBtn);
+      frag.appendChild(imgApiStatus);
+    }
+
+    const imgFileInput = el("input",{type:"file", accept:"image/*", style:"display:none"});
+    const confirmMsg = el("p",{style:"font-size:12px;color:var(--green);margin-top:8px;min-height:14px;"},"");
+    imgFileInput.addEventListener("change", async (e)=>{
+      const file = e.target.files[0]; if(!file) return;
+      const dataUrl = await resizeImageFile(file);
+      const id = uid();
+      state.images.push({id, name:file.name, dataUrl, tags:[platform], favorite:false});
+      LS.set("vf-images", state.images);
+      updateCount();
+      state.selectedId = id;
+      confirmMsg.textContent = "Image ajoutée à ta bibliothèque ✓";
+      imgFileInput.value = "";
+    });
+    frag.appendChild(imgFileInput);
+    frag.appendChild(el("button",{class:"btn-secondary", onclick:()=>imgFileInput.click()}, [svgIcon(ICONS.upload,14), el("span",{},"Importer l'image générée")]));
+    frag.appendChild(confirmMsg);
+
+    frag.appendChild(el("h2",{class:"section"}, state.viewMode==="production" ? "Texte à copier dans ChatGPT" : "Prompt texte"));
+    frag.appendChild(vfWrap(el("div",{class:"card", style:"margin-bottom:6px;"},[el("pre",{}, state.textPrompt)])));
+    frag.appendChild(copyBtnFor(()=>state.textPrompt));
+
+    if(state.apiProviders.length){
+      const providerSelect = el("select",{style:"margin:8px 0;"}, state.apiProviders.map(p=> el("option",{value:p.id}, p.label)));
+      providerSelect.value = state.selectedProviderId || state.apiProviders[0].id;
+      providerSelect.addEventListener("change", e=>{ state.selectedProviderId = e.target.value; renderMain(); });
+      frag.appendChild(providerSelect);
+
+      const apiStatus = el("p",{style:"font-size:12px;color:var(--muted2);min-height:16px;margin:4px 0 8px;"},"");
+      const apiBtn = el("button",{class:"btn-secondary", style:"margin-bottom:10px;"}, [svgIcon(ICONS.sparkles,14), el("span",{},"Générer via l'API (remplace le copier/coller)")]);
+      apiBtn.addEventListener("click", async ()=>{
+        const provider = state.apiProviders.find(p=>p.id===(state.selectedProviderId||state.apiProviders[0].id));
+        if(!provider || !provider.apiKey){ apiStatus.textContent = "Renseigne d'abord une clé API dans Paramètres API."; return; }
+        const cached = findCachedResult(provider.label, state.textPrompt);
+        if(cached && !confirm(`Un résultat identique existe déjà (${cached.date}). Régénérer quand même et consommer du budget ?`)) {
+          state.textPasted = cached.result || "";
+          renderMain();
+          return;
+        }
+        const cost = estimateCost(provider, state.textPrompt);
+        const costLabel = cost!=null ? `~$${cost.toFixed(4)}` : "coût non estimé (tarifs non renseignés)";
+        if(!confirm(`Lancer la génération via ${provider.label} ? Coût estimé : ${costLabel}.`)) return;
+        apiStatus.textContent = "Génération en cours...";
+        const t0 = Date.now();
+        try{
+          const result = await callProviderText(provider, "Tu es le rédacteur officiel de cette marque, respecte strictement les informations et contraintes fournies.", state.textPrompt);
+          state.textPasted = result;
+          logToLab({ provider: provider.label, model: provider.model, type:"texte", prompt: state.textPrompt, promptHash: hashPrompt(state.textPrompt), result, cost, durationMs: Date.now()-t0, status:"accepted" });
+          apiStatus.textContent = "Résultat reçu et inséré ci-dessous ✓";
+          renderMain();
+        }catch(err){
+          logToLab({ provider: provider.label, model: provider.model, type:"texte", prompt: state.textPrompt, promptHash: hashPrompt(state.textPrompt), cost, durationMs: Date.now()-t0, status:"refused", reason: String(err.message||err) });
+          apiStatus.textContent = `Échec de l'appel (${err.message||err}) — utilise le mode manuel ci-dessous à la place.`;
+        }
+      });
+      frag.appendChild(apiBtn);
+      frag.appendChild(apiStatus);
+    }
+
+    const pastedArea = el("textarea",{rows:"5", placeholder:"Colle ici la réponse texte de ChatGPT (ou récupère-la automatiquement via l'API ci-dessus)..."}, state.textPasted);
+    pastedArea.addEventListener("input", e=>{ state.textPasted = e.target.value; });
+    frag.appendChild(el("div",{style:"margin:10px 0;"}, pastedArea));
+
+    frag.appendChild(el("button",{class:"btn-secondary", style:"margin-bottom:10px;", onclick: ()=>{
+      sendToAudit({
+        platform, missionKey: state.mission, topic: state.topic,
+        imagePrompt: state.imagePrompt, textPrompt: state.textPrompt,
+        textMods: textModulesFor(platform), imageMods: imageModulesFor(),
+        prestation: getSelectedPrestationInfo(), style: getSelectedStyle(),
+        antiRepeatTextNote: buildAntiRepeatNote(platform,"texte"), antiRepeatImageNote: buildAntiRepeatNote(platform,"image"),
+        textPasted: state.textPasted,
+      });
+    }}, [svgIcon(ICONS.sparkles,14), el("span",{},"Analyser avec ChatGPT")]));
+
+    if(state.viewMode==="production"){
+      frag.appendChild(el("div",{class:"card", style:"margin-bottom:16px;"},[
+        el("p",{class:"label", style:"margin-bottom:8px;"},"Checklist avant publication"),
+        el("div",{class:"learning-row"},"☐ Image collée dans ChatGPT, logo joint si disponible"),
+        el("div",{class:"learning-row"},"☐ Texte généré et collé ci-dessus"),
+        el("div",{class:"learning-row"},"☐ Durée / tarif vérifiés"),
+        el("div",{class:"learning-row"},"☐ Logo ajouté manuellement si besoin (onglet Éditeur)"),
+        el("div",{class:"learning-row"},"☐ Hashtags / alt text relus"),
+        el("div",{class:"learning-row"},"☐ Prêt à publier"),
+      ]));
+    }
+
+    frag.appendChild(buildFeedbackBlock({
+      platform, topic: state.topic, imagePrompt: state.imagePrompt, textPrompt: state.textPrompt,
+      getTextResult: ()=>state.textPasted,
+    }));
+  }
+
+  return frag;
+}
+
+/* ============================================================
+   ONGLET AUDIT IA
+============================================================ */
+function scoreRow(label, val){
+  const pct = val==null ? 0 : val*10;
+  const color = val==null ? "var(--muted2)" : pct>=70 ? "var(--green)" : pct>=45 ? "var(--amber)" : "var(--coral)";
+  return el("div",{style:"margin-bottom:8px;"},[
+    el("div",{style:"display:flex;justify-content:space-between;font-size:12px;color:var(--muted);margin-bottom:3px;"},
+      [el("span",{},label), el("span",{style:`color:${color};font-weight:600;`}, val!=null? `${val}/10` : "—")]),
+    el("div",{style:"height:5px;background:rgba(255,255,255,0.08);border-radius:3px;overflow:hidden;"},[
+      el("div",{style:`height:100%;width:${pct}%;background:${color};`}),
+    ]),
+  ]);
+}
+function renderAuditReport(report){
+  const frag = el("div",{class:"card", style:"margin-bottom:16px;"});
+  frag.appendChild(el("div",{style:"text-align:center;margin-bottom:14px;"},[
+    el("div",{style:"font-size:11px;color:var(--muted2);text-transform:uppercase;letter-spacing:.06em;"},"Score global"),
+    el("div",{style:"font-size:32px;font-weight:700;color:var(--lime);"}, report.global!=null?`${report.global}/10`:"—"),
+  ]));
+  [["Respect de la charte",report.charte],["Cohérence marque",report.coherence],["Respect plateforme",report.plateforme],
+   ["SEO",report.seo],["Conversion",report.conversion],["Clarté",report.clarte],
+   ["Qualité rédactionnelle",report.redaction],["Qualité direction artistique",report.da],
+   ["Originalité",report.originalite],["Risque de répétition",report.repetition]]
+   .forEach(([label,val])=> frag.appendChild(scoreRow(label,val)));
+
+  if(report.pointsForts.length){
+    frag.appendChild(el("p",{class:"label", style:"margin-top:14px;"},"Points forts"));
+    report.pointsForts.forEach(p=> frag.appendChild(el("div",{class:"learning-row", style:"color:var(--green);"}, `+ ${p}`)));
+  }
+  if(report.pointsFaibles.length){
+    frag.appendChild(el("p",{class:"label", style:"margin-top:10px;"},"Points faibles"));
+    report.pointsFaibles.forEach(p=> frag.appendChild(el("div",{class:"learning-row", style:"color:var(--coral);"}, `− ${p}`)));
+  }
+  if(report.recommandations.length){
+    frag.appendChild(el("p",{class:"label", style:"margin-top:10px;"},"Recommandations"));
+    report.recommandations.forEach(p=> frag.appendChild(el("div",{class:"learning-row"}, `→ ${p}`)));
+  }
+  return frag;
+}
+function buildAuditTab(){
+  const frag = el("div",{});
+  const ctx = state.lastGenerated;
+
+  if(!ctx){
+    frag.appendChild(el("p",{class:"hint"},"Génère d'abord un contenu depuis l'onglet \"Créer un post\", puis clique sur \"Analyser avec ChatGPT\"."));
+  } else {
+    frag.appendChild(el("h2",{class:"section"},"Contenu à analyser"));
+    frag.appendChild(el("p",{class:"sublabel"}, `${ctx.campaignLabel || ctx.platform} · Mission : ${ctx.missionKey || "non spécifiée"} · Sujet : ${ctx.topic}`));
+
+    frag.appendChild(el("button",{class:"btn-primary", style:"margin-bottom:14px;", onclick: ()=>{
+      state.auditPrompt = buildAuditPromptText(ctx);
+      renderMain();
+    }}, [svgIcon(ICONS.sparkles,16), el("span",{},"Générer le prompt d'audit")]));
+
+    if(state.auditPrompt){
+      frag.appendChild(vfWrap(el("div",{class:"card", style:"margin-bottom:6px;"},[el("pre",{}, state.auditPrompt)])));
+      frag.appendChild(copyBtnFor(()=>state.auditPrompt));
+      frag.appendChild(el("p",{class:"sublabel"},"Colle ce prompt dans ChatGPT (dans la conversation où l'image a été générée si possible), puis colle sa réponse ci-dessous."));
+
+      const pastedArea = el("textarea",{rows:"6", placeholder:"Colle ici le rapport structuré de ChatGPT..."}, state.auditPasted);
+      pastedArea.addEventListener("input", e=>{ state.auditPasted = e.target.value; });
+      frag.appendChild(el("div",{style:"margin:10px 0;"}, pastedArea));
+
+      frag.appendChild(el("button",{class:"btn-primary", style:"margin-bottom:20px;", onclick: ()=>{
+        if(!state.auditPasted.trim()) return;
+        const report = parseAuditReport(state.auditPasted);
+        const entry = { id: uid(), date: nowStr(), platform: ctx.platform, missionKey: ctx.missionKey, topic: ctx.topic, ...report };
+        state.auditHistory.push(entry);
+        LS.set("vf-audit", state.auditHistory);
+        state.auditPasted = ""; state.auditPrompt = "";
+        renderMain();
+      }}, "Importer le rapport dans l'historique d'audit"));
+    }
+
+    const last = state.auditHistory[state.auditHistory.length-1];
+    if(last){
+      frag.appendChild(el("h2",{class:"section"},"Dernier audit importé"));
+      frag.appendChild(renderAuditReport(last));
+      if(last.recommandations && last.recommandations.length){
+        frag.appendChild(el("button",{class:"btn-secondary", style:"margin-bottom:24px;", onclick: ()=>{
+          last.recommandations.forEach(r=>{
+            state.modules.push({ id: uid(), category:"Leçons apprises",
+              title: `Recommandation audit ${last.platform} — ${last.date}`, content:r, enabled:true });
+          });
+          LS.set("vf-modules", state.modules);
+          alert("Recommandations ajoutées à la base de connaissances (catégorie Leçons apprises).");
+        }}, "Ajouter ces recommandations à la base de connaissances"));
+      }
+    }
+  }
+
+  frag.appendChild(el("h2",{class:"section"},"Historique des audits"));
+  const filterRow = el("div",{class:"pillrow", style:"margin-bottom:14px;"});
+  ["Toutes",...PLATFORMS].forEach(p=>{
+    filterRow.appendChild(el("button",{class:"pill"+(state.auditFilter===p?" active":""), onclick:()=>{ state.auditFilter=p; renderMain(); }}, p));
+  });
+  frag.appendChild(filterRow);
+
+  const list = state.auditHistory.filter(a=> state.auditFilter==="Toutes" || a.platform===state.auditFilter).slice().reverse();
+  if(list.length===0){
+    frag.appendChild(el("p",{class:"hint"},"Aucun audit enregistré pour l'instant."));
+  } else {
+    list.forEach(a=>{
+      const details = el("details",{class:"history-card"});
+      details.appendChild(el("summary",{style:"cursor:pointer;display:flex;justify-content:space-between;font-size:13px;"},[
+        el("span",{}, `${a.platform} · ${a.date}`),
+        el("span",{style:"color:var(--lime);font-weight:600;"}, a.global!=null?`${a.global}/10`:"—"),
+      ]));
+      details.appendChild(renderAuditReport(a));
+      frag.appendChild(details);
+    });
+  }
+
+  return frag;
+}
+
+/* ============================================================
+   ONGLET BASE DE PROMPTS (historique)
+============================================================ */
+const RATING_LABEL = { up:"👍 Excellent", mid:"👌 Moyen", down:"👎 À revoir" };
+function buildHistoryTab(){
+  const frag = el("div",{});
+  const filterRow = el("div",{class:"pillrow", style:"margin-bottom:14px;"});
+  ["Toutes",...PLATFORMS].forEach(p=>{
+    filterRow.appendChild(el("button",{class:"pill"+(state.historyFilter===p?" active":""), onclick:()=>{ state.historyFilter=p; renderMain(); }}, p));
+  });
+  frag.appendChild(filterRow);
+
+  const list = state.history.filter(h=> state.historyFilter==="Toutes" || h.platform===state.historyFilter).slice().reverse();
+  if(list.length===0){
+    frag.appendChild(el("p",{class:"hint"},"Aucun post généré pour l'instant."));
+    return frag;
+  }
+  list.forEach(h=>{
+    const favBtn = el("button",{class:"btn-small"+(h.favorite?" active":""), onclick:()=>{ h.favorite=!h.favorite; LS.set("vf-history", state.history); renderMain(); }},
+      [svgIcon(ICONS.star,12), el("span",{}, h.favorite?"Favori":"")]);
+    const details = el("details",{style:"margin-top:8px;"},[
+      el("summary",{style:"font-size:12px;color:var(--muted2);cursor:pointer;"},"Voir les prompts"),
+      el("pre",{style:"margin-top:6px;"}, `--- IMAGE ---\n${h.imagePrompt}\n\n--- TEXTE ---\n${h.textPrompt}`),
+    ]);
+    frag.appendChild(el("div",{class:"history-card"},[
+      el("div",{class:"history-top"},[
+        el("span",{}, `${h.platform} · ${h.date}`),
+        el("span",{}, RATING_LABEL[h.rating]||""),
+      ]),
+      el("div",{style:"font-size:13px;color:var(--muted);margin-bottom:4px;"}, `Sujet : ${h.topic}`),
+      h.textResult ? el("div",{style:"font-size:13px;white-space:pre-wrap;"}, h.textResult.slice(0,200)+(h.textResult.length>200?"...":"")) : null,
+      favBtn, details,
+    ]));
+  });
+  return frag;
+}
+
+/* ============================================================
+   ONGLET RÉGLAGES (export / import)
+============================================================ */
+/* ============================================================
+   ONGLET PARAMÈTRES API
+============================================================ */
+function buildApiTab(){
+  const frag = el("div",{});
+  frag.appendChild(el("div",{class:"card", style:"margin-bottom:16px;border-color:#8FA6FF;"},[
+    el("p",{style:"font-weight:600;margin-bottom:6px;"},"Les clés API vivent sur Netlify, pas dans l'appli"),
+    el("p",{style:"font-size:13px;color:var(--muted);"},"Depuis la migration vers les fonctions serveur, tu ne saisis plus de clé ici. Configure-les une fois dans le tableau de bord Netlify :"),
+    el("p",{style:"font-size:13px;color:var(--muted);margin-top:6px;"},"Site configuration → Environment variables → ajoute :"),
+    el("pre",{style:"margin-top:6px;"}, "OPENAI_API_KEY=sk-...\nANTHROPIC_API_KEY=sk-ant-...  (si utilisé)\nGEMINI_API_KEY=...            (si utilisé)"),
+    el("p",{style:"font-size:12px;color:var(--muted2);margin-top:6px;"},"Puis redéploie le site. Les fonctions serveur liront ces variables automatiquement — aucune clé ne transite plus par le navigateur."),
+  ]));
+
+  frag.appendChild(el("p",{class:"label"},"Ajout rapide"));
+  const presetRow = el("div",{class:"pillrow", style:"margin-bottom:18px;"});
+  PROVIDER_PRESETS.forEach(preset=>{
+    presetRow.appendChild(el("button",{class:"pill", onclick:()=>{
+      state.apiProviders.push({ id: uid(), label:preset.label, kind:preset.kind, baseUrl:preset.baseUrl, model:preset.model, priceIn:0, priceOut:0 });
+      LS.set("vf-api-providers", state.apiProviders);
+      renderMain();
+    }}, `+ ${preset.label}`));
+  });
+  frag.appendChild(presetRow);
+
+  frag.appendChild(el("p",{class:"label"},"Fournisseurs configurés"));
+  if(!state.apiProviders.length){
+    frag.appendChild(el("p",{class:"hint"},"Aucun fournisseur configuré. Ajoute-en un ci-dessus, ou continue simplement en mode manuel (copier/coller dans ChatGPT)."));
+  }
+  state.apiProviders.forEach(p=>{
+    const card = el("div",{class:"module-card"});
+    card.appendChild(el("div",{class:"module-head"},[
+      el("div",{class:"module-title"}, `${p.label} — ${PROVIDER_KINDS[p.kind]?.label||p.kind}`),
+      el("button",{class:"btn-small", onclick:()=>{
+        state.apiProviders = state.apiProviders.filter(x=>x.id!==p.id);
+        LS.set("vf-api-providers", state.apiProviders);
+        renderMain();
+      }}, svgIcon(ICONS.trash,12)),
+    ]));
+    const modelInput = el("input",{type:"text", value:p.model||"", placeholder:"Modèle (ex : gpt-4o-mini)"});
+    modelInput.addEventListener("input", e=>{ p.model = e.target.value; LS.set("vf-api-providers", state.apiProviders); });
+    card.appendChild(el("div",{style:"margin:8px 0;"}, modelInput));
+    if(PROVIDER_KINDS[p.kind]?.needsBaseUrl){
+      const baseInput = el("input",{type:"text", value:p.baseUrl||"", placeholder:"URL de base de l'API"});
+      baseInput.addEventListener("input", e=>{ p.baseUrl = e.target.value; LS.set("vf-api-providers", state.apiProviders); });
+      card.appendChild(el("div",{style:"margin-bottom:8px;"}, baseInput));
+    }
+    const priceRow = el("div",{style:"display:flex;gap:8px;margin-bottom:8px;"});
+    const priceIn = el("input",{type:"text", value:String(p.priceIn||""), placeholder:"$/1K tokens entrée"});
+    priceIn.addEventListener("input", e=>{ p.priceIn = parseFloat(e.target.value)||0; LS.set("vf-api-providers", state.apiProviders); });
+    const priceOut = el("input",{type:"text", value:String(p.priceOut||""), placeholder:"$/1K tokens sortie"});
+    priceOut.addEventListener("input", e=>{ p.priceOut = parseFloat(e.target.value)||0; LS.set("vf-api-providers", state.apiProviders); });
+    priceRow.appendChild(priceIn); priceRow.appendChild(priceOut);
+    card.appendChild(priceRow);
+    card.appendChild(el("p",{style:"font-size:11px;color:var(--muted2);"},"Tarifs approximatifs saisis manuellement — aucune API de pricing en temps réel. Laisse à 0 si tu ne connais pas le tarif exact."));
+    frag.appendChild(card);
+  });
+
+  frag.appendChild(el("p",{class:"label", style:"margin-top:18px;"},"Génération d'image"));
+  frag.appendChild(el("p",{class:"sublabel"},"OpenAI (gpt-image-1) est câblé en appel direct via la fonction serveur, si OPENAI_API_KEY est configurée. Les autres générateurs d'images (Stability, Ideogram, Flux/Fal) restent en mode manuel pour l'instant — chacun a un format d'API différent et mérite d'être fait proprement plutôt que rapidement."));
+
+  return frag;
+}
+
+/* ============================================================
+   ONGLET LABORATOIRE IA
+============================================================ */
+function buildLabTab(){
+  const frag = el("div",{});
+  frag.appendChild(el("p",{class:"sublabel"},"Historique de toutes les générations via API directe : modèle, coût, temps, résultat accepté ou refusé. Alimente l'apprentissage au fil du temps."));
+
+  if(!state.lab.length){
+    frag.appendChild(el("p",{class:"hint"},"Aucune génération via API pour l'instant. Configure un fournisseur dans \"Paramètres API\" puis génère un post en Mode Expert ou Production."));
+    return frag;
+  }
+
+  // Bibliothèque de compatibilité : agrège les taux d'acceptation par fournisseur pour repérer les tendances.
+  const byProvider = {};
+  state.lab.forEach(l=>{
+    if(!byProvider[l.provider]) byProvider[l.provider] = { accepted:0, refused:0, reasons:{} };
+    if(l.status==="accepted") byProvider[l.provider].accepted++;
+    if(l.status==="refused"){
+      byProvider[l.provider].refused++;
+      const r = l.reason || "raison inconnue";
+      byProvider[l.provider].reasons[r] = (byProvider[l.provider].reasons[r]||0)+1;
+    }
+  });
+  frag.appendChild(el("p",{class:"label"},"Bibliothèque de compatibilité"));
+  Object.entries(byProvider).forEach(([provName, stats])=>{
+    const total = stats.accepted+stats.refused;
+    const rate = total ? Math.round((stats.accepted/total)*100) : 0;
+    const topReason = Object.entries(stats.reasons).sort((a,b)=>b[1]-a[1])[0];
+    frag.appendChild(el("div",{class:"module-card"},[
+      el("div",{class:"module-head"},[el("div",{class:"module-title"}, provName), el("span",{style:`font-size:13px;color:${rate>=80?"var(--green)":rate>=50?"var(--amber)":"var(--coral)"};font-weight:600;`}, `${rate}% accepté`)]),
+      el("div",{class:"module-content"}, `${stats.accepted} accepté(s), ${stats.refused} refusé(s)${topReason? ` — motif de refus le plus fréquent : "${topReason[0]}"` : ""}`),
+    ]));
+  });
+
+  frag.appendChild(el("p",{class:"label", style:"margin-top:18px;"},"Historique détaillé"));
+  const filterRow = el("div",{class:"pillrow", style:"margin-bottom:14px;"});
+  const providers = ["Toutes", ...new Set(state.lab.map(l=>l.provider))];
+  providers.forEach(p=>{
+    filterRow.appendChild(el("button",{class:"pill"+(state.labFilter===p?" active":""), onclick:()=>{ state.labFilter=p; renderMain(); }}, p));
+  });
+  frag.appendChild(filterRow);
+
+  const list = state.lab.filter(l=> state.labFilter==="Toutes" || l.provider===state.labFilter).slice().reverse();
+  list.forEach(l=>{
+    frag.appendChild(el("div",{class:"history-card"},[
+      el("div",{class:"history-top"},[
+        el("span",{}, `${l.provider} · ${l.model} · ${l.date}`),
+        el("span",{style:`color:${l.status==="accepted"?"var(--green)":l.status==="refused"?"var(--coral)":"var(--muted2)"};`}, l.status==="accepted"?"✓ accepté":l.status==="refused"?"✗ refusé":"—"),
+      ]),
+      el("div",{style:"font-size:13px;color:var(--muted);margin-bottom:4px;"}, `Type : ${l.type} · Coût estimé : ${l.cost!=null ? "$"+l.cost.toFixed(4) : "non estimé"} · Temps : ${l.durationMs!=null ? (l.durationMs/1000).toFixed(1)+"s" : "—"}`),
+      l.reason ? el("div",{style:"font-size:12px;color:var(--coral);"}, `Raison : ${l.reason}`) : null,
+      el("details",{style:"margin-top:6px;"},[
+        el("summary",{style:"font-size:12px;color:var(--muted2);cursor:pointer;"},"Voir le prompt envoyé"),
+        el("pre",{style:"margin-top:6px;"}, l.prompt||""),
+      ]),
+    ]));
+  });
+  return frag;
+}
+
+function buildSettingsTab(){
+  const frag = el("div",{});
+  frag.appendChild(el("p",{class:"sublabel"},"Sauvegarde complète en un clic : bibliothèque, connaissances, direction artistique, styles, historique, audits et campagnes en cours — tout ce que contient Viewfinder, dans un seul fichier JSON. Utile pour ne jamais perdre ton travail ou pour le transférer sur un autre appareil."));
+
+  function getAllVfKeys(){
+    const keys = [];
+    for(let i=0;i<localStorage.length;i++){
+      const k = localStorage.key(i);
+      if(k && k.startsWith("vf-")) keys.push(k);
+    }
+    return keys;
+  }
+  const LABELS = {
+    "vf-images":"Bibliothèque", "vf-modules":"Connaissances", "vf-da":"Direction artistique",
+    "vf-styles":"Styles", "vf-history":"Base de prompts (historique)", "vf-audit":"Audits IA",
+    "vf-campaign":"Campagne en cours", "vf-lab":"Laboratoire IA", "vf-api-providers":"Paramètres API (clés incluses)", "vf-modes":"Modes de production",
+  };
+  const keys = getAllVfKeys();
+  frag.appendChild(el("p",{class:"label"},"Contenu de la sauvegarde"));
+  const list = el("div",{style:"margin-bottom:10px;"});
+  keys.forEach(k=>{
+    let count = "";
+    try{ const v = LS.get(k, null); if(Array.isArray(v)) count = ` (${v.length})`; }catch(e){}
+    list.appendChild(el("div",{style:"font-size:13px;color:var(--muted);padding:4px 0;border-bottom:1px solid var(--border);"}, `${LABELS[k]||k}${count}`));
+  });
+  frag.appendChild(list);
+
+  const apiKeyToggle = el("input",{type:"checkbox", checked: state.includeApiKeysInExport});
+  apiKeyToggle.addEventListener("change", e=>{ state.includeApiKeysInExport = e.target.checked; });
+  frag.appendChild(el("label",{style:"display:flex;align-items:center;gap:8px;margin-bottom:18px;font-size:13px;color:var(--muted);"},
+    [apiKeyToggle, "Inclure mes clés API dans l'export (déconseillé si tu comptes partager ce fichier — exclu par défaut)"]));
+
+  frag.appendChild(el("button",{class:"btn-primary", style:"margin-bottom:12px;", onclick: ()=>{
+    const dump = { _meta: { app:"Viewfinder", exportedAt: new Date().toISOString(), version: 1 } };
+    getAllVfKeys().forEach(k=>{
+      if(k==="vf-api-providers" && !state.includeApiKeysInExport){
+        const sanitized = (LS.get(k, [])||[]).map(p=> ({...p, apiKey:""}));
+        dump[k] = sanitized;
+      } else {
+        dump[k] = LS.get(k, null);
+      }
+    });
+    const blob = new Blob([JSON.stringify(dump, null, 2)], {type:"application/json"});
+    const link = document.createElement("a");
+    link.download = `viewfinder-sauvegarde-${nowStr().replace(/\//g,"-")}.json`;
+    link.href = URL.createObjectURL(blob);
+    link.click();
+  }}, [svgIcon(ICONS.download,16), el("span",{},"Exporter toute la sauvegarde")]));
+
+  const importInput = el("input",{type:"file", accept:"application/json", style:"display:none"});
+  const importMsg = el("p",{style:"font-size:12px;color:var(--green);min-height:14px;"},"");
+  importInput.addEventListener("change", (e)=>{
+    const file = e.target.files[0]; if(!file) return;
+    const reader = new FileReader();
+    reader.onload = ()=>{
+      try{
+        const dump = JSON.parse(reader.result);
+        const entries = Object.entries(dump).filter(([k])=> k.startsWith("vf-"));
+        if(!entries.length){ importMsg.textContent = "Ce fichier ne contient aucune donnée Viewfinder reconnue."; return; }
+        const ok = confirm(`Restaurer cette sauvegarde va REMPLACER toutes les données actuelles de Viewfinder sur cet appareil (${entries.length} élément(s)). Continuer ?`);
+        if(!ok) return;
+        entries.forEach(([k,v])=>{ if(v!==null) LS.set(k, v); });
+        importMsg.textContent = "Restauration réussie, rechargement...";
+        setTimeout(()=>location.reload(), 800);
+      }catch(err){ importMsg.textContent = "Fichier invalide ou corrompu."; }
+    };
+    reader.readAsText(file);
+    importInput.value = "";
+  });
+  frag.appendChild(importInput);
+  frag.appendChild(el("button",{class:"btn-secondary"}, [svgIcon(ICONS.upload,14), el("span",{},"Restaurer une sauvegarde")]))
+    .addEventListener("click", ()=>importInput.click());
+  frag.appendChild(importMsg);
+
+  return frag;
+}
+
+/* ============================================================
+   ROUTEUR
+============================================================ */
+function renderMain(){
+  const main = document.getElementById("main");
+  main.innerHTML = "";
+  const builders = {
+    accueil: buildAccueilTab, library: buildLibraryTab, editor: buildEditorTab, knowledge: buildKnowledgeTab,
+    da: buildDaTab, styles: buildStylesTab, post: buildPostTab, audit: buildAuditTab, lab: buildLabTab, api: buildApiTab,
+    history: buildHistoryTab, settings: buildSettingsTab,
+  };
+  try{
+    const builder = builders[state.tab] || buildAccueilTab;
+    main.appendChild(builder());
+  }catch(err){
+    console.error("Erreur de rendu :", err);
+    main.appendChild(el("div",{class:"card"},[
+      el("p",{style:"color:var(--coral);font-weight:600;margin-bottom:6px;"},"Cet onglet a rencontré un problème."),
+      el("p",{style:"font-size:12px;color:var(--muted2);margin-bottom:10px;"}, String(err && err.message || err)),
+      el("button",{class:"btn-secondary", onclick:()=>{ state.tab="accueil"; renderNav(); renderMain(); }}, "Retour à l'accueil"),
+    ]));
+  }
+}
+renderNav();
+renderMain();
+updateCount();
+
+if ("serviceWorker" in navigator) {
+  window.addEventListener("load", () => {
+    navigator.serviceWorker.register("./sw.js").catch((err) => console.error("SW non enregistré :", err));
+  });
+}
+</script>
+</body>
+</html>
