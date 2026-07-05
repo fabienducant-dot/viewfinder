@@ -865,6 +865,16 @@ const PROVIDER_KINDS = {
 };
 /* Fiches de départ, purement indicatives — l'utilisateur peut ajouter n'importe quel autre
    fournisseur via "Ajouter un fournisseur personnalisé", aucun nom n'est figé dans le moteur. */
+/* OpenAI est disponible par défaut, sans aucune configuration ni clé locale : l'appli appelle
+   directement la fonction serveur Netlify, qui utilise sa propre clé côté serveur. Si cette clé
+   n'existe pas encore sur Netlify, l'appel échoue proprement et le mode manuel reste disponible.
+   Ajouter un fournisseur dans "Paramètres API" n'est utile que pour changer de modèle ou utiliser
+   un autre fournisseur (Anthropic, Gemini...). */
+const DEFAULT_OPENAI_PROVIDER = {
+  id: "default-openai", label: "OpenAI", kind: "openai-compatible",
+  baseUrl: "https://api.openai.com/v1", model: "gpt-4o-mini", priceIn: 0, priceOut: 0, speed: "Rapide",
+};
+
 const PROVIDER_PRESETS = [
   { label:"OpenAI", kind:"openai-compatible", mediaType:"texte", baseUrl:"https://api.openai.com/v1", model:"gpt-4o-mini",
     speed:"Rapide", maxContext:"128K tokens", strengths:"Polyvalent, bonne qualité rédactionnelle", weaknesses:"Coût variable selon le modèle",
@@ -1848,7 +1858,7 @@ function buildPostTab(){
     }));
 
     const risks = currentRiskFlags();
-    const provider = state.apiProviders.find(p=>p.id===state.selectedProviderId) || state.apiProviders[0] || null;
+    const provider = state.apiProviders.find(p=>p.id===state.selectedProviderId) || state.apiProviders[0] || DEFAULT_OPENAI_PROVIDER;
     const estCost = provider ? estimateCost(provider, state.textPrompt) : null;
     const SPEED_ESTIMATES = { "Très rapide":"≈2-5 s", "Rapide":"≈5-10 s", "Moyenne":"≈10-20 s" };
     const estTime = provider ? (SPEED_ESTIMATES[provider.speed] || "variable selon le fournisseur") : null;
@@ -1907,7 +1917,7 @@ function buildPostTab(){
       ]));
     }
 
-    if(provider && provider.apiKey){
+    if(provider){
       const cached = findCachedResult(provider.label, state.textPrompt);
       if(cached){
         frag.appendChild(el("div",{class:"card", style:"margin-bottom:16px;border-color:#8FA6FF;"},[
@@ -1925,7 +1935,7 @@ function buildPostTab(){
     frag.appendChild(copyBtnFor(()=>state.imagePrompt));
     frag.appendChild(el("p",{class:"sublabel"},"Colle ce prompt dans ChatGPT Plus (génération d'image), puis importe le résultat dans ta bibliothèque — ou génère-la directement ci-dessous si OpenAI est configuré."));
 
-    const openaiProvider = state.apiProviders.find(p=>p.kind==="openai-compatible" && (p.baseUrl||"").includes("api.openai.com"));
+    const openaiProvider = state.apiProviders.find(p=>p.kind==="openai-compatible" && (p.baseUrl||"").includes("api.openai.com")) || DEFAULT_OPENAI_PROVIDER;
     if(openaiProvider){
       const imgApiStatus = el("p",{style:"font-size:12px;color:var(--muted2);min-height:16px;margin:4px 0 8px;"},"");
       const imgApiBtn = el("button",{class:"btn-secondary", style:"margin-bottom:10px;"}, [svgIcon(ICONS.wand,14), el("span",{},"Générer l'image via l'API (OpenAI)")]);
@@ -1975,17 +1985,17 @@ function buildPostTab(){
     frag.appendChild(vfWrap(el("div",{class:"card", style:"margin-bottom:6px;"},[el("pre",{}, state.textPrompt)])));
     frag.appendChild(copyBtnFor(()=>state.textPrompt));
 
-    if(state.apiProviders.length){
-      const providerSelect = el("select",{style:"margin:8px 0;"}, state.apiProviders.map(p=> el("option",{value:p.id}, p.label)));
-      providerSelect.value = state.selectedProviderId || state.apiProviders[0].id;
+    {
+      const availableProviders = state.apiProviders.length ? state.apiProviders : [DEFAULT_OPENAI_PROVIDER];
+      const providerSelect = el("select",{style:"margin:8px 0;"}, availableProviders.map(p=> el("option",{value:p.id}, p.label)));
+      providerSelect.value = state.selectedProviderId || availableProviders[0].id;
       providerSelect.addEventListener("change", e=>{ state.selectedProviderId = e.target.value; renderMain(); });
       frag.appendChild(providerSelect);
 
       const apiStatus = el("p",{style:"font-size:12px;color:var(--muted2);min-height:16px;margin:4px 0 8px;"},"");
       const apiBtn = el("button",{class:"btn-secondary", style:"margin-bottom:10px;"}, [svgIcon(ICONS.sparkles,14), el("span",{},"Générer via l'API (remplace le copier/coller)")]);
       apiBtn.addEventListener("click", async ()=>{
-        const provider = state.apiProviders.find(p=>p.id===(state.selectedProviderId||state.apiProviders[0].id));
-        if(!provider || !provider.apiKey){ apiStatus.textContent = "Renseigne d'abord une clé API dans Paramètres API."; return; }
+        const provider = availableProviders.find(p=>p.id===(state.selectedProviderId||availableProviders[0].id)) || availableProviders[0];
         const cached = findCachedResult(provider.label, state.textPrompt);
         if(cached && !confirm(`Un résultat identique existe déjà (${cached.date}). Régénérer quand même et consommer du budget ?`)) {
           state.textPasted = cached.result || "";
@@ -2212,13 +2222,13 @@ function buildApiTab(){
   const frag = el("div",{});
   frag.appendChild(el("div",{class:"card", style:"margin-bottom:16px;border-color:#8FA6FF;"},[
     el("p",{style:"font-weight:600;margin-bottom:6px;"},"Les clés API vivent sur Netlify, pas dans l'appli"),
-    el("p",{style:"font-size:13px;color:var(--muted);"},"Depuis la migration vers les fonctions serveur, tu ne saisis plus de clé ici. Configure-les une fois dans le tableau de bord Netlify :"),
+    el("p",{style:"font-size:13px;color:var(--muted);"},"OpenAI fonctionne par défaut, sans rien ajouter ici, dès que la variable est configurée côté Netlify (l'appli appelle directement la fonction serveur). Configure-la une fois dans le tableau de bord Netlify :"),
     el("p",{style:"font-size:13px;color:var(--muted);margin-top:6px;"},"Site configuration → Environment variables → ajoute :"),
     el("pre",{style:"margin-top:6px;"}, "OPENAI_API_KEY=sk-...\nANTHROPIC_API_KEY=sk-ant-...  (si utilisé)\nGEMINI_API_KEY=...            (si utilisé)"),
     el("p",{style:"font-size:12px;color:var(--muted2);margin-top:6px;"},"Puis redéploie le site. Les fonctions serveur liront ces variables automatiquement — aucune clé ne transite plus par le navigateur."),
   ]));
 
-  frag.appendChild(el("p",{class:"label"},"Ajout rapide"));
+  frag.appendChild(el("p",{class:"label"},"Ajout rapide (facultatif — pour changer de modèle ou utiliser un autre fournisseur)"));
   const presetRow = el("div",{class:"pillrow", style:"margin-bottom:18px;"});
   PROVIDER_PRESETS.forEach(preset=>{
     presetRow.appendChild(el("button",{class:"pill", onclick:()=>{
@@ -2229,9 +2239,9 @@ function buildApiTab(){
   });
   frag.appendChild(presetRow);
 
-  frag.appendChild(el("p",{class:"label"},"Fournisseurs configurés"));
+  frag.appendChild(el("p",{class:"label"},"Fournisseurs personnalisés"));
   if(!state.apiProviders.length){
-    frag.appendChild(el("p",{class:"hint"},"Aucun fournisseur configuré. Ajoute-en un ci-dessus, ou continue simplement en mode manuel (copier/coller dans ChatGPT)."));
+    frag.appendChild(el("p",{class:"hint"},"Aucun ajout nécessaire : OpenAI (modèle gpt-4o-mini) est déjà utilisable par défaut dans \"Créer un post\". Ajoute un fournisseur ici seulement pour changer de modèle ou utiliser Anthropic/Gemini."));
   }
   state.apiProviders.forEach(p=>{
     const card = el("div",{class:"module-card"});
