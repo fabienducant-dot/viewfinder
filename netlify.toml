@@ -8,6 +8,12 @@
 [functions."check-scheduled-posts"]
   schedule = "*/15 * * * *"
 
+[[redirects]]
+  from = "/img/*"
+  to = "/.netlify/functions/serve-image?id=:splat"
+  status = 200
+  force = true
+
 [[headers]]
   for = "/sw.js"
   [headers.values]
