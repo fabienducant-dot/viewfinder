@@ -1029,8 +1029,9 @@ async function pushToServerSilent(){
       method:"POST", headers: syncHeaders(),
       body: JSON.stringify({ data: gatherSyncData(), updatedAt: getLocalUpdatedAt() || Date.now() }),
     });
-    if(res.ok){ localStorage.setItem("vf-last-server-sync", String(Date.now())); }
-  }catch(e){ /* silencieux : pas de connexion ou serveur indisponible, le local reste intact */ }
+    if(res.ok){ localStorage.setItem("vf-last-server-sync", String(Date.now())); return true; }
+    return false;
+  }catch(e){ return false; /* pas de connexion ou serveur indisponible, le local reste intact */ }
 }
 async function checkServerOnLoad(){
   try{
@@ -2197,7 +2198,7 @@ function buildPostTab(){
       dateInput.addEventListener("input", e=>{ state.scheduleDate = e.target.value; });
       frag.appendChild(dateInput);
       const schedMsg = el("p",{style:"font-size:12px;color:var(--green);min-height:16px;"},"");
-      frag.appendChild(el("button",{class:"btn-primary", style:"margin-bottom:10px;", onclick:()=>{
+      frag.appendChild(el("button",{class:"btn-primary", style:"margin-bottom:10px;", onclick: async ()=>{
         if(!state.scheduleDate){ schedMsg.style.color="var(--coral)"; schedMsg.textContent="Choisis une date et une heure d'abord."; return; }
         const scheduledAt = new Date(state.scheduleDate).getTime();
         state.scheduled.push({
@@ -2206,9 +2207,17 @@ function buildPostTab(){
           scheduledAt, status: "programmé", createdAt: Date.now(), sentAt: null, error: null,
         });
         LS.set("vf-scheduled", state.scheduled);
-        schedMsg.style.color = "var(--green)";
-        schedMsg.textContent = "Post programmé ✓ — visible dans l'onglet Calendrier.";
         state.scheduleDate = "";
+        schedMsg.style.color = "var(--muted2)";
+        schedMsg.textContent = "Post programmé — synchronisation avec le serveur...";
+        const ok = await pushToServerSilent();
+        if(ok){
+          schedMsg.style.color = "var(--green)";
+          schedMsg.textContent = "Post programmé ✓ — envoyé au serveur, visible dans l'onglet Calendrier.";
+        } else {
+          schedMsg.style.color = "var(--coral)";
+          schedMsg.textContent = "Post programmé localement, mais la synchro serveur a échoué — va dans Réglages → \"Sauvegarder sur serveur\" avant de fermer l'appli.";
+        }
       }}, [svgIcon(ICONS.sparkles,16), el("span",{},"Programmer ce post")]));
       frag.appendChild(el("button",{class:"btn-ghost", style:"margin-bottom:10px;", onclick:()=>{
         state.scheduled.push({
