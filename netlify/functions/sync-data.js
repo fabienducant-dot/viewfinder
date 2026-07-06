@@ -8,7 +8,7 @@ const { getStore } = require("@netlify/blobs");
 
 const ALLOWED_KEYS = [
   "vf-modules", "vf-styles", "vf-da", "vf-history",
-  "vf-audit", "vf-lab", "vf-api-providers", "vf-modes", "vf-campaign",
+  "vf-audit", "vf-lab", "vf-api-providers", "vf-modes", "vf-campaign", "vf-scheduled", "vf-make-webhook",
 ];
 
 function openStore(){
