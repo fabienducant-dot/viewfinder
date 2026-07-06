@@ -136,7 +136,12 @@ const LS = {
     try{
       localStorage.setItem(key, JSON.stringify(val));
       if(SYNC_KEYS.includes(key)){ bumpLocalUpdatedAt(); scheduleAutoSync(); }
-    }catch(e){ console.error(e); }
+      return true;
+    }catch(e){
+      console.error(e);
+      if(typeof state!=="undefined") state.storageError = { key, message: String(e && e.message || e), at: Date.now() };
+      return false;
+    }
   }
 };
 const uid = () => `${Date.now()}-${Math.random().toString(36).slice(2,8)}`;
@@ -2201,12 +2206,20 @@ function buildPostTab(){
       frag.appendChild(el("button",{class:"btn-primary", style:"margin-bottom:10px;", onclick: async ()=>{
         if(!state.scheduleDate){ schedMsg.style.color="var(--coral)"; schedMsg.textContent="Choisis une date et une heure d'abord."; return; }
         const scheduledAt = new Date(state.scheduleDate).getTime();
-        state.scheduled.push({
+        const newPost = {
           id: uid(), platform, mission: state.mission, topic: state.topic,
           textFinal: state.textPasted, imageDataUrl: previewImg.dataUrl,
           scheduledAt, status: "programmé", createdAt: Date.now(), sentAt: null, error: null,
-        });
-        LS.set("vf-scheduled", state.scheduled);
+        };
+        state.scheduled.push(newPost);
+        const savedLocally = LS.set("vf-scheduled", state.scheduled);
+        if(!savedLocally){
+          state.scheduled.pop(); // annule l'ajout en mémoire : rien n'a réellement été enregistré
+          schedMsg.style.color = "var(--coral)";
+          schedMsg.textContent = "Échec : stockage du téléphone plein (trop de photos enregistrées). Supprime d'anciens posts envoyés ou des images de la bibliothèque, puis réessaie.";
+          renderMain();
+          return;
+        }
         state.scheduleDate = "";
         schedMsg.style.color = "var(--muted2)";
         schedMsg.textContent = "Post programmé — synchronisation avec le serveur...";
