@@ -372,6 +372,7 @@ const state = {
   scheduled: LS.get("vf-scheduled", []),
   makeWebhook: LS.get("vf-make-webhook", ""),
   scheduleDate: "",
+  postImageId: null,
   history: LS.get("vf-history", []),
   historyFilter: "Toutes",
   lastGenerated: null,
@@ -1929,6 +1930,7 @@ function buildPostTab(){
     state.textPrompt = buildTextPromptFull(platform, state.topic, state.mission);
     state.textPasted = ""; state.feedbackComment = "";
     state.textPromptOptimized = null; state.imagePromptOptimized = null;
+    state.postImageId = null;
     renderMain();
   }}, [svgIcon(ICONS.wand,16), el("span",{},"Générer image + texte")]));
 
@@ -2038,6 +2040,7 @@ function buildPostTab(){
           LS.set("vf-images", state.images);
           updateCount();
           state.selectedId = id;
+          state.postImageId = id;
           logToLab({ provider:"OpenAI", model:"gpt-image-1-mini", type:"image", prompt: state.imagePrompt, promptHash: hashPrompt(state.imagePrompt), cost:null, durationMs: Date.now()-t0, status:"accepted" });
           imgApiStatus.textContent = "Image générée et ajoutée à ta bibliothèque ✓";
           renderMain();
@@ -2060,6 +2063,7 @@ function buildPostTab(){
       LS.set("vf-images", state.images);
       updateCount();
       state.selectedId = id;
+      state.postImageId = id;
       confirmMsg.textContent = "Image ajoutée à ta bibliothèque ✓";
       imgFileInput.value = "";
     });
@@ -2067,12 +2071,49 @@ function buildPostTab(){
     frag.appendChild(el("button",{class:"btn-secondary", onclick:()=>imgFileInput.click()}, [svgIcon(ICONS.upload,14), el("span",{},"Importer l'image générée")]));
     frag.appendChild(confirmMsg);
 
-    const previewImg = state.images.find(i=>i.id===state.selectedId);
+    const previewImg = state.images.find(i=>i.id===state.postImageId);
     if(previewImg){
       frag.appendChild(el("p",{class:"label", style:"margin-top:14px;"},"Aperçu de l'image retenue pour ce post"));
-      frag.appendChild(vfWrap(el("div",{style:"max-width:280px;margin:0 auto 16px;border-radius:12px;overflow:hidden;"},[
+      frag.appendChild(vfWrap(el("div",{style:"max-width:280px;margin:0 auto 10px;border-radius:12px;overflow:hidden;"},[
         el("img",{src:previewImg.dataUrl, style:"width:100%;display:block;"}),
       ])));
+
+      const logoAsset = state.images.find(i=>i.assetType==="logo");
+      if(logoAsset){
+        const logoMsg = el("p",{style:"font-size:12px;color:var(--green);min-height:16px;margin:0 0 10px;text-align:center;"},"");
+        frag.appendChild(el("button",{class:"btn-secondary", style:"margin-bottom:10px;", onclick: async ()=>{
+          logoMsg.style.color = "var(--muted2)"; logoMsg.textContent = "Ajout du logo en cours...";
+          try{
+            const baseImg = await loadImage(previewImg.dataUrl);
+            const logoImg = await loadImage(logoAsset.dataUrl);
+            const canvas = document.createElement("canvas");
+            canvas.width = baseImg.width; canvas.height = baseImg.height;
+            const ctx = canvas.getContext("2d");
+            ctx.drawImage(baseImg, 0, 0);
+            const logoW = canvas.width * (state.logoOverlay.size/100);
+            const logoH = logoW * (logoImg.height/logoImg.width);
+            const lx = (state.logoOverlay.x/100)*canvas.width - logoW/2;
+            const ly = (state.logoOverlay.y/100)*canvas.height - logoH/2;
+            ctx.drawImage(logoImg, lx, ly, logoW, logoH);
+            const newDataUrl = canvas.toDataURL("image/png");
+            const id = uid();
+            state.images.push({ id, name:`${previewImg.name.replace(/\.png$/,"")}-logo.png`, dataUrl:newDataUrl, tags:[platform,"logo-ajouté"], favorite:false });
+            LS.set("vf-images", state.images);
+            updateCount();
+            state.postImageId = id;
+            logoMsg.style.color = "var(--green)"; logoMsg.textContent = "Logo ajouté ✓ — nouvelle image créée dans la bibliothèque.";
+            renderMain();
+          }catch(err){
+            logoMsg.style.color = "var(--coral)"; logoMsg.textContent = `Échec (${err.message||err}).`;
+          }
+        }}, [svgIcon(ICONS.sparkles,14), el("span",{},"Ajouter mon logo sur cette image")]));
+        frag.appendChild(logoMsg);
+        frag.appendChild(el("p",{style:"font-size:11px;color:var(--muted2);margin:-4px 0 10px;text-align:center;"},
+          "Utilise la position/taille réglées dans l'onglet Éditeur. Crée une nouvelle image, l'originale reste intacte."));
+      } else {
+        frag.appendChild(el("p",{style:"font-size:12px;color:var(--muted2);margin:0 0 10px;"},
+          "Aucun logo enregistré comme actif de marque — marque une image \"Logo\" dans l'onglet Bibliothèque pour pouvoir l'ajouter automatiquement ici."));
+      }
     }
 
     frag.appendChild(el("h2",{class:"section"}, state.viewMode==="production" ? "Texte à copier dans ChatGPT" : "Prompt texte"));
