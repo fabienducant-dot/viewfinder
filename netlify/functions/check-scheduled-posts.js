@@ -50,7 +50,7 @@ exports.handler = async () => {
       try {
         const siteUrl = process.env.SITE_URL || process.env.URL || "";
         const imageUrl = post.imageDataUrl && siteUrl
-          ? `${siteUrl.replace(/\/$/, "")}/.netlify/functions/serve-image?id=${post.id}`
+          ? `${siteUrl.replace(/\/$/, "")}/img/${post.id}.jpg`
           : null;
         console.log(`[check-scheduled-posts] Post ${post.id} → appel du webhook Make : ${webhookUrl}`);
         const res = await fetch(webhookUrl, {

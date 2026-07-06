@@ -23,12 +23,13 @@ exports.handler = async (event) => {
   if (!id) {
     return { statusCode: 400, body: "Paramètre 'id' manquant" };
   }
+  const cleanId = id.replace(/\.[a-zA-Z0-9]+$/, ""); // tolère un suffixe genre ".jpg" ajouté pour Instagram/Make
 
   try {
     const store = openStore();
     const scheduledRaw = await store.get("vf-scheduled");
     const scheduled = scheduledRaw ? JSON.parse(scheduledRaw) : [];
-    const post = scheduled.find((p) => p.id === id);
+    const post = scheduled.find((p) => p.id === cleanId);
 
     if (!post || !post.imageDataUrl) {
       return { statusCode: 404, body: "Image introuvable pour cet identifiant" };
