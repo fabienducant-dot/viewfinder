@@ -41,6 +41,10 @@ exports.handler = async () => {
       if (!post.scheduledAt || post.scheduledAt > now) continue;
 
       try {
+        const siteUrl = process.env.SITE_URL || process.env.URL || "";
+        const imageUrl = post.imageDataUrl && siteUrl
+          ? `${siteUrl.replace(/\/$/, "")}/.netlify/functions/serve-image?id=${post.id}`
+          : null;
         const res = await fetch(webhookUrl, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
@@ -50,6 +54,7 @@ exports.handler = async () => {
             sujet: post.topic,
             texte: post.textFinal,
             image: post.imageDataUrl || null,
+            image_url: imageUrl,
             type_contenu: post.platform,
           }),
         });
