@@ -2066,6 +2066,7 @@ function buildPostTab(){
       state.postImageId = id;
       confirmMsg.textContent = "Image ajoutée à ta bibliothèque ✓";
       imgFileInput.value = "";
+      renderMain();
     });
     frag.appendChild(imgFileInput);
     frag.appendChild(el("button",{class:"btn-secondary", onclick:()=>imgFileInput.click()}, [svgIcon(ICONS.upload,14), el("span",{},"Importer l'image générée")]));
