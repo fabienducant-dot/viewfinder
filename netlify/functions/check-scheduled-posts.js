@@ -23,11 +23,14 @@ exports.handler = async () => {
     const webhookRaw = await store.get("vf-make-webhook");
     const webhookUrl = webhookRaw ? JSON.parse(webhookRaw) : "";
     if (!webhookUrl) {
+      console.log("[check-scheduled-posts] Aucun webhook Make configuré — arrêt.");
       return { statusCode: 200, body: JSON.stringify({ skipped: "Aucun webhook Make configuré" }) };
     }
+    console.log(`[check-scheduled-posts] Webhook configuré : ${webhookUrl}`);
 
     const scheduledRaw = await store.get("vf-scheduled");
     const scheduled = scheduledRaw ? JSON.parse(scheduledRaw) : [];
+    console.log(`[check-scheduled-posts] ${scheduled.length} publication(s) au total dans le store.`);
     if (!Array.isArray(scheduled) || !scheduled.length) {
       return { statusCode: 200, body: JSON.stringify({ skipped: "Aucun post en attente" }) };
     }
@@ -35,16 +38,21 @@ exports.handler = async () => {
     const now = Date.now();
     let sentCount = 0;
     let errorCount = 0;
+    const dueCount = scheduled.filter(p => p.status === "programmé" && p.scheduledAt && p.scheduledAt <= now).length;
+    console.log(`[check-scheduled-posts] ${dueCount} publication(s) éligible(s) (statut "programmé" + heure passée).`);
 
     for (const post of scheduled) {
       if (post.status !== "programmé") continue;
       if (!post.scheduledAt || post.scheduledAt > now) continue;
+
+      console.log(`[check-scheduled-posts] Traitement du post ${post.id} (${post.platform}, prévu ${new Date(post.scheduledAt).toISOString()})`);
 
       try {
         const siteUrl = process.env.SITE_URL || process.env.URL || "";
         const imageUrl = post.imageDataUrl && siteUrl
           ? `${siteUrl.replace(/\/$/, "")}/.netlify/functions/serve-image?id=${post.id}`
           : null;
+        console.log(`[check-scheduled-posts] Post ${post.id} → appel du webhook Make : ${webhookUrl}`);
         const res = await fetch(webhookUrl, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
@@ -58,27 +66,32 @@ exports.handler = async () => {
             type_contenu: post.platform,
           }),
         });
+        console.log(`[check-scheduled-posts] Post ${post.id} → Make a répondu HTTP ${res.status}`);
         if (!res.ok) throw new Error(`Make a répondu ${res.status}`);
         post.status = "envoyé";
         post.sentAt = Date.now();
         post.error = null;
         sentCount++;
+        console.log(`[check-scheduled-posts] Post ${post.id} → statut mis à jour : envoyé.`);
       } catch (err) {
         post.status = "erreur";
         post.error = String(err.message || err);
         errorCount++;
+        console.log(`[check-scheduled-posts] Post ${post.id} → ERREUR : ${post.error}`);
       }
     }
 
     if (sentCount || errorCount) {
       await store.set("vf-scheduled", JSON.stringify(scheduled));
+      console.log(`[check-scheduled-posts] Store mis à jour (${sentCount} envoyé(s), ${errorCount} erreur(s)).`);
     }
 
     return {
       statusCode: 200,
-      body: JSON.stringify({ checked: scheduled.length, sent: sentCount, errors: errorCount }),
+      body: JSON.stringify({ checked: scheduled.length, due: dueCount, sent: sentCount, errors: errorCount }),
     };
   } catch (err) {
+    console.log(`[check-scheduled-posts] ERREUR GLOBALE : ${String(err.message || err)}`);
     return { statusCode: 500, body: JSON.stringify({ error: String(err.message || err) }) };
   }
 };
