@@ -9,6 +9,16 @@ const ALLOWED_KEYS = [
   "vf-audit", "vf-lab", "vf-api-providers", "vf-modes", "vf-campaign",
 ];
 
+/* L'injection automatique du contexte Netlify Blobs (siteID/token) s'est révélée peu fiable
+   sur ce type de fonction — on fournit donc les identifiants explicitement, via deux variables
+   d'environnement à créer sur Netlify : BLOBS_SITE_ID et BLOBS_TOKEN (voir MIGRATION.md). */
+function openStore(){
+  if(process.env.BLOBS_SITE_ID && process.env.BLOBS_TOKEN){
+    return getStore({ name: "viewfinder-data", siteID: process.env.BLOBS_SITE_ID, token: process.env.BLOBS_TOKEN });
+  }
+  return getStore("viewfinder-data");
+}
+
 exports.handler = async (event) => {
   if (event.httpMethod !== "POST") {
     return { statusCode: 405, body: "Method Not Allowed" };
@@ -24,7 +34,7 @@ exports.handler = async (event) => {
     if (!data || typeof data !== "object") {
       return { statusCode: 400, headers: { "Content-Type": "application/json" }, body: JSON.stringify({ error: "Aucune donnée fournie" }) };
     }
-    const store = getStore("viewfinder-data");
+    const store = openStore();
     let saved = 0;
     for (const key of ALLOWED_KEYS) {
       if (Object.prototype.hasOwnProperty.call(data, key)) {

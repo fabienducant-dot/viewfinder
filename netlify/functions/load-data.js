@@ -7,6 +7,13 @@ const ALLOWED_KEYS = [
   "vf-audit", "vf-lab", "vf-api-providers", "vf-modes", "vf-campaign",
 ];
 
+function openStore(){
+  if(process.env.BLOBS_SITE_ID && process.env.BLOBS_TOKEN){
+    return getStore({ name: "viewfinder-data", siteID: process.env.BLOBS_SITE_ID, token: process.env.BLOBS_TOKEN });
+  }
+  return getStore("viewfinder-data");
+}
+
 exports.handler = async (event) => {
   if (event.httpMethod !== "GET" && event.httpMethod !== "POST") {
     return { statusCode: 405, body: "Method Not Allowed" };
@@ -18,7 +25,7 @@ exports.handler = async (event) => {
     }
   }
   try {
-    const store = getStore("viewfinder-data");
+    const store = openStore();
     const data = {};
     for (const key of ALLOWED_KEYS) {
       const raw = await store.get(key);
