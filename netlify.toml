@@ -5,6 +5,9 @@
 [functions]
   node_bundler = "esbuild"
 
+[functions."check-scheduled-posts"]
+  schedule = "*/15 * * * *"
+
 [[headers]]
   for = "/sw.js"
   [headers.values]
