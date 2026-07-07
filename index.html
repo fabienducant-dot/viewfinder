@@ -2207,8 +2207,11 @@ function buildPostTab(){
       frag.appendChild(dateInput);
       const schedMsg = el("p",{style:"font-size:12px;color:var(--green);min-height:16px;"},"");
       frag.appendChild(el("button",{class:"btn-primary", style:"margin-bottom:10px;", onclick: async ()=>{
+       try{
         if(!state.scheduleDate){ schedMsg.style.color="var(--coral)"; schedMsg.textContent="Choisis une date et une heure d'abord."; return; }
+        if(!previewImg || !previewImg.dataUrl){ schedMsg.style.color="var(--coral)"; schedMsg.textContent="Erreur : aucune image valide sélectionnée pour ce post."; return; }
         const scheduledAt = new Date(state.scheduleDate).getTime();
+        if(isNaN(scheduledAt)){ schedMsg.style.color="var(--coral)"; schedMsg.textContent="Date invalide, réessaie."; return; }
         const newPost = {
           id: uid(), platform, mission: state.mission, topic: state.topic,
           textFinal: state.textPasted, imageDataUrl: previewImg.dataUrl,
@@ -2234,6 +2237,10 @@ function buildPostTab(){
           schedMsg.style.color = "var(--coral)";
           schedMsg.textContent = "Post programmé localement, mais la synchro serveur a échoué — va dans Réglages → \"Sauvegarder sur serveur\" avant de fermer l'appli.";
         }
+       }catch(e){
+          schedMsg.style.color = "var(--coral)";
+          schedMsg.textContent = "Erreur inattendue : " + String(e && e.message || e);
+       }
       }}, [svgIcon(ICONS.sparkles,16), el("span",{},"Programmer ce post")]));
       frag.appendChild(el("button",{class:"btn-ghost", style:"margin-bottom:10px;", onclick:()=>{
         state.scheduled.push({
