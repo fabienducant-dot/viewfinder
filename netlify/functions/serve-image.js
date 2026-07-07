@@ -19,7 +19,15 @@ exports.handler = async (event) => {
   if (event.httpMethod !== "GET") {
     return { statusCode: 405, body: "Method Not Allowed" };
   }
-  const id = event.queryStringParameters && event.queryStringParameters.id;
+  // On essaie d'abord le paramètre de requête classique (appel direct à la fonction),
+  // puis on retombe sur le chemin d'origine tel que vu par le navigateur/Make
+  // (cas de la redirection /img/<id>.jpg, où Netlify ne remplit pas toujours ?id=:splat).
+  let id = event.queryStringParameters && event.queryStringParameters.id;
+  if (!id) {
+    const rawPath = event.path || (event.rawUrl ? new URL(event.rawUrl).pathname : "") || "";
+    const lastSegment = rawPath.split("/").filter(Boolean).pop() || "";
+    if (lastSegment && lastSegment !== "serve-image") id = lastSegment;
+  }
   if (!id) {
     return { statusCode: 400, body: "Paramètre 'id' manquant" };
   }
