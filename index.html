@@ -1030,13 +1030,16 @@ function applySyncData(data){
 }
 async function pushToServerSilent(){
   try{
+    const controller = new AbortController();
+    const timeoutId = setTimeout(()=>controller.abort(), 12000);
     const res = await fetch("/.netlify/functions/save-data", {
-      method:"POST", headers: syncHeaders(),
+      method:"POST", headers: syncHeaders(), signal: controller.signal,
       body: JSON.stringify({ data: gatherSyncData(), updatedAt: getLocalUpdatedAt() || Date.now() }),
     });
+    clearTimeout(timeoutId);
     if(res.ok){ localStorage.setItem("vf-last-server-sync", String(Date.now())); return true; }
     return false;
-  }catch(e){ return false; /* pas de connexion ou serveur indisponible, le local reste intact */ }
+  }catch(e){ return false; /* pas de connexion, timeout, ou serveur indisponible : le local reste intact */ }
 }
 async function checkServerOnLoad(){
   try{
@@ -2199,7 +2202,7 @@ function buildPostTab(){
     if(state.textPasted.trim() && previewImg){
       frag.appendChild(el("h2",{class:"section"},"Programmer la publication"));
       frag.appendChild(el("p",{class:"sublabel"},"Texte et image validés ? Choisis une date et une heure — Make ne sera déclenché qu'à ce moment précis, jamais avant."));
-      const dateInput = el("input",{type:"datetime-local", style:"width:100%;background:var(--card);border:1px solid var(--border);border-radius:10px;padding:9px 12px;font-size:14px;margin-bottom:10px;"});
+      const dateInput = el("input",{type:"datetime-local", value: state.scheduleDate || "", style:"width:100%;background:var(--card);border:1px solid var(--border);border-radius:10px;padding:9px 12px;font-size:14px;margin-bottom:10px;"});
       dateInput.addEventListener("input", e=>{ state.scheduleDate = e.target.value; });
       frag.appendChild(dateInput);
       const schedMsg = el("p",{style:"font-size:12px;color:var(--green);min-height:16px;"},"");
