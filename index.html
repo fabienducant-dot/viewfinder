@@ -158,22 +158,24 @@ const ASPECTS = {
   "16:9": { w: 1920, h: 1080 },
 };
 
-const PLATFORMS = ["Instagram","Facebook","Google Business","Article Blog Wix"];
+const PLATFORMS = ["Instagram","Facebook","Google Business","Article Blog Wix","Story"];
 
-const PLATFORM_ASPECT = { "Instagram":"4:5", "Facebook":"1:1", "Google Business":"4:3", "Article Blog Wix":"16:9" };
-const PLATFORM_OVERLAY = { "Instagram":"léger", "Facebook":"léger", "Google Business":"aucun", "Article Blog Wix":"aucun" };
-const PLATFORM_MAXCHARS = { "Instagram":40, "Facebook":50, "Google Business":0, "Article Blog Wix":0 };
+const PLATFORM_ASPECT = { "Instagram":"4:5", "Facebook":"1:1", "Google Business":"4:3", "Article Blog Wix":"16:9", "Story":"9:16" };
+const PLATFORM_OVERLAY = { "Instagram":"léger", "Facebook":"léger", "Google Business":"aucun", "Article Blog Wix":"aucun", "Story":"aucun" };
+const PLATFORM_MAXCHARS = { "Instagram":40, "Facebook":50, "Google Business":0, "Article Blog Wix":0, "Story":60 };
 const PLATFORM_NOTE = {
   "Instagram": "Format portrait, texte léger toléré sur l'image (accroche courte).",
   "Facebook": "Format carré, texte léger toléré sur l'image.",
   "Google Business": "Aucun texte sur l'image (recommandation Google) — le texte porte tout le SEO.",
   "Article Blog Wix": "Image de couverture épurée, sans texte incrusté — le titre est géré par la mise en page Wix.",
+  "Story": "Format vertical plein écran, avec une ou plusieurs phrases d'accroche incrustées et le logo en bas, centré — publiée simultanément sur Instagram et Facebook.",
 };
 const TEXT_STRUCTURE = {
   "Instagram": "Réponds avec :\n1) Légende (2 à 4 phrases)\n2) 5 à 8 hashtags\n3) Une suggestion d'alt text (accessibilité)",
   "Facebook": "Réponds avec :\n1) Texte du post\n2) 2 à 4 hashtags optionnels\n3) Une suggestion d'alt text",
   "Google Business": "Réponds avec :\n1) Texte du post (150 à 300 mots, sans hashtags, mots-clés SEO locaux intégrés naturellement)\n2) Un bouton d'action suggéré (Réserver, En savoir plus, Acheter...)\n3) Un alt text descriptif SEO pour l'image",
   "Article Blog Wix": "Réponds avec :\n1) Titre SEO (H1)\n2) Meta description (155 caractères max)\n3) Slug d'URL suggéré\n4) Introduction\n5) 2 à 3 sections avec sous-titres H2\n6) Conclusion avec appel à l'action\n7) 5 mots-clés SEO\n8) Catégorie suggérée",
+  "Story": "Réponds avec :\n1) Une phrase courte d'accroche optionnelle (facultative, la Story reste avant tout visuelle)\n2) Une suggestion d'alt text",
 };
 /* MASTER SDZ et CODEX SDZ sont les documents de plus haute autorité : toujours injectés,
    quelle que soit la plateforme ou la mission — c'est le socle non négociable de la marque. */
@@ -194,6 +196,8 @@ const TEXT_MODULE_MAP = {
   "Article Blog Wix": ["SEO","Blog Wix","Prestations","Offres","Règles rédactionnelles","Glossaire","Interdits",
     "À ne jamais faire","À faire","Vocabulaire autorisé","Vocabulaire interdit","Erreurs fréquentes","Leçons apprises",
     "CTA","Psychologie client","Personae","Objections clients","Saisonnalité","Missions"],
+  "Story": ["Univers de marque","Règles rédactionnelles","Stories","Interdits","À ne jamais faire","À faire",
+    "Vocabulaire autorisé","Vocabulaire interdit","Prestations","Offres","CTA","Saisonnalité","Missions"],
 };
 /* Story : image uniquement dans le mode campagne, donc pas de map texte — elle ne charge jamais SEO. */
 const IMAGE_MODULE_CATS = ["Charte graphique","Direction artistique","Logo","Palette","Typographies",
@@ -230,6 +234,7 @@ const PLATFORM_TEXT_BUDGET = {
   "Facebook": 3000,
   "Google Business": 3200,
   "Article Blog Wix": 6000,
+  "Story": 800,
 };
 const TEXT_CONTEXT_BUDGET = 4500; // valeur de repli si la plateforme n'a pas de budget dédié
 const IMAGE_CONTEXT_BUDGET = 2600;
@@ -831,10 +836,14 @@ function buildImagePromptFull(platform, topic, aspectKey, missionKey){
   const mods = imageModulesFor();
   const modText = mods.length ? modulesToText(mods) : "(Aucun module visuel activé — active-en dans l'onglet Connaissances.)";
   const style = getSelectedStyle();
-  const overlayRule = PLATFORM_OVERLAY[platform]==="aucun"
-    ? "Pas de texte incrusté sur l'image."
-    : `Texte léger toléré sur l'image (accroche courte, ${PLATFORM_MAXCHARS[platform]} caractères max).`;
-  const logoRule = state.da.presenceLogo ? "Le logo de la marque doit apparaître, discrètement." : "Pas de logo sur cette image.";
+  const overlayRule = platform==="Story"
+    ? "Une ou plusieurs phrases d'accroche courtes et percutantes, incrustées sur l'image, bien lisibles en un coup d'œil (format Story, lecture rapide)."
+    : PLATFORM_OVERLAY[platform]==="aucun"
+      ? "Pas de texte incrusté sur l'image."
+      : `Texte léger toléré sur l'image (accroche courte, ${PLATFORM_MAXCHARS[platform]} caractères max).`;
+  const logoRule = platform==="Story"
+    ? "Le logo de la marque doit apparaître en bas de l'image, centré horizontalement."
+    : state.da.presenceLogo ? "Le logo de la marque doit apparaître, discrètement." : "Pas de logo sur cette image.";
   const selectedProvider = state.apiProviders.find(p=>p.id===state.selectedProviderId);
   const wantsKeywords = selectedProvider && KEYWORD_STYLE_PROVIDERS.includes(selectedProvider.label);
   return cleanPrompt(`Génère une image pour cette marque en respectant strictement :
@@ -875,7 +884,7 @@ const CAMPAIGN_ITEMS = [
   { label:"Google Business", platform:"Google Business" },
   { label:"Instagram", platform:"Instagram" },
   { label:"Facebook", platform:"Facebook" },
-  { label:"Story", platform:"Instagram", aspectOverride:"9:16", imageOnly:true },
+  { label:"Story", platform:"Story", aspectOverride:"9:16", imageOnly:true },
   { label:"Article Blog Wix", platform:"Article Blog Wix" },
 ];
 /* ============================================================
@@ -1887,7 +1896,7 @@ function buildPostTab(){
           platform:item.platform, missionKey:state.mission, prestation:getSelectedPrestationInfo(), style:getSelectedStyle(),
           textMods: txtDetail.kept, textIgnored: txtDetail.ignored, imageMods: imgDetail.kept, imageIgnored: imgDetail.ignored,
           duplicatesRemoved: txtDetail.duplicatesRemoved + imgDetail.duplicatesRemoved,
-          aspect:item.aspect, overlayRule: PLATFORM_OVERLAY[item.platform]==="aucun" || item.imageOnly ? "aucun texte sur l'image" : "texte léger toléré",
+          aspect:item.aspect, overlayRule: item.platform==="Story" ? "accroche obligatoire + logo bas centré" : (PLATFORM_OVERLAY[item.platform]==="aucun" || item.imageOnly ? "aucun texte sur l'image" : "texte léger toléré"),
         }));
       }
       frag.appendChild(vfWrap(el("div",{class:"card", style:"margin-bottom:6px;"},[el("pre",{}, item.imagePrompt)])));
@@ -1951,7 +1960,7 @@ function buildPostTab(){
       textMods: txtDetail.kept, textIgnored: txtDetail.ignored, imageMods: imgDetail.kept, imageIgnored: imgDetail.ignored,
       duplicatesRemoved: txtDetail.duplicatesRemoved + imgDetail.duplicatesRemoved,
       aspect: PLATFORM_ASPECT[platform],
-      overlayRule: PLATFORM_OVERLAY[platform]==="aucun" ? "aucun texte sur l'image" : `texte léger toléré (${PLATFORM_MAXCHARS[platform]} car. max)`,
+      overlayRule: platform==="Story" ? "accroche obligatoire + logo bas centré" : (PLATFORM_OVERLAY[platform]==="aucun" ? "aucun texte sur l'image" : `texte léger toléré (${PLATFORM_MAXCHARS[platform]} car. max)`),
     }));
 
     const risks = currentRiskFlags();
