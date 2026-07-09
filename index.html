@@ -346,6 +346,7 @@ const DEFAULT_STYLES = [
 ============================================================ */
 const state = {
   tab: "accueil",
+  creationMode: "post", // "image" | "post" | "campaign" — distingue les 3 boutons d'accueil dans l'onglet "Créer un post"
   images: LS.get("vf-images", []),
   librarySearch: "",
   libraryAssetFilter: false,
@@ -874,6 +875,7 @@ function buildImagePromptFull(platform, topic, aspectKey, missionKey){
   const logoRule = wantsRealLogo
     ? "Ne dessine et n'invente aucun logo, symbole, monogramme ou texte de marque sur l'image — le vrai logo de l'entreprise sera ajouté automatiquement après coup par-dessus. Laisse simplement, en bas de l'image, une zone dégagée et sobre (pas de motif chargé ni de texte à cet endroit) pour l'accueillir proprement."
     : "Pas de logo sur cette image.";
+  const brandAuthenticityRule = "Ne crée aucun logo. Ne dessine aucun emblème, écusson ou monogramme de marque, même approximatif. N'invente aucun nom de marque, aucun slogan, aucun @identifiant ou pseudo de réseau social, et n'écris aucun texte qui imiterait une marque ou un mot-dièse — le seul texte autorisé sur l'image est l'accroche définie ci-dessus, s'il y en a une.";
   const selectedProvider = state.apiProviders.find(p=>p.id===state.selectedProviderId);
   const wantsKeywords = selectedProvider && KEYWORD_STYLE_PROVIDERS.includes(selectedProvider.label);
   return cleanPrompt(`Génère une image pour cette marque en respectant strictement :
@@ -886,6 +888,7 @@ ${styleBlock(style)}
 Plateforme : ${platform} — format ${aspectKey} (${ASPECTS[aspectKey].w}x${ASPECTS[aspectKey].h})
 ${overlayRule}
 ${logoRule}
+${brandAuthenticityRule}
 Sujet : ${topic}
 ${seasonBlock()}${buildAntiRepeatNote(platform, "image")}
 ${SAFETY_GUARDRAIL}
@@ -1274,27 +1277,28 @@ function buildAccueilTab(){
   }
 
   const activeModules = state.modules.filter(m=>m.enabled).length;
-  const avgQuality = (()=>{
-    const withGlobal = state.auditHistory.filter(a=>a.global!=null);
-    if(!withGlobal.length) return null;
-    return (withGlobal.reduce((s,a)=>s+a.global,0)/withGlobal.length).toFixed(1);
-  })();
+  const countByStatus = (s)=> state.scheduled.filter(p=>p.status===s).length;
+  const nbProgramme = countByStatus("programmé");
+  const nbEnvoye = countByStatus("envoyé");
+  const nbErreur = countByStatus("erreur");
 
   frag.appendChild(el("div",{style:"display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-bottom:22px;"},[
     el("div",{class:"card", style:"text-align:center;padding:12px 6px;"},[el("div",{style:"font-size:20px;font-weight:700;"},String(state.images.length)),el("div",{style:"font-size:10px;color:var(--muted2);"},"visuels")]),
     el("div",{class:"card", style:"text-align:center;padding:12px 6px;"},[el("div",{style:"font-size:20px;font-weight:700;"},String(activeModules)),el("div",{style:"font-size:10px;color:var(--muted2);"},"modules actifs")]),
-    el("div",{class:"card", style:"text-align:center;padding:12px 6px;"},[el("div",{style:"font-size:20px;font-weight:700;color:var(--lime);"},avgQuality!=null?`${avgQuality}/10`:"—"),el("div",{style:"font-size:10px;color:var(--muted2);"},"score moyen")]),
+    el("div",{class:"card", style:"text-align:center;padding:12px 6px;"},[el("div",{style:"font-size:20px;font-weight:700;color:var(--amber, var(--lime));"},String(nbProgramme)),el("div",{style:"font-size:10px;color:var(--muted2);"},"programmés")]),
+    el("div",{class:"card", style:"text-align:center;padding:12px 6px;"},[el("div",{style:"font-size:20px;font-weight:700;color:var(--green);"},String(nbEnvoye)),el("div",{style:"font-size:10px;color:var(--muted2);"},"envoyés")]),
+    el("div",{class:"card", style:"text-align:center;padding:12px 6px;"},[el("div",{style:"font-size:20px;font-weight:700;color:var(--coral);"},String(nbErreur)),el("div",{style:"font-size:10px;color:var(--muted2);"},"en erreur")]),
   ]));
 
   frag.appendChild(el("p",{class:"label"},"Actions rapides"));
   frag.appendChild(quickAction(ICONS.wand, "Créer une image", "Génère un prompt image guidé par ta charte et ton style", ()=>{
-    state.tab="post"; renderNav(); renderMain();
+    state.creationMode="image"; state.tab="post"; renderNav(); renderMain();
   }));
   frag.appendChild(quickAction(ICONS.sparkles, "Créer un post", "Image + texte adaptés à une plateforme", ()=>{
-    state.tab="post"; renderNav(); renderMain();
+    state.creationMode="post"; state.tab="post"; renderNav(); renderMain();
   }));
   frag.appendChild(quickAction(ICONS.copy, "Créer une campagne complète", "5 formats générés en une fois", ()=>{
-    state.mission="Créer une campagne complète"; state.tab="post"; renderNav(); renderMain();
+    state.creationMode="campaign"; state.mission="Créer une campagne complète"; state.tab="post"; renderNav(); renderMain();
   }));
   frag.appendChild(quickAction(ICONS.star, "Lancer un audit", state.lastGenerated ? "Analyser le dernier contenu généré" : "Génère d'abord un post pour pouvoir l'auditer", ()=>{
     state.tab="audit"; renderNav(); renderMain();
@@ -1558,6 +1562,22 @@ function importModulesFromText(text){
 function buildKnowledgeTab(){
   const frag = el("div",{});
 
+  frag.appendChild(el("p",{class:"sublabel"}, "Cet onglet est la base de connaissances textuelle de La Santé des Zèbres (SDZ) : règles, exemples, prestations, univers de marque... tout ce qui guide les textes et images générés."));
+  frag.appendChild(el("div",{class:"card", style:"margin-bottom:16px;background:var(--card2, var(--card));"},[
+    el("p",{style:"font-size:12px;margin:0;"}, "🖼️ Le vrai logo ne s'importe pas ici. Ajoute-le dans l'onglet Bibliothèque, puis marque-le comme actif \"Logo\" — c'est cette image-là qui sera automatiquement surimposée sur tes visuels, jamais un logo dessiné par l'IA."),
+  ]));
+
+  const GENERIC_MODULE_TITLES = ["Ton & identité visuelle","Interdits généraux","Structure générale","Style par défaut","Présentation de la marque"];
+  const genericCount = state.modules.filter(m=>GENERIC_MODULE_TITLES.includes(m.title)).length;
+  if(genericCount>0){
+    frag.appendChild(el("button",{class:"btn-secondary", style:"margin-bottom:16px;", onclick:()=>{
+      if(!confirm(`Supprimer les ${genericCount} module(s) générique(s) par défaut (non spécifiques à SDZ) ? MASTER SDZ, CODEX SDZ, Prestations, Direction artistique, Logo, Palette et tout le reste ne sont pas touchés.`)) return;
+      state.modules = state.modules.filter(m=>!GENERIC_MODULE_TITLES.includes(m.title));
+      LS.set("vf-modules", state.modules);
+      renderMain();
+    }}, `🧹 Nettoyer les modules génériques (${genericCount})`));
+  }
+
   frag.appendChild(el("h2",{class:"section"},"Importer depuis ChatGPT"));
   frag.appendChild(el("p",{class:"sublabel"},"ChatGPT connaît déjà ton activité. Récupère un prompt, colle sa réponse, les modules sont créés automatiquement."));
   const genBtn = el("button",{class:"btn-secondary", style:"margin-bottom:10px;"}, [svgIcon(ICONS.sparkles,14), el("span",{},"Générer le prompt")]);
@@ -1763,25 +1783,41 @@ function buildInspector({ platform, missionKey, prestation, style, textMods, ima
 }
 
 /* ---------- bloc de retour + score qualité, réutilisé pour post simple et campagne ---------- */
+function hasLikelyCTA(text, missionKey){
+  const t = (text||"").toLowerCase();
+  const genericCtas = ["réserve","réservez","contacte","contactez","découvre","découvrez","profite","profitez",
+    "appelle","appelez","offre","offrez","réservation","rendez-vous","inscri","clique","cliquez","visite","visitez"];
+  if(genericCtas.some(w=>t.includes(w))) return true;
+  const missionCta = missionKey && MISSIONS[missionKey] && MISSIONS[missionKey].cta;
+  if(missionCta){
+    const ctaWords = missionCta.toLowerCase().split(/\W+/).filter(w=>w.length>3);
+    if(ctaWords.some(w=>t.includes(w))) return true;
+  }
+  return false;
+}
+
 function buildValidationChecklist(ctx){
   const platform = ctx.platform;
   const text = (ctx.getTextResult ? ctx.getTextResult() : "") || "";
   const requiresText = !!ctx.textPrompt;
   const checks = [];
 
-  if(requiresText){
-    checks.push({ label:"Texte rédigé (généré ou collé)", ok: text.trim().length>0 });
-  }
+  checks.push({ label:`Format plateforme correct (${PLATFORM_ASPECT[platform]})`, ok: true });
+  checks.push({ label: requiresText ? "Texte requis pour cette plateforme : rédigé" : "Texte non requis pour cette plateforme (normal, rien à faire)",
+    ok: requiresText ? text.trim().length>0 : true });
   checks.push({ label:"Image sélectionnée pour ce post", ok: !!ctx.hasImage });
+  checks.push({ label:"Logo IA interdit dans le prompt (consigne appliquée automatiquement)", ok: true });
+  checks.push({ label: wantsRealLogoLabel(platform), ok: !logoRequiredFor(platform) || !!ctx.logoApplied });
 
-  if(logoRequiredFor(platform)){
-    checks.push({ label:"Logo réel de la marque appliqué (pas dessiné par l'IA)", ok: !!ctx.logoApplied });
-  }
   if(requiresText && ctx.prestationName){
     checks.push({ label:`Nom de la prestation repris exactement ("${ctx.prestationName}")`, ok: text.includes(ctx.prestationName) });
   }
+  if(requiresText){
+    checks.push({ label:"CTA (appel à l'action) présent dans le texte", ok: hasLikelyCTA(text, ctx.missionKey) });
+  }
   if(requiresText && platform==="Google Business"){
     checks.push({ label:"Pas de hashtags (non recommandé pour Google Business)", ok: !text.includes("#") });
+    checks.push({ label:"Longueur adaptée à un résumé Google Business (150 à 300 mots environ)", ok: text.split(/\s+/).filter(Boolean).length>=80 });
   }
   if(requiresText && (platform==="Instagram" || platform==="Facebook")){
     checks.push({ label:"Longueur raisonnable pour un réseau social (moins de 2200 caractères)", ok: text.length>0 && text.length<2200 });
@@ -1789,9 +1825,15 @@ function buildValidationChecklist(ctx){
   if(requiresText && platform==="Article Blog Wix"){
     checks.push({ label:"Article suffisamment développé pour le SEO (plus de 500 caractères)", ok: text.length>500 });
   }
+  if(ctx.schedulable !== false && platform!=="Article Blog Wix" && platform!=="Story"){
+    checks.push({ label:"Image compatible avec l'envoi automatique à Make (servie via image_url)", ok: !!ctx.hasImage });
+  }
 
   const passed = checks.filter(c=>c.ok).length;
   return { checks, passed, total: checks.length, allOk: checks.length>0 && checks.every(c=>c.ok) };
+}
+function wantsRealLogoLabel(platform){
+  return logoRequiredFor(platform) ? "Vrai logo prévu en surimpression (pas un logo dessiné par l'IA)" : "Logo non requis pour ce format (normal)";
 }
 
 function buildFeedbackBlock(ctx){
@@ -1953,16 +1995,19 @@ function buildPostTab(){
     return frag;
   }
 
+  const imageOnlyMode = state.creationMode === "image";
   frag.appendChild(el("button",{class:"btn-primary", style:"margin-bottom:14px;", onclick: ()=>{
     if(!state.topic.trim()){ topicWarn.textContent = "Décris d'abord le sujet du post avant de générer."; return; }
     topicWarn.textContent = "";
     state.imagePrompt = buildImagePromptFull(platform, state.topic, PLATFORM_ASPECT[platform], state.mission);
-    state.textPrompt = platform==="Story" ? null : buildTextPromptFull(platform, state.topic, state.mission);
+    state.textPrompt = (platform==="Story" || imageOnlyMode) ? null : buildTextPromptFull(platform, state.topic, state.mission);
     state.textPasted = ""; state.feedbackComment = "";
     state.textPromptOptimized = null; state.imagePromptOptimized = null;
     state.postImageId = null;
     renderMain();
-  }}, [svgIcon(ICONS.wand,16), el("span",{}, platform==="Story" ? "Générer l'image (accroche + logo intégrés)" : "Générer image + texte")]));
+  }}, [svgIcon(ICONS.wand,16), el("span",{}, platform==="Story" ? "Générer l'image (accroche + logo intégrés)" : imageOnlyMode ? "Générer l'image" : "Générer image + texte")]));
+
+  if(imageOnlyMode) frag.appendChild(el("p",{class:"sublabel", style:"margin-top:-8px;"}, "Mode image seule — aucun texte ne sera généré. Passe par \"Créer un post\" si tu as aussi besoin d'une légende."));
 
   if(state.imagePrompt){
     const txtDetail = textModulesDetail(platform);
@@ -2218,7 +2263,8 @@ function buildPostTab(){
       platform, topic: state.topic, imagePrompt: state.imagePrompt, textPrompt: state.textPrompt,
       getTextResult: ()=>state.textPasted,
       hasImage: !!previewImg, logoApplied: !!(previewImg && previewImg.logoApplied),
-      prestationName: state.prestationName || null,
+      prestationName: state.prestationName || null, missionKey: state.mission,
+      schedulable: platform !== "Article Blog Wix" && platform !== "Story",
     }));
 
     const isSchedulable = platform !== "Article Blog Wix" && platform !== "Story";
@@ -2281,7 +2327,10 @@ function buildPostTab(){
         frag.appendChild(schedMsg);
       } else {
         frag.appendChild(el("h2",{class:"section"},"Publication manuelle"));
-        frag.appendChild(el("p",{class:"sublabel"}, `${platform} n'est pas automatisable via Make — copie le texte (s'il y en a) et télécharge l'image, puis publie-les toi-même.`));
+        const manualHint = platform==="Story"
+          ? "Story non automatisable via Make — télécharge l'image et publie-la toi-même en story sur Instagram et/ou Facebook."
+          : `${platform} n'est pas automatisable via Make — copie le texte (s'il y en a) et télécharge l'image, puis publie-les toi-même.`;
+        frag.appendChild(el("p",{class:"sublabel"}, manualHint));
         const manualMsg = el("p",{style:"font-size:12px;color:var(--green);min-height:16px;"},"");
         if(requiresTextForSchedule) frag.appendChild(copyBtnFor(()=>state.textPasted));
         frag.appendChild(el("button",{class:"btn-secondary", style:"margin:6px 0;", onclick:()=>{
@@ -2393,6 +2442,7 @@ function buildCalendarCard(item, inCampaign){
     const checklist = buildValidationChecklist({
       platform: item.platform, textPrompt: item.textPrompt, getTextResult: ()=>item.textFinal,
       hasImage: !!item.imageDataUrl, logoApplied: !!item.logoApplied, prestationName: null,
+      missionKey: item.mission, schedulable: item.schedulable,
     });
     if(checklist.total>0){
       card.appendChild(el("p",{class:"label", style:"margin-top:10px;"}, "Checklist"));
@@ -2443,8 +2493,11 @@ function buildCalendarCard(item, inCampaign){
       }}, "Retirer la date"));
     }
   } else {
-    card.appendChild(el("p",{class:"sublabel", style:"margin:6px 0;"}, "Article non programmable — copie le texte et télécharge l'image, puis publie-les toi-même dans Wix."));
-    actionsRow.appendChild(copyBtnFor(()=>item.textFinal||""));
+    const hint = item.platform==="Story"
+      ? "Story non programmable — télécharge l'image et publie-la toi-même en story sur Instagram et/ou Facebook."
+      : "Article non programmable — copie le texte et télécharge l'image, puis publie-les toi-même dans Wix.";
+    card.appendChild(el("p",{class:"sublabel", style:"margin:6px 0;"}, hint));
+    if(item.textFinal) actionsRow.appendChild(copyBtnFor(()=>item.textFinal||""));
     if(item.imageDataUrl){
       actionsRow.appendChild(el("button",{class:"btn-small", onclick:()=>{
         const link = document.createElement("a");
