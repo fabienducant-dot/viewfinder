@@ -482,6 +482,35 @@ function loadImage(src){
   });
 }
 
+/* L'IA ne doit jamais être chargée de dessiner le logo (elle ne peut que l'approximer, jamais le reproduire
+   fidèlement) : on lui demande de laisser une zone dégagée, puis on incruste ici le vrai fichier logo
+   marqué comme actif de marque dans la Bibliothèque, exactement à la position réglée dans state.logoOverlay. */
+async function compositeRealLogo(baseDataUrl){
+  const logoAsset = state.images.find(i=>i.assetType==="logo");
+  if(!logoAsset) return { dataUrl: baseDataUrl, applied:false };
+  try{
+    const baseImg = await loadImage(baseDataUrl);
+    const logoImg = await loadImage(logoAsset.dataUrl);
+    const canvas = document.createElement("canvas");
+    canvas.width = baseImg.width; canvas.height = baseImg.height;
+    const ctx = canvas.getContext("2d");
+    ctx.drawImage(baseImg, 0, 0);
+    const logoW = canvas.width * (state.logoOverlay.size/100);
+    const logoH = logoW * (logoImg.height/logoImg.width);
+    const lx = (state.logoOverlay.x/100)*canvas.width - logoW/2;
+    const ly = (state.logoOverlay.y/100)*canvas.height - logoH/2;
+    ctx.drawImage(logoImg, lx, ly, logoW, logoH);
+    return { dataUrl: canvas.toDataURL("image/png"), applied:true };
+  }catch(e){
+    return { dataUrl: baseDataUrl, applied:false };
+  }
+}
+
+/* true si cette plateforme/ce réglage exige le vrai logo sur l'image (Story : toujours ; sinon selon la DA). */
+function logoRequiredFor(platform){
+  return platform==="Story" || state.da.presenceLogo;
+}
+
 /* ============================================================
    MOTEUR DE SÉLECTION INTELLIGENT
 ============================================================ */
@@ -720,7 +749,7 @@ function seasonBlock(){
 function prestationPromptBlock(){
   const info = getSelectedPrestationInfo();
   if(!info) return "";
-  let out = `PRESTATION CONCERNÉE : ${info.name}\n`;
+  let out = `PRESTATION CONCERNÉE : ${info.name}\nIMPORTANT : reprends ce nom de prestation EXACTEMENT tel qu'écrit ci-dessus (mêmes majuscules, même orthographe) partout où tu le mentionnes — ne le reformule pas, ne le traduis pas, ne change pas sa casse.\n`;
   if(info.duree) out += `Durée : ${info.duree}\n`;
   if(info.tarif) out += `Tarif : ${info.tarif}\n`;
   const ficheKeys = Object.keys(info.fiche);
@@ -841,9 +870,10 @@ function buildImagePromptFull(platform, topic, aspectKey, missionKey){
     : PLATFORM_OVERLAY[platform]==="aucun"
       ? "Pas de texte incrusté sur l'image."
       : `Texte léger toléré sur l'image (accroche courte, ${PLATFORM_MAXCHARS[platform]} caractères max).`;
-  const logoRule = platform==="Story"
-    ? "Le logo de la marque doit apparaître en bas de l'image, centré horizontalement."
-    : state.da.presenceLogo ? "Le logo de la marque doit apparaître, discrètement." : "Pas de logo sur cette image.";
+  const wantsRealLogo = logoRequiredFor(platform);
+  const logoRule = wantsRealLogo
+    ? "Ne dessine et n'invente aucun logo, symbole, monogramme ou texte de marque sur l'image — le vrai logo de l'entreprise sera ajouté automatiquement après coup par-dessus. Laisse simplement, en bas de l'image, une zone dégagée et sobre (pas de motif chargé ni de texte à cet endroit) pour l'accueillir proprement."
+    : "Pas de logo sur cette image.";
   const selectedProvider = state.apiProviders.find(p=>p.id===state.selectedProviderId);
   const wantsKeywords = selectedProvider && KEYWORD_STYLE_PROVIDERS.includes(selectedProvider.label);
   return cleanPrompt(`Génère une image pour cette marque en respectant strictement :
@@ -1095,12 +1125,13 @@ function generateCampaignPosts(topic, missionKey){
   const campaignId = uid();
   return CAMPAIGN_ITEMS.map(item=>{
     const aspect = item.aspectOverride || PLATFORM_ASPECT[item.platform];
+    const isStory = item.platform === "Story";
     return {
       id: uid(), campaignId, campaignTopic: topic, campaignLabel: item.label,
       platform: item.platform, mission: missionKey, topic,
       imagePrompt: buildImagePromptFull(item.platform, topic, aspect, missionKey),
-      textPrompt: buildTextPromptFull(item.platform, topic, missionKey),
-      textFinal: "", imageDataUrl: null,
+      textPrompt: isStory ? null : buildTextPromptFull(item.platform, topic, missionKey),
+      textFinal: isStory ? null : "", imageDataUrl: null,
       schedulable: item.platform !== "Article Blog Wix" && item.platform !== "Story",
       scheduledAt: null, status: "brouillon", createdAt: Date.now(), sentAt: null, error: null,
     };
@@ -1732,24 +1763,54 @@ function buildInspector({ platform, missionKey, prestation, style, textMods, ima
 }
 
 /* ---------- bloc de retour + score qualité, réutilisé pour post simple et campagne ---------- */
+function buildValidationChecklist(ctx){
+  const platform = ctx.platform;
+  const text = (ctx.getTextResult ? ctx.getTextResult() : "") || "";
+  const requiresText = !!ctx.textPrompt;
+  const checks = [];
+
+  if(requiresText){
+    checks.push({ label:"Texte rédigé (généré ou collé)", ok: text.trim().length>0 });
+  }
+  checks.push({ label:"Image sélectionnée pour ce post", ok: !!ctx.hasImage });
+
+  if(logoRequiredFor(platform)){
+    checks.push({ label:"Logo réel de la marque appliqué (pas dessiné par l'IA)", ok: !!ctx.logoApplied });
+  }
+  if(requiresText && ctx.prestationName){
+    checks.push({ label:`Nom de la prestation repris exactement ("${ctx.prestationName}")`, ok: text.includes(ctx.prestationName) });
+  }
+  if(requiresText && platform==="Google Business"){
+    checks.push({ label:"Pas de hashtags (non recommandé pour Google Business)", ok: !text.includes("#") });
+  }
+  if(requiresText && (platform==="Instagram" || platform==="Facebook")){
+    checks.push({ label:"Longueur raisonnable pour un réseau social (moins de 2200 caractères)", ok: text.length>0 && text.length<2200 });
+  }
+  if(requiresText && platform==="Article Blog Wix"){
+    checks.push({ label:"Article suffisamment développé pour le SEO (plus de 500 caractères)", ok: text.length>500 });
+  }
+
+  const passed = checks.filter(c=>c.ok).length;
+  return { checks, passed, total: checks.length, allOk: checks.length>0 && checks.every(c=>c.ok) };
+}
+
 function buildFeedbackBlock(ctx){
   const frag = el("div",{});
   const risk = computeRepetitionRisk(ctx.platform, ctx.getTextResult());
-  frag.appendChild(el("h2",{class:"section"},"Score qualité avant validation"));
+  const checklist = buildValidationChecklist(ctx);
+  frag.appendChild(el("h2",{class:"section"},"Checklist de validation"));
   const riskColor = risk>50 ? "var(--coral)" : risk>25 ? "var(--amber)" : "var(--green)";
   frag.appendChild(el("p",{style:`font-size:13px;margin-bottom:10px;`},[
     "Risque de répétition détecté (calcul automatique vs historique) : ",
     el("strong",{style:`color:${riskColor};`}, `${risk}%`),
   ]));
-  const dims = [["charte","Respect de la charte"],["coherence","Cohérence marque"],["adaptation","Adaptation plateforme"],
-    ["originalite","Originalité"],["clarte","Clarté"],["conversion","Potentiel de conversion"]];
-  dims.forEach(([key,label])=>{
-    const valSpan = el("span",{}, String(state.qualityScores[key]));
-    const row = el("div",{class:"row"},[el("span",{},label), valSpan]);
-    const range = el("input",{type:"range", min:"0", max:"10", value:String(state.qualityScores[key])});
-    range.addEventListener("input", e=>{ state.qualityScores[key]=Number(e.target.value); valSpan.textContent=e.target.value; });
-    frag.appendChild(el("div",{class:"slider-block"},[row, range]));
+  checklist.checks.forEach(c=>{
+    frag.appendChild(el("div",{class:"learning-row", style:`color:${c.ok?"var(--green)":"var(--coral)"};`}, `${c.ok?"✅":"⚠️"} ${c.label}`));
   });
+  if(checklist.total>0){
+    frag.appendChild(el("p",{style:`font-size:13px;font-weight:600;margin:10px 0;color:${checklist.allOk?"var(--green)":"var(--amber)"};`},
+      checklist.allOk ? "Tout est en ordre, prêt à valider." : `${checklist.passed}/${checklist.total} points validés — vérifie les points signalés ci-dessus avant de publier.`));
+  }
 
   frag.appendChild(el("h2",{class:"section"},"Retour sur ce contenu"));
   frag.appendChild(el("p",{class:"sublabel"},"Ton retour devient une nouvelle règle réinjectée dans les prochaines générations."));
@@ -1763,7 +1824,7 @@ function buildFeedbackBlock(ctx){
       id: uid(), date: nowStr(), platform: ctx.platform, topic: ctx.topic,
       imagePrompt: ctx.imagePrompt, textPrompt: ctx.textPrompt,
       textResult: ctx.getTextResult(), rating, comment: state.feedbackComment, favorite:false,
-      quality: {...state.qualityScores, repetitionRisk: risk},
+      quality: { checklistPassed: checklist.passed, checklistTotal: checklist.total, checklistOk: checklist.allOk, repetitionRisk: risk },
       campaignLabel: ctx.campaignLabel || null,
     };
     state.history.push(entry);
@@ -1896,12 +1957,12 @@ function buildPostTab(){
     if(!state.topic.trim()){ topicWarn.textContent = "Décris d'abord le sujet du post avant de générer."; return; }
     topicWarn.textContent = "";
     state.imagePrompt = buildImagePromptFull(platform, state.topic, PLATFORM_ASPECT[platform], state.mission);
-    state.textPrompt = buildTextPromptFull(platform, state.topic, state.mission);
+    state.textPrompt = platform==="Story" ? null : buildTextPromptFull(platform, state.topic, state.mission);
     state.textPasted = ""; state.feedbackComment = "";
     state.textPromptOptimized = null; state.imagePromptOptimized = null;
     state.postImageId = null;
     renderMain();
-  }}, [svgIcon(ICONS.wand,16), el("span",{},"Générer image + texte")]));
+  }}, [svgIcon(ICONS.wand,16), el("span",{}, platform==="Story" ? "Générer l'image (accroche + logo intégrés)" : "Générer image + texte")]));
 
   if(state.imagePrompt){
     const txtDetail = textModulesDetail(platform);
@@ -1916,19 +1977,15 @@ function buildPostTab(){
 
     const risks = currentRiskFlags();
     const provider = state.apiProviders.find(p=>p.id===state.selectedProviderId) || state.apiProviders[0] || DEFAULT_OPENAI_PROVIDER;
-    const estCost = provider ? estimateCost(provider, state.textPrompt) : null;
+    const estCost = provider ? estimateCost(provider, state.textPrompt||"") : null;
     const SPEED_ESTIMATES = { "Très rapide":"≈2-5 s", "Rapide":"≈5-10 s", "Moyenne":"≈10-20 s" };
     const estTime = provider ? (SPEED_ESTIMATES[provider.speed] || "variable selon le fournisseur") : null;
-    const qScore = computeQualityScore({ platform, textPrompt: state.textPrompt, textMods: txtDetail.kept, imageMods: imgDetail.kept, missionKey: state.mission });
-    const scoreColor = qScore.global>=80 ? "var(--green)" : qScore.global>=60 ? "var(--amber)" : "var(--coral)";
+    const qScore = computeQualityScore({ platform, textPrompt: state.textPrompt||"", textMods: txtDetail.kept, imageMods: imgDetail.kept, missionKey: state.mission });
     const routerSuggestion = suggestProviderFor({ platform });
 
     frag.appendChild(el("div",{class:"card", style:"margin-bottom:16px;"},[
-      el("div",{style:"display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;"},[
-        el("p",{class:"label", style:"margin:0;"},"Audit préalable & score qualité"),
-        el("span",{style:`font-size:22px;font-weight:700;color:${scoreColor};`}, `${qScore.global}/100`),
-      ]),
-      el("div",{class:"learning-row"}, `Longueur du prompt texte : ${state.textPrompt.length} caractères ${state.textPrompt.length>4000?"— assez long, vérifie qu'aucune info superflue n'a été injectée":""}`),
+      el("p",{class:"label", style:"margin-bottom:10px;"},"Audit du contexte injecté"),
+      state.textPrompt ? el("div",{class:"learning-row"}, `Longueur du prompt texte : ${state.textPrompt.length} caractères ${state.textPrompt.length>4000?"— assez long, vérifie qu'aucune info superflue n'a été injectée":""}`) : null,
       el("div",{class:"learning-row"},
         `Connaissances : ${txtDetail.totalAvailable+imgDetail.totalAvailable} disponibles · ${txtDetail.totalKept+imgDetail.totalKept} injectées · ${(txtDetail.ignored.length+imgDetail.ignored.length)} ignorées · ${txtDetail.duplicatesRemoved+imgDetail.duplicatesRemoved} doublons fusionnés`),
       (()=>{
@@ -1944,24 +2001,21 @@ function buildPostTab(){
       risks.length
         ? el("div",{class:"learning-row", style:"color:var(--amber);"}, `⚠ Sujets à traiter avec prudence : ${risks.join(", ")}. Un garde-fou générique est déjà inclus dans le prompt image ; pour un résultat plus précis, renseigne un champ "Scène visuelle" dans la fiche de cette prestation (onglet Connaissances).`)
         : el("div",{class:"learning-row"}, "Aucun sujet sensible détecté."),
-      qScore.weakPoints.length
-        ? el("div",{class:"learning-row", style:"color:var(--coral);"}, `Points faibles détectés : ${qScore.weakPoints.join(", ")}.`)
-        : el("div",{class:"learning-row", style:"color:var(--green);"}, "Aucun point faible détecté sur les critères mesurables."),
       el("div",{class:"learning-row"}, provider
         ? `Coût estimé (${provider.label}) : ${estCost!=null ? "$"+estCost.toFixed(4) : "non estimé — renseigne les tarifs dans Paramètres API"} · Temps estimé : ${estTime}`
         : "Aucun fournisseur API configuré — mode manuel (copier/coller)."),
       routerSuggestion ? el("div",{class:"learning-row", style:"color:#8FA6FF;"}, `Moteur recommandé pour ce type de contenu : ${routerSuggestion.suggestion} — ${routerSuggestion.reason} (suggestion libre, tu choisis toujours toi-même dans le sélecteur ci-dessous).`) : null,
-      el("p",{style:"font-size:11px;color:var(--muted2);margin-top:6px;"},"Score heuristique local basé sur des signaux structurels, pas un jugement sémantique — pour une vraie évaluation qualitative, utilise l'onglet Audit IA."),
+      el("p",{style:"font-size:11px;color:var(--muted2);margin-top:6px;"},"La vraie validation (texte, image, logo, nom de prestation) se fait via la checklist plus bas, une fois le contenu prêt."),
     ]));
 
-    if(qScore.global < 70){
+    if(state.textPrompt && qScore.global < 70){
       frag.appendChild(el("button",{class:"btn-secondary", style:"margin-bottom:16px;", onclick: ()=>{
         const optimizedText = buildTextPromptFull(platform, state.topic, state.mission);
         const optimizedImage = buildImagePromptFull(platform, state.topic, PLATFORM_ASPECT[platform], state.mission);
         state.textPromptOptimized = optimizedText;
         state.imagePromptOptimized = optimizedImage;
         renderMain();
-      }}, "🛠 Optimiser le prompt (score sous le seuil de 70)"));
+      }}, "🛠 Optimiser le prompt (contexte perfectible)"));
     }
     if(state.textPromptOptimized){
       frag.appendChild(el("div",{class:"card", style:"margin-bottom:16px;"},[
@@ -2003,15 +2057,22 @@ function buildPostTab(){
         const ratio = ASPECTS[PLATFORM_ASPECT[platform]].w / ASPECTS[PLATFORM_ASPECT[platform]].h;
         const size = ratio > 1.15 ? "1792x1024" : ratio < 0.85 ? "1024x1792" : "1024x1024";
         try{
-          const dataUrl = await callProviderImage(state.imagePrompt, size);
+          let dataUrl = await callProviderImage(state.imagePrompt, size);
+          let logoApplied = false;
+          if(logoRequiredFor(platform)){
+            const composited = await compositeRealLogo(dataUrl);
+            dataUrl = composited.dataUrl; logoApplied = composited.applied;
+          }
           const id = uid();
-          state.images.push({ id, name:`${platform}-${nowStr()}.png`, dataUrl, tags:[platform], favorite:false });
+          state.images.push({ id, name:`${platform}-${nowStr()}.png`, dataUrl, tags:[platform], favorite:false, logoApplied });
           LS.set("vf-images", state.images);
           updateCount();
           state.selectedId = id;
           state.postImageId = id;
           logToLab({ provider:"OpenAI", model:"gpt-image-1-mini", type:"image", prompt: state.imagePrompt, promptHash: hashPrompt(state.imagePrompt), cost:null, durationMs: Date.now()-t0, status:"accepted" });
-          imgApiStatus.textContent = "Image générée et ajoutée à ta bibliothèque ✓";
+          imgApiStatus.textContent = logoRequiredFor(platform)
+            ? (logoApplied ? "Image générée, logo réel appliqué ✓" : "Image générée — aucun logo marqué comme actif de marque dans la Bibliothèque, rien n'a été ajouté.")
+            : "Image générée et ajoutée à ta bibliothèque ✓";
           renderMain();
         }catch(err){
           logToLab({ provider:"OpenAI", model:"gpt-image-1-mini", type:"image", prompt: state.imagePrompt, promptHash: hashPrompt(state.imagePrompt), cost:null, durationMs: Date.now()-t0, status:"refused", reason:String(err.message||err) });
@@ -2026,14 +2087,21 @@ function buildPostTab(){
     const confirmMsg = el("p",{style:"font-size:12px;color:var(--green);margin-top:8px;min-height:14px;"},"");
     imgFileInput.addEventListener("change", async (e)=>{
       const file = e.target.files[0]; if(!file) return;
-      const dataUrl = await resizeImageFile(file);
+      let dataUrl = await resizeImageFile(file);
+      let logoApplied = false;
+      if(logoRequiredFor(platform)){
+        const composited = await compositeRealLogo(dataUrl);
+        dataUrl = composited.dataUrl; logoApplied = composited.applied;
+      }
       const id = uid();
-      state.images.push({id, name:file.name, dataUrl, tags:[platform], favorite:false});
+      state.images.push({id, name:file.name, dataUrl, tags:[platform], favorite:false, logoApplied});
       LS.set("vf-images", state.images);
       updateCount();
       state.selectedId = id;
       state.postImageId = id;
-      confirmMsg.textContent = "Image ajoutée à ta bibliothèque ✓";
+      confirmMsg.textContent = logoRequiredFor(platform)
+        ? (logoApplied ? "Image importée, logo réel appliqué ✓" : "Image importée — aucun logo marqué comme actif de marque dans la Bibliothèque, rien n'a été ajouté.")
+        : "Image ajoutée à ta bibliothèque ✓";
       imgFileInput.value = "";
       renderMain();
     });
@@ -2086,133 +2154,154 @@ function buildPostTab(){
       }
     }
 
-    frag.appendChild(el("h2",{class:"section"}, state.viewMode==="production" ? "Texte à copier dans ChatGPT" : "Prompt texte"));
-    frag.appendChild(vfWrap(el("div",{class:"card", style:"margin-bottom:6px;"},[el("pre",{}, state.textPrompt)])));
-    frag.appendChild(copyBtnFor(()=>state.textPrompt));
+    if(state.textPrompt){
+      frag.appendChild(el("h2",{class:"section"}, state.viewMode==="production" ? "Texte à copier dans ChatGPT" : "Prompt texte"));
+      frag.appendChild(vfWrap(el("div",{class:"card", style:"margin-bottom:6px;"},[el("pre",{}, state.textPrompt)])));
+      frag.appendChild(copyBtnFor(()=>state.textPrompt));
 
-    {
-      const availableProviders = state.apiProviders.length ? state.apiProviders : [DEFAULT_OPENAI_PROVIDER];
-      const providerSelect = el("select",{style:"margin:8px 0;"}, availableProviders.map(p=> el("option",{value:p.id}, p.label)));
-      providerSelect.value = state.selectedProviderId || availableProviders[0].id;
-      providerSelect.addEventListener("change", e=>{ state.selectedProviderId = e.target.value; renderMain(); });
-      frag.appendChild(providerSelect);
+      {
+        const availableProviders = state.apiProviders.length ? state.apiProviders : [DEFAULT_OPENAI_PROVIDER];
+        const providerSelect = el("select",{style:"margin:8px 0;"}, availableProviders.map(p=> el("option",{value:p.id}, p.label)));
+        providerSelect.value = state.selectedProviderId || availableProviders[0].id;
+        providerSelect.addEventListener("change", e=>{ state.selectedProviderId = e.target.value; renderMain(); });
+        frag.appendChild(providerSelect);
 
-      const apiStatus = el("p",{style:"font-size:12px;color:var(--muted2);min-height:16px;margin:4px 0 8px;"},"");
-      const apiBtn = el("button",{class:"btn-secondary", style:"margin-bottom:10px;"}, [svgIcon(ICONS.sparkles,14), el("span",{},"Générer via l'API (remplace le copier/coller)")]);
-      apiBtn.addEventListener("click", async ()=>{
-        const provider = availableProviders.find(p=>p.id===(state.selectedProviderId||availableProviders[0].id)) || availableProviders[0];
-        const cached = findCachedResult(provider.label, state.textPrompt);
-        if(cached && !confirm(`Un résultat identique existe déjà (${cached.date}). Régénérer quand même et consommer du budget ?`)) {
-          state.textPasted = cached.result || "";
-          renderMain();
-          return;
-        }
-        const cost = estimateCost(provider, state.textPrompt);
-        const costLabel = cost!=null ? `~$${cost.toFixed(4)}` : "coût non estimé (tarifs non renseignés)";
-        if(!confirm(`Lancer la génération via ${provider.label} ? Coût estimé : ${costLabel}.`)) return;
-        apiStatus.textContent = "Génération en cours...";
-        const t0 = Date.now();
-        try{
-          const result = await callProviderText(provider, "Tu es le rédacteur officiel de cette marque, respecte strictement les informations et contraintes fournies.", state.textPrompt);
-          state.textPasted = result;
-          logToLab({ provider: provider.label, model: provider.model, type:"texte", prompt: state.textPrompt, promptHash: hashPrompt(state.textPrompt), result, cost, durationMs: Date.now()-t0, status:"accepted" });
-          apiStatus.textContent = "Résultat reçu et inséré ci-dessous ✓";
-          renderMain();
-        }catch(err){
-          logToLab({ provider: provider.label, model: provider.model, type:"texte", prompt: state.textPrompt, promptHash: hashPrompt(state.textPrompt), cost, durationMs: Date.now()-t0, status:"refused", reason: String(err.message||err) });
-          apiStatus.textContent = `Échec de l'appel (${err.message||err}) — utilise le mode manuel ci-dessous à la place.`;
-        }
-      });
-      frag.appendChild(apiBtn);
-      frag.appendChild(apiStatus);
-    }
+        const apiStatus = el("p",{style:"font-size:12px;color:var(--muted2);min-height:16px;margin:4px 0 8px;"},"");
+        const apiBtn = el("button",{class:"btn-secondary", style:"margin-bottom:10px;"}, [svgIcon(ICONS.sparkles,14), el("span",{},"Générer via l'API (remplace le copier/coller)")]);
+        apiBtn.addEventListener("click", async ()=>{
+          const provider = availableProviders.find(p=>p.id===(state.selectedProviderId||availableProviders[0].id)) || availableProviders[0];
+          const cached = findCachedResult(provider.label, state.textPrompt);
+          if(cached && !confirm(`Un résultat identique existe déjà (${cached.date}). Régénérer quand même et consommer du budget ?`)) {
+            state.textPasted = cached.result || "";
+            renderMain();
+            return;
+          }
+          const cost = estimateCost(provider, state.textPrompt);
+          const costLabel = cost!=null ? `~$${cost.toFixed(4)}` : "coût non estimé (tarifs non renseignés)";
+          if(!confirm(`Lancer la génération via ${provider.label} ? Coût estimé : ${costLabel}.`)) return;
+          apiStatus.textContent = "Génération en cours...";
+          const t0 = Date.now();
+          try{
+            const result = await callProviderText(provider, "Tu es le rédacteur officiel de cette marque, respecte strictement les informations et contraintes fournies.", state.textPrompt);
+            state.textPasted = result;
+            logToLab({ provider: provider.label, model: provider.model, type:"texte", prompt: state.textPrompt, promptHash: hashPrompt(state.textPrompt), result, cost, durationMs: Date.now()-t0, status:"accepted" });
+            apiStatus.textContent = "Résultat reçu et inséré ci-dessous ✓";
+            renderMain();
+          }catch(err){
+            logToLab({ provider: provider.label, model: provider.model, type:"texte", prompt: state.textPrompt, promptHash: hashPrompt(state.textPrompt), cost, durationMs: Date.now()-t0, status:"refused", reason: String(err.message||err) });
+            apiStatus.textContent = `Échec de l'appel (${err.message||err}) — utilise le mode manuel ci-dessous à la place.`;
+          }
+        });
+        frag.appendChild(apiBtn);
+        frag.appendChild(apiStatus);
+      }
 
-    const pastedArea = el("textarea",{rows:"5", placeholder:"Colle ici la réponse texte de ChatGPT (ou récupère-la automatiquement via l'API ci-dessus)..."}, state.textPasted);
-    pastedArea.addEventListener("input", e=>{ state.textPasted = e.target.value; });
-    frag.appendChild(el("div",{style:"margin:10px 0;"}, pastedArea));
+      const pastedArea = el("textarea",{rows:"5", placeholder:"Colle ici la réponse texte de ChatGPT (ou récupère-la automatiquement via l'API ci-dessus)..."}, state.textPasted);
+      pastedArea.addEventListener("input", e=>{ state.textPasted = e.target.value; });
+      frag.appendChild(el("div",{style:"margin:10px 0;"}, pastedArea));
 
-    frag.appendChild(el("button",{class:"btn-secondary", style:"margin-bottom:10px;", onclick: ()=>{
-      sendToAudit({
-        platform, missionKey: state.mission, topic: state.topic,
-        imagePrompt: state.imagePrompt, textPrompt: state.textPrompt,
-        textMods: textModulesFor(platform), imageMods: imageModulesFor(),
-        prestation: getSelectedPrestationInfo(), style: getSelectedStyle(),
-        antiRepeatTextNote: buildAntiRepeatNote(platform,"texte"), antiRepeatImageNote: buildAntiRepeatNote(platform,"image"),
-        textPasted: state.textPasted,
-      });
-    }}, [svgIcon(ICONS.sparkles,14), el("span",{},"Analyser avec ChatGPT")]));
-
-    if(state.viewMode==="production"){
-      frag.appendChild(el("div",{class:"card", style:"margin-bottom:16px;"},[
-        el("p",{class:"label", style:"margin-bottom:8px;"},"Checklist avant publication"),
-        el("div",{class:"learning-row"},"☐ Image collée dans ChatGPT, logo joint si disponible"),
-        el("div",{class:"learning-row"},"☐ Texte généré et collé ci-dessus"),
-        el("div",{class:"learning-row"},"☐ Durée / tarif vérifiés"),
-        el("div",{class:"learning-row"},"☐ Logo ajouté manuellement si besoin (onglet Éditeur)"),
-        el("div",{class:"learning-row"},"☐ Hashtags / alt text relus"),
-        el("div",{class:"learning-row"},"☐ Prêt à publier"),
-      ]));
+      frag.appendChild(el("button",{class:"btn-secondary", style:"margin-bottom:10px;", onclick: ()=>{
+        sendToAudit({
+          platform, missionKey: state.mission, topic: state.topic,
+          imagePrompt: state.imagePrompt, textPrompt: state.textPrompt,
+          textMods: textModulesFor(platform), imageMods: imageModulesFor(),
+          prestation: getSelectedPrestationInfo(), style: getSelectedStyle(),
+          antiRepeatTextNote: buildAntiRepeatNote(platform,"texte"), antiRepeatImageNote: buildAntiRepeatNote(platform,"image"),
+          textPasted: state.textPasted,
+        });
+      }}, [svgIcon(ICONS.sparkles,14), el("span",{},"Analyser avec ChatGPT")]));
+    } else {
+      frag.appendChild(el("p",{class:"sublabel", style:"margin-top:10px;"}, "Aucun texte séparé pour ce format : l'accroche fait partie intégrante de l'image générée ci-dessus."));
     }
 
     frag.appendChild(buildFeedbackBlock({
       platform, topic: state.topic, imagePrompt: state.imagePrompt, textPrompt: state.textPrompt,
       getTextResult: ()=>state.textPasted,
+      hasImage: !!previewImg, logoApplied: !!(previewImg && previewImg.logoApplied),
+      prestationName: state.prestationName || null,
     }));
 
-    if(state.textPasted.trim() && previewImg){
-      frag.appendChild(el("h2",{class:"section"},"Programmer la publication"));
-      frag.appendChild(el("p",{class:"sublabel"},"Texte et image validés ? Choisis une date et une heure — Make ne sera déclenché qu'à ce moment précis, jamais avant."));
-      const dateInput = el("input",{type:"datetime-local", value: state.scheduleDate || "", style:"width:100%;background:var(--card);border:1px solid var(--border);border-radius:10px;padding:9px 12px;font-size:14px;margin-bottom:10px;"});
-      dateInput.addEventListener("input", e=>{ state.scheduleDate = e.target.value; });
-      frag.appendChild(dateInput);
-      const schedMsg = el("p",{style:"font-size:12px;color:var(--green);min-height:16px;"},"");
-      frag.appendChild(el("button",{class:"btn-primary", style:"margin-bottom:10px;", onclick: async ()=>{
-       try{
-        if(!state.scheduleDate){ schedMsg.style.color="var(--coral)"; schedMsg.textContent="Choisis une date et une heure d'abord."; return; }
-        if(!previewImg || !previewImg.dataUrl){ schedMsg.style.color="var(--coral)"; schedMsg.textContent="Erreur : aucune image valide sélectionnée pour ce post."; return; }
-        const scheduledAt = new Date(state.scheduleDate).getTime();
-        if(isNaN(scheduledAt)){ schedMsg.style.color="var(--coral)"; schedMsg.textContent="Date invalide, réessaie."; return; }
-        const newPost = {
-          id: uid(), platform, mission: state.mission, topic: state.topic,
-          textFinal: state.textPasted, imageDataUrl: previewImg.dataUrl,
-          scheduledAt, status: "programmé", createdAt: Date.now(), sentAt: null, error: null,
-        };
-        state.scheduled.push(newPost);
-        const savedLocally = LS.set("vf-scheduled", state.scheduled);
-        if(!savedLocally){
-          state.scheduled.pop(); // annule l'ajout en mémoire : rien n'a réellement été enregistré
-          schedMsg.style.color = "var(--coral)";
-          schedMsg.textContent = "Échec : stockage du téléphone plein (trop de photos enregistrées). Supprime d'anciens posts envoyés ou des images de la bibliothèque, puis réessaie.";
-          renderMain();
-          return;
-        }
-        state.scheduleDate = "";
-        schedMsg.style.color = "var(--muted2)";
-        schedMsg.textContent = "Post programmé — synchronisation avec le serveur...";
-        const ok = await pushToServerSilent();
-        if(ok){
+    const isSchedulable = platform !== "Article Blog Wix" && platform !== "Story";
+    const requiresTextForSchedule = !!state.textPrompt;
+    const contentReady = previewImg && (!requiresTextForSchedule || state.textPasted.trim());
+    if(contentReady){
+      if(isSchedulable){
+        frag.appendChild(el("h2",{class:"section"},"Programmer la publication"));
+        frag.appendChild(el("p",{class:"sublabel"},"Texte et image validés ? Choisis une date et une heure — Make ne sera déclenché qu'à ce moment précis, jamais avant."));
+        const dateInput = el("input",{type:"datetime-local", value: state.scheduleDate || "", style:"width:100%;background:var(--card);border:1px solid var(--border);border-radius:10px;padding:9px 12px;font-size:14px;margin-bottom:10px;"});
+        dateInput.addEventListener("input", e=>{ state.scheduleDate = e.target.value; });
+        frag.appendChild(dateInput);
+        const schedMsg = el("p",{style:"font-size:12px;color:var(--green);min-height:16px;"},"");
+        frag.appendChild(el("button",{class:"btn-primary", style:"margin-bottom:10px;", onclick: async ()=>{
+         try{
+          if(!state.scheduleDate){ schedMsg.style.color="var(--coral)"; schedMsg.textContent="Choisis une date et une heure d'abord."; return; }
+          if(!previewImg || !previewImg.dataUrl){ schedMsg.style.color="var(--coral)"; schedMsg.textContent="Erreur : aucune image valide sélectionnée pour ce post."; return; }
+          const scheduledAt = new Date(state.scheduleDate).getTime();
+          if(isNaN(scheduledAt)){ schedMsg.style.color="var(--coral)"; schedMsg.textContent="Date invalide, réessaie."; return; }
+          const newPost = {
+            id: uid(), platform, mission: state.mission, topic: state.topic,
+            textFinal: state.textPasted, imageDataUrl: previewImg.dataUrl, schedulable: true,
+            scheduledAt, status: "programmé", createdAt: Date.now(), sentAt: null, error: null,
+          };
+          state.scheduled.push(newPost);
+          const savedLocally = LS.set("vf-scheduled", state.scheduled);
+          if(!savedLocally){
+            state.scheduled.pop(); // annule l'ajout en mémoire : rien n'a réellement été enregistré
+            schedMsg.style.color = "var(--coral)";
+            schedMsg.textContent = "Échec : stockage du téléphone plein (trop de photos enregistrées). Supprime d'anciens posts envoyés ou des images de la bibliothèque, puis réessaie.";
+            renderMain();
+            return;
+          }
+          state.scheduleDate = "";
+          schedMsg.style.color = "var(--muted2)";
+          schedMsg.textContent = "Post programmé — synchronisation avec le serveur...";
+          const ok = await pushToServerSilent();
+          if(ok){
+            schedMsg.style.color = "var(--green)";
+            schedMsg.textContent = "Post programmé ✓ — envoyé au serveur, visible dans l'onglet Calendrier.";
+          } else {
+            schedMsg.style.color = "var(--coral)";
+            schedMsg.textContent = "Post programmé localement, mais la synchro serveur a échoué — va dans Réglages → \"Sauvegarder sur serveur\" avant de fermer l'appli.";
+          }
+         }catch(e){
+            schedMsg.style.color = "var(--coral)";
+            schedMsg.textContent = "Erreur inattendue : " + String(e && e.message || e);
+         }
+        }}, [svgIcon(ICONS.sparkles,16), el("span",{},"Programmer ce post")]));
+        frag.appendChild(el("button",{class:"btn-ghost", style:"margin-bottom:10px;", onclick:()=>{
+          state.scheduled.push({
+            id: uid(), platform, mission: state.mission, topic: state.topic,
+            textFinal: state.textPasted, imageDataUrl: previewImg.dataUrl, schedulable: true,
+            scheduledAt: null, status: "brouillon", createdAt: Date.now(), sentAt: null, error: null,
+          });
+          LS.set("vf-scheduled", state.scheduled);
           schedMsg.style.color = "var(--green)";
-          schedMsg.textContent = "Post programmé ✓ — envoyé au serveur, visible dans l'onglet Calendrier.";
-        } else {
-          schedMsg.style.color = "var(--coral)";
-          schedMsg.textContent = "Post programmé localement, mais la synchro serveur a échoué — va dans Réglages → \"Sauvegarder sur serveur\" avant de fermer l'appli.";
-        }
-       }catch(e){
-          schedMsg.style.color = "var(--coral)";
-          schedMsg.textContent = "Erreur inattendue : " + String(e && e.message || e);
-       }
-      }}, [svgIcon(ICONS.sparkles,16), el("span",{},"Programmer ce post")]));
-      frag.appendChild(el("button",{class:"btn-ghost", style:"margin-bottom:10px;", onclick:()=>{
-        state.scheduled.push({
-          id: uid(), platform, mission: state.mission, topic: state.topic,
-          textFinal: state.textPasted, imageDataUrl: previewImg.dataUrl,
-          scheduledAt: null, status: "brouillon", createdAt: Date.now(), sentAt: null, error: null,
-        });
-        LS.set("vf-scheduled", state.scheduled);
-        schedMsg.style.color = "var(--green)";
-        schedMsg.textContent = "Enregistré comme brouillon ✓ — tu pourras lui donner une date plus tard.";
-      }}, "Enregistrer comme brouillon (sans date pour l'instant)"));
-      frag.appendChild(schedMsg);
+          schedMsg.textContent = "Enregistré comme brouillon ✓ — tu pourras lui donner une date plus tard.";
+        }}, "Enregistrer comme brouillon (sans date pour l'instant)"));
+        frag.appendChild(schedMsg);
+      } else {
+        frag.appendChild(el("h2",{class:"section"},"Publication manuelle"));
+        frag.appendChild(el("p",{class:"sublabel"}, `${platform} n'est pas automatisable via Make — copie le texte (s'il y en a) et télécharge l'image, puis publie-les toi-même.`));
+        const manualMsg = el("p",{style:"font-size:12px;color:var(--green);min-height:16px;"},"");
+        if(requiresTextForSchedule) frag.appendChild(copyBtnFor(()=>state.textPasted));
+        frag.appendChild(el("button",{class:"btn-secondary", style:"margin:6px 0;", onclick:()=>{
+          const link = document.createElement("a");
+          link.download = `${platform.toLowerCase().replace(/\s+/g,"-")}-${uid()}.jpg`;
+          link.href = previewImg.dataUrl;
+          link.click();
+        }}, [svgIcon(ICONS.download,14), el("span",{},"Télécharger l'image")]));
+        frag.appendChild(el("button",{class:"btn-ghost", style:"margin:6px 0;display:block;", onclick:()=>{
+          state.scheduled.push({
+            id: uid(), platform, mission: state.mission, topic: state.topic,
+            textFinal: state.textPasted, imageDataUrl: previewImg.dataUrl, schedulable: false,
+            scheduledAt: null, status: "validé", createdAt: Date.now(), sentAt: null, error: null,
+          });
+          LS.set("vf-scheduled", state.scheduled);
+          manualMsg.textContent = "Archivé dans le Calendrier ✓ (statut Validé, pour garder une trace).";
+          renderMain();
+        }}, "Garder une trace dans le Calendrier"));
+        frag.appendChild(manualMsg);
+      }
     }
   }
 
@@ -2234,7 +2323,8 @@ function buildCalendarCard(item, inCampaign){
   if(item.sentAt) card.appendChild(el("div",{style:"font-size:12px;color:var(--green);"}, `Envoyé le : ${new Date(item.sentAt).toLocaleString("fr-FR")}`));
   if(item.error) card.appendChild(el("div",{style:"font-size:12px;color:var(--coral);"}, `Erreur : ${item.error}`));
 
-  const needsContent = inCampaign && (!item.textFinal || !item.textFinal.trim() || !item.imageDataUrl);
+  const requiresText = !!item.textPrompt;
+  const needsContent = inCampaign && ((requiresText && (!item.textFinal || !item.textFinal.trim())) || !item.imageDataUrl);
   if(needsContent){
     card.appendChild(el("p",{class:"label", style:"margin-top:10px;"}, "Prompt image"));
     card.appendChild(vfWrap(el("div",{class:"card", style:"margin-bottom:6px;"},[el("pre",{}, item.imagePrompt)])));
@@ -2252,11 +2342,18 @@ function buildCalendarCard(item, inCampaign){
         const ratio = ASPECTS[aspectKey].w / ASPECTS[aspectKey].h;
         const size = ratio > 1.15 ? "1792x1024" : ratio < 0.85 ? "1024x1792" : "1024x1024";
         try{
-          const dataUrl = await callProviderImage(item.imagePrompt, size);
-          item.imageDataUrl = dataUrl;
+          let dataUrl = await callProviderImage(item.imagePrompt, size);
+          let logoApplied = false;
+          if(logoRequiredFor(item.platform)){
+            const composited = await compositeRealLogo(dataUrl);
+            dataUrl = composited.dataUrl; logoApplied = composited.applied;
+          }
+          item.imageDataUrl = dataUrl; item.logoApplied = logoApplied;
           const saved = LS.set("vf-scheduled", state.scheduled);
           logToLab({ provider:"OpenAI", model:"gpt-image-1-mini", type:"image", prompt:item.imagePrompt, promptHash:hashPrompt(item.imagePrompt), cost:null, durationMs:Date.now()-t0, status:"accepted" });
-          imgApiStatus.textContent = saved ? "Image générée ✓" : "Générée, mais échec d'enregistrement (stockage plein ?).";
+          imgApiStatus.textContent = !saved ? "Générée, mais échec d'enregistrement (stockage plein ?)."
+            : logoRequiredFor(item.platform) ? (logoApplied ? "Image générée, logo réel appliqué ✓" : "Image générée — aucun logo marqué comme actif de marque, rien n'a été ajouté.")
+            : "Image générée ✓";
           renderMain();
         }catch(err){
           imgApiStatus.textContent = `Échec (${err.message||err}) — utilise l'import manuel ci-dessous.`;
@@ -2267,10 +2364,17 @@ function buildCalendarCard(item, inCampaign){
     const imgFileInput = el("input",{type:"file", accept:"image/*", style:"display:none"});
     imgFileInput.addEventListener("change", async (e)=>{
       const file = e.target.files[0]; if(!file) return;
-      const dataUrl = await resizeImageFile(file);
-      item.imageDataUrl = dataUrl;
+      let dataUrl = await resizeImageFile(file);
+      let logoApplied = false;
+      if(logoRequiredFor(item.platform)){
+        const composited = await compositeRealLogo(dataUrl);
+        dataUrl = composited.dataUrl; logoApplied = composited.applied;
+      }
+      item.imageDataUrl = dataUrl; item.logoApplied = logoApplied;
       const saved = LS.set("vf-scheduled", state.scheduled);
-      imgApiStatus.textContent = saved ? "Image importée ✓" : "Importée, mais échec d'enregistrement (stockage plein ?).";
+      imgApiStatus.textContent = !saved ? "Importée, mais échec d'enregistrement (stockage plein ?)."
+        : logoRequiredFor(item.platform) ? (logoApplied ? "Image importée, logo réel appliqué ✓" : "Image importée — aucun logo marqué comme actif de marque, rien n'a été ajouté.")
+        : "Image importée ✓";
       renderMain();
     });
     card.appendChild(imgFileInput);
@@ -2286,10 +2390,21 @@ function buildCalendarCard(item, inCampaign){
       card.appendChild(pastedArea);
     }
 
+    const checklist = buildValidationChecklist({
+      platform: item.platform, textPrompt: item.textPrompt, getTextResult: ()=>item.textFinal,
+      hasImage: !!item.imageDataUrl, logoApplied: !!item.logoApplied, prestationName: null,
+    });
+    if(checklist.total>0){
+      card.appendChild(el("p",{class:"label", style:"margin-top:10px;"}, "Checklist"));
+      checklist.checks.forEach(c=>{
+        card.appendChild(el("div",{class:"learning-row", style:`color:${c.ok?"var(--green)":"var(--coral)"};font-size:12px;`}, `${c.ok?"✅":"⚠️"} ${c.label}`));
+      });
+    }
+
     const validateMsg = el("p",{style:"font-size:12px;color:var(--coral);min-height:14px;margin:4px 0;"},"");
     card.appendChild(el("button",{class:"btn-secondary", style:"margin-bottom:6px;", onclick: async ()=>{
-      if(!item.textFinal || !item.textFinal.trim() || !item.imageDataUrl){
-        validateMsg.textContent = "Texte et image requis avant de valider.";
+      if((requiresText && (!item.textFinal || !item.textFinal.trim())) || !item.imageDataUrl){
+        validateMsg.textContent = requiresText ? "Texte et image requis avant de valider." : "Image requise avant de valider.";
         return;
       }
       item.status = "validé";
@@ -2408,12 +2523,15 @@ function buildCalendarTab(){
   actionsRow.appendChild(el("button",{class:"btn-small", onclick:()=>{
     let count = 0;
     state.scheduled.forEach(p=>{
-      if(p.status==="brouillon" && p.textFinal && p.textFinal.trim() && p.imageDataUrl){ p.status="validé"; count++; }
+      if(p.status!=="brouillon") return;
+      const requiresText = !!p.textPrompt;
+      const ready = (!requiresText || (p.textFinal && p.textFinal.trim())) && p.imageDataUrl;
+      if(ready){ p.status="validé"; count++; }
     });
     LS.set("vf-scheduled", state.scheduled);
     pushToServerSilentSafe();
     actionMsg.style.color = count ? "var(--green)" : "var(--amber)";
-    actionMsg.textContent = count ? `${count} contenu(s) validé(s) ✓` : "Aucun contenu prêt à valider (texte + image requis sur chaque brouillon).";
+    actionMsg.textContent = count ? `${count} contenu(s) validé(s) ✓` : "Aucun contenu prêt à valider (image requise partout, texte requis sauf pour les Stories).";
     renderMain();
   }}, "☑️ Valider la campagne"));
 
