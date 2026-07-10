@@ -3050,13 +3050,14 @@ function analyzePackFile(raw, dryRun){
   if(packType==="STYLES"){
     let added=0, updated=0, identical=0;
     const moduleResults = [];
+    const META_FIELDS = ["id","createdAt","updatedAt","sourcePack","packVersion"];
+    const stripMeta = (obj)=>{ const c={...obj}; META_FIELDS.forEach(f=>delete c[f]); return c; };
     raw.styles.forEach(s=>{
       const name = String(s.name).trim();
-      const incoming = { ...s, name };
-      delete incoming.id;
+      const incoming = stripMeta({ ...s, name });
       const existing = state.styles.find(x=>(x.name||"").trim().toLowerCase()===name.toLowerCase());
       if(existing){
-        const existingComparable = { ...existing }; delete existingComparable.id;
+        const existingComparable = stripMeta(existing);
         if(JSON.stringify(existingComparable) !== JSON.stringify(incoming)){
           if(!dryRun){ Object.assign(existing, incoming); existing.updatedAt = Date.now(); existing.sourcePack = packType; existing.packVersion = incomingVersion; }
           updated++; moduleResults.push({title:name, status:"updated"});
