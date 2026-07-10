@@ -3,37 +3,38 @@
 <head>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, viewport-fit=cover" />
-<meta name="theme-color" content="#1B1230" />
+<meta name="theme-color" content="#0B0B0B" />
 <meta name="mobile-web-app-capable" content="yes" />
 <meta name="apple-mobile-web-app-capable" content="yes" />
-<title>Viewfinder</title>
+<title>SDZ App</title>
 <link rel="manifest" href="./manifest.json" />
 <link rel="icon" type="image/png" sizes="32x32" href="./icons/favicon-32.png" />
 <link rel="apple-touch-icon" href="./icons/icon-180.png" />
-<meta name="apple-mobile-web-app-title" content="Viewfinder" />
+<meta name="apple-mobile-web-app-title" content="SDZ App" />
 <style>
   :root{
-    --bg:#1B1230; --card:rgba(255,255,255,0.05); --card2:rgba(255,255,255,0.08); --border:rgba(255,255,255,0.13);
-    --text:#F4F1EA; --muted:#B8B4C9; --muted2:#8B899C;
-    --coral:#FF5D73; --lime:#D4F14C; --amber:#FFB020; --blue:#4C6EF5; --green:#3ECF8E;
+    --bg:#0B0B0B; --card:rgba(255,255,255,0.05); --card2:rgba(255,255,255,0.08); --border:rgba(255,255,255,0.14);
+    --text:#F5F4EF; --muted:#BFBAA8; --muted2:#8C8878;
+    --gold:#C9A227; --gold-soft:#E4C567;
+    --coral:#B33A3A; --lime:var(--gold-soft); --amber:#FFB020; --blue:var(--gold); --green:#3ECF8E;
   }
   *{box-sizing:border-box;}
   html,body{margin:0;padding:0;background:var(--bg);color:var(--text);font-family:-apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif;}
   button{font-family:inherit;cursor:pointer;border:none;background:none;color:inherit;}
   input,textarea,select{font-family:inherit;color:inherit;background:transparent;}
   ::-webkit-scrollbar{width:6px;height:6px}
-  ::-webkit-scrollbar-thumb{background:#4C3D66;border-radius:3px}
+  ::-webkit-scrollbar-thumb{background:#3A3428;border-radius:3px}
 
-  header{position:sticky;top:0;z-index:10;background:rgba(27,18,48,0.97);border-bottom:1px solid var(--border);
+  header{position:sticky;top:0;z-index:10;background:rgba(11,11,11,0.97);border-bottom:1px solid var(--border);
     padding:14px 18px;display:flex;align-items:center;justify-content:space-between;}
   .brand{display:flex;align-items:center;gap:8px;font-weight:700;font-size:18px;letter-spacing:-0.02em;}
-  .dot-ring{width:26px;height:26px;border-radius:50%;border:2px solid var(--coral);display:flex;align-items:center;justify-content:center;}
+  .dot-ring{width:26px;height:26px;border-radius:50%;border:2px solid var(--gold);display:flex;align-items:center;justify-content:center;}
   .dot-ring i{width:8px;height:8px;border-radius:50%;background:var(--lime);}
   .count{font-size:12px;color:var(--muted);}
 
   nav{display:flex;gap:6px;padding:12px 16px 0;overflow-x:auto;}
   nav button{padding:8px 14px;border-radius:999px;font-size:13px;white-space:nowrap;color:var(--muted);transition:background .15s;}
-  nav button.active{background:var(--coral);color:var(--bg);font-weight:600;}
+  nav button.active{background:var(--gold);color:var(--bg);font-weight:600;}
   nav button:not(.active):hover{background:rgba(255,255,255,0.06);}
 
   main{padding:16px;padding-bottom:80px;max-width:560px;margin:0 auto;}
@@ -45,7 +46,7 @@
 
   .upload-zone{width:100%;border:2px dashed rgba(255,255,255,0.2);border-radius:18px;padding:28px 10px;
     display:flex;flex-direction:column;align-items:center;gap:8px;color:var(--muted);margin-bottom:16px;transition:.15s;}
-  .upload-zone:hover{border-color:rgba(255,93,115,0.6);color:var(--coral);}
+  .upload-zone:hover{border-color:rgba(201,162,39,0.6);color:var(--gold);}
 
   .grid2{display:grid;grid-template-columns:1fr 1fr;gap:12px;}
   .thumb{position:relative;aspect-ratio:1/1;border-radius:12px;overflow:hidden;cursor:pointer;}
@@ -67,18 +68,18 @@
   .pillrow{display:flex;gap:8px;flex-wrap:wrap;}
   .pill{padding:7px 14px;border-radius:999px;font-size:13px;border:1px solid rgba(255,255,255,0.15);color:var(--muted);}
   .pill.active{background:var(--lime);color:var(--bg);border-color:var(--lime);font-weight:600;}
-  .badge{display:inline-block;font-size:10px;padding:2px 8px;border-radius:999px;background:rgba(76,110,245,0.2);color:#8FA6FF;}
+  .badge{display:inline-block;font-size:10px;padding:2px 8px;border-radius:999px;background:rgba(201,162,39,0.2);color:var(--gold-soft);}
 
   textarea,input[type=text],select{width:100%;background:var(--card);border:1px solid var(--border);border-radius:10px;
     padding:9px 12px;font-size:14px;outline:none;resize:none;}
-  textarea:focus,input[type=text]:focus,select:focus{border-color:var(--coral);}
-  input[type=range]{width:100%;accent-color:var(--coral);}
-  input[type=checkbox]{width:16px;height:16px;accent-color:var(--coral);}
+  textarea:focus,input[type=text]:focus,select:focus{border-color:var(--gold);}
+  input[type=range]{width:100%;accent-color:var(--gold);}
+  input[type=checkbox]{width:16px;height:16px;accent-color:var(--gold);}
 
-  .btn-primary{width:100%;background:var(--coral);color:var(--bg);font-weight:600;border-radius:999px;padding:13px;
+  .btn-primary{width:100%;background:var(--gold);color:var(--bg);font-weight:600;border-radius:999px;padding:13px;
     display:flex;align-items:center;justify-content:center;gap:8px;font-size:15px;}
   .btn-primary:hover{filter:brightness(1.08);}
-  .btn-secondary{width:100%;background:rgba(76,110,245,0.18);color:#8FA6FF;font-weight:600;border-radius:999px;padding:10px;
+  .btn-secondary{width:100%;background:rgba(201,162,39,0.18);color:var(--gold-soft);font-weight:600;border-radius:999px;padding:10px;
     display:flex;align-items:center;justify-content:center;gap:8px;font-size:14px;}
   .btn-small{background:var(--card);border-radius:8px;padding:6px 10px;font-size:12px;display:inline-flex;align-items:center;gap:5px;}
   .btn-ghost{flex:1;background:var(--card);border-radius:999px;padding:9px;font-size:13px;
@@ -107,7 +108,7 @@
 </head>
 <body>
 <header>
-  <div class="brand"><span class="dot-ring"><i></i></span><span>Viewfinder</span></div>
+  <div class="brand"><span class="dot-ring"><i></i></span><span>SDZ App</span></div>
   <span class="count" id="imgCount">0 visuel</span>
 </header>
 <nav id="nav"></nav>
@@ -1253,7 +1254,7 @@ function updateCount(){
 ============================================================ */
 function quickAction(iconPath, title, subtitle, onclick){
   return el("button",{class:"card", style:"width:100%;text-align:left;display:flex;align-items:center;gap:14px;margin-bottom:10px;", onclick},[
-    el("div",{style:"width:40px;height:40px;border-radius:12px;background:rgba(255,93,115,0.15);display:flex;align-items:center;justify-content:center;flex-shrink:0;color:var(--coral);"},[svgIcon(iconPath,20)]),
+    el("div",{style:"width:40px;height:40px;border-radius:12px;background:rgba(201,162,39,0.15);display:flex;align-items:center;justify-content:center;flex-shrink:0;color:var(--gold);"},[svgIcon(iconPath,20)]),
     el("div",{},[
       el("div",{style:"font-weight:600;font-size:14px;margin-bottom:2px;"}, title),
       el("div",{style:"font-size:12px;color:var(--muted2);"}, subtitle),
@@ -1264,7 +1265,7 @@ function buildAccueilTab(){
   const frag = el("div",{});
 
   if(state.serverHasNewerData){
-    frag.appendChild(el("div",{class:"card", style:"margin-bottom:16px;border-color:#8FA6FF;"},[
+    frag.appendChild(el("div",{class:"card", style:"margin-bottom:16px;border-color:var(--gold-soft);"},[
       el("p",{style:"font-weight:600;margin-bottom:6px;"},"Des données plus récentes existent sur le serveur"),
       el("p",{style:"font-size:13px;color:var(--muted);margin-bottom:10px;"},"Probablement générées depuis un autre appareil ou navigateur. Rien n'a été modifié ici — choisis ce que tu veux faire."),
       el("div",{style:"display:flex;gap:8px;"},[
@@ -2051,7 +2052,7 @@ function buildPostTab(){
       el("div",{class:"learning-row"}, provider
         ? `Coût estimé (${provider.label}) : ${estCost!=null ? "$"+estCost.toFixed(4) : "non estimé — renseigne les tarifs dans Paramètres API"} · Temps estimé : ${estTime}`
         : "Aucun fournisseur API configuré — mode manuel (copier/coller)."),
-      routerSuggestion ? el("div",{class:"learning-row", style:"color:#8FA6FF;"}, `Moteur recommandé pour ce type de contenu : ${routerSuggestion.suggestion} — ${routerSuggestion.reason} (suggestion libre, tu choisis toujours toi-même dans le sélecteur ci-dessous).`) : null,
+      routerSuggestion ? el("div",{class:"learning-row", style:"color:var(--gold-soft);"}, `Moteur recommandé pour ce type de contenu : ${routerSuggestion.suggestion} — ${routerSuggestion.reason} (suggestion libre, tu choisis toujours toi-même dans le sélecteur ci-dessous).`) : null,
       el("p",{style:"font-size:11px;color:var(--muted2);margin-top:6px;"},"La vraie validation (texte, image, logo, nom de prestation) se fait via la checklist plus bas, une fois le contenu prêt."),
     ]));
 
@@ -2078,7 +2079,7 @@ function buildPostTab(){
     if(provider){
       const cached = findCachedResult(provider.label, state.textPrompt);
       if(cached){
-        frag.appendChild(el("div",{class:"card", style:"margin-bottom:16px;border-color:#8FA6FF;"},[
+        frag.appendChild(el("div",{class:"card", style:"margin-bottom:16px;border-color:var(--gold-soft);"},[
           el("p",{style:"font-size:13px;margin-bottom:8px;"}, `Un résultat identique existe déjà (généré le ${cached.date} via ${cached.provider}) — évite un appel payant inutile.`),
           el("div",{style:"display:flex;gap:8px;"},[
             el("button",{class:"btn-ghost", onclick:()=>{ state.textPasted = cached.result||""; renderMain(); }}, "Réutiliser"),
@@ -2530,7 +2531,7 @@ function buildCalendarTab(){
   const frag = el("div",{});
 
   frag.appendChild(el("p",{class:"label"},"Webhook Make"));
-  frag.appendChild(el("p",{class:"sublabel"},"L'URL de ton scénario Make (déclenchement webhook). À la date programmée, Viewfinder l'appelle automatiquement — une seule fois par post, comme ton run manuel actuel."));
+  frag.appendChild(el("p",{class:"sublabel"},"L'URL de ton scénario Make (déclenchement webhook). À la date programmée, SDZ App l'appelle automatiquement — une seule fois par post, comme ton run manuel actuel."));
   const webhookInput = el("input",{type:"text", value: state.makeWebhook, placeholder:"https://hook.eu2.make.com/..."});
   webhookInput.addEventListener("input", e=>{ state.makeWebhook = e.target.value; LS.set("vf-make-webhook", e.target.value); });
   frag.appendChild(el("div",{style:"margin-bottom:12px;"}, webhookInput));
@@ -2789,7 +2790,7 @@ function buildHistoryTab(){
 ============================================================ */
 function buildApiTab(){
   const frag = el("div",{});
-  frag.appendChild(el("div",{class:"card", style:"margin-bottom:16px;border-color:#8FA6FF;"},[
+  frag.appendChild(el("div",{class:"card", style:"margin-bottom:16px;border-color:var(--gold-soft);"},[
     el("p",{style:"font-weight:600;margin-bottom:6px;"},"Les clés API vivent sur Netlify, pas dans l'appli"),
     el("p",{style:"font-size:13px;color:var(--muted);"},"OpenAI fonctionne par défaut, sans rien ajouter ici, dès que la variable est configurée côté Netlify (l'appli appelle directement la fonction serveur). Configure-la une fois dans le tableau de bord Netlify :"),
     el("p",{style:"font-size:13px;color:var(--muted);margin-top:6px;"},"Site configuration → Environment variables → ajoute :"),
@@ -3285,7 +3286,7 @@ function buildSettingsTab(){
   frag.appendChild(el("p",{style:"font-size:11px;color:var(--muted2);margin:20px 0 4px;border-top:1px solid var(--border);padding-top:12px;"},
     "Export/import JSON ci-dessous : ta sécurité de secours, indépendante du serveur — toujours disponible même sans connexion."));
 
-  frag.appendChild(el("p",{class:"sublabel"},"Sauvegarde complète en un clic : bibliothèque, connaissances, direction artistique, styles, historique, audits et campagnes en cours — tout ce que contient Viewfinder, dans un seul fichier JSON. Utile pour ne jamais perdre ton travail ou pour le transférer sur un autre appareil."));
+  frag.appendChild(el("p",{class:"sublabel"},"Sauvegarde complète en un clic : bibliothèque, connaissances, direction artistique, styles, historique, audits et campagnes en cours — tout ce que contient SDZ App, dans un seul fichier JSON. Utile pour ne jamais perdre ton travail ou pour le transférer sur un autre appareil."));
 
   function getAllVfKeys(){
     const keys = [];

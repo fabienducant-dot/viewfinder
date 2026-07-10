@@ -1,4 +1,4 @@
-/* Service Worker Viewfinder — met en cache l'appli pour un fonctionnement hors-ligne.
+/* Service Worker SDZ App — met en cache l'appli pour un fonctionnement hors-ligne.
    Toutes les données (bibliothèque, connaissances, historique) restent dans localStorage
    sur l'appareil : ce cache ne concerne que les fichiers de l'application elle-même.
 
