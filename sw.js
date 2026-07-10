@@ -7,11 +7,13 @@
    au lieu de rester bloqué sur une version mise en cache. Seuls les fichiers statiques qui ne
    changent presque jamais (icônes) utilisent une stratégie cache-d'abord. */
 
-const CACHE_NAME = "viewfinder-cache-v2";
+const CACHE_NAME = "viewfinder-cache-v3";
 const APP_SHELL = [
   "./",
   "./index.html",
   "./manifest.json",
+  "./icons/favicon-32.png",
+  "./icons/icon-180.png",
   "./icons/icon-192.png",
   "./icons/icon-512.png",
 ];
