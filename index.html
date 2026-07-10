@@ -120,7 +120,7 @@
 /* Clés synchronisées avec le serveur (Netlify Blobs) — doit rester identique à la
    liste ALLOWED_KEYS des fonctions serveur save-data / load-data / sync-data.
    Volontairement exclues : vf-images (trop lourd), toute clé API. */
-const SYNC_KEYS = ["vf-modules","vf-styles","vf-da","vf-history","vf-audit","vf-lab","vf-api-providers","vf-modes","vf-campaign","vf-scheduled","vf-make-webhook"];
+const SYNC_KEYS = ["vf-modules","vf-styles","vf-da","vf-history","vf-audit","vf-lab","vf-api-providers","vf-modes","vf-campaign","vf-scheduled","vf-make-webhook","vf-pack-imports"];
 
 let autoSyncTimer = null;
 function scheduleAutoSync(){
@@ -356,6 +356,7 @@ const state = {
   overlay: { text: "", x: 50, y: 85, size: 56, color: "#F4F1EA" },
   logoOverlay: { assetId: "", x: 50, y: 88, size: 16 },
   modules: LS.get("vf-modules", DEFAULT_MODULES),
+  lastPackImports: LS.get("vf-pack-imports", []),
   newModule: { category: CATEGORIES[0], title:"", content:"" },
   moduleFilter: "Toutes",
   configPrompt: "", configPasted: "",
@@ -2993,7 +2994,91 @@ function buildSettingsTab(){
   }}, [svgIcon(ICONS.download,14), el("span",{},"Restaurer depuis serveur")]));
 
   frag.appendChild(syncMsg);
-  frag.appendChild(el("p",{style:"font-size:11px;color:var(--muted2);margin:0 0 20px;border-top:1px solid var(--border);padding-top:12px;"},
+
+  frag.appendChild(el("p",{style:"font-size:11px;color:var(--muted2);margin:20px 0 4px;border-top:1px solid var(--border);padding-top:12px;"},
+    "Import rapide d'un Pack Production SDZ — évite de recopier les règles module par module."));
+  frag.appendChild(el("p",{class:"sublabel"}, "Sélectionne 1 à 3 fichiers JSON (MASTER_PRODUCTION_SDZ.json, MASTER_IMAGE_SDZ.json, MASTER_CAMPAIGN_SDZ.json). Le type de chaque fichier est détecté automatiquement via son champ \"packType\" — les règles sont fusionnées dans les bonnes zones sans écraser ce qui existe déjà, ni créer de doublons."));
+
+  const KNOWN_PACK_TYPES = ["MASTER_PRODUCTION_SDZ","MASTER_IMAGE_SDZ","MASTER_CAMPAIGN_SDZ"];
+  const packMsg = el("div",{style:"font-size:12px;min-height:16px;margin:8px 0 12px;white-space:pre-wrap;"},"");
+  const packFileInput = el("input",{type:"file", accept:".json,application/json", multiple:true, style:"display:none"});
+
+  packFileInput.addEventListener("change", async (e)=>{
+    const files = Array.from(e.target.files||[]);
+    if(!files.length) return;
+    const lines = [];
+    let touchedModules = false, touchedDa = false;
+
+    for(const file of files){
+      let raw;
+      try{ raw = JSON.parse(await file.text()); }
+      catch(err){ lines.push(`❌ ${file.name} : JSON invalide (${err.message}).`); continue; }
+
+      const packType = raw.packType;
+      if(!packType || !KNOWN_PACK_TYPES.includes(packType)){
+        lines.push(`⚠️ ${file.name} : champ "packType" absent ou non reconnu (attendu : ${KNOWN_PACK_TYPES.join(", ")}) — fichier ignoré.`);
+        continue;
+      }
+
+      const incomingModules = Array.isArray(raw.modules) ? raw.modules : [];
+      let added = 0, updated = 0, skipped = 0;
+      incomingModules.forEach(m=>{
+        const title = (m.title||"").trim();
+        const content = (m.content||"").trim();
+        const category = (m.category||"Univers de marque").trim();
+        if(!title || !content){ skipped++; return; }
+        const existing = state.modules.find(x=>x.title.trim().toLowerCase()===title.toLowerCase() && x.category===category);
+        if(existing){
+          if(existing.content.trim() !== content){
+            existing.content = content;
+            existing.updatedAt = Date.now();
+            existing.sourcePack = packType;
+            updated++;
+          } else {
+            skipped++; // contenu identique : rien à faire, pas de doublon créé
+          }
+        } else {
+          state.modules.push({ id: uid(), category, title, content, enabled:true, createdAt: Date.now(), sourcePack: packType });
+          added++;
+        }
+      });
+      if(added || updated) touchedModules = true;
+
+      let daUpdated = 0;
+      if(raw.direction_artistique && typeof raw.direction_artistique==="object"){
+        Object.keys(raw.direction_artistique).forEach(k=>{
+          if(raw.direction_artistique[k]!=null && raw.direction_artistique[k]!==""){
+            state.da[k] = raw.direction_artistique[k];
+            daUpdated++;
+          }
+        });
+        if(daUpdated) touchedDa = true;
+      }
+
+      state.lastPackImports = state.lastPackImports || [];
+      state.lastPackImports.unshift({ packType, fileName:file.name, importedAt: Date.now(), added, updated, skipped, daUpdated });
+
+      lines.push(`✅ ${file.name} (${packType}) : ${added} ajouté(s), ${updated} mis à jour, ${skipped} déjà à jour${daUpdated?`, ${daUpdated} réglage(s) de direction artistique appliqué(s)`:""}.`);
+    }
+
+    if(touchedModules) LS.set("vf-modules", state.modules);
+    if(touchedDa) LS.set("vf-da", state.da);
+    LS.set("vf-pack-imports", state.lastPackImports||[]);
+
+    packMsg.style.color = "var(--muted2)";
+    packMsg.textContent = lines.join("\n") + "\n\nSauvegarde en cours vers le serveur...";
+    renderMain();
+    const synced = (touchedModules||touchedDa) ? await pushToServerSilent() : true;
+    packMsg.style.color = synced ? "var(--green)" : "var(--coral)";
+    packMsg.textContent = lines.join("\n") + (synced ? "\n\nSauvegardé sur le serveur ✓" : "\n\nSauvegardé en local, mais la synchro serveur a échoué — réessaie depuis \"Sauvegarder sur serveur\" plus haut.");
+    packFileInput.value = "";
+    renderMain();
+  });
+  frag.appendChild(packFileInput);
+  frag.appendChild(el("button",{class:"btn-primary", style:"margin-bottom:8px;", onclick:()=>packFileInput.click()}, [svgIcon(ICONS.upload,16), el("span",{},"Importer Pack SDZ")]));
+  frag.appendChild(packMsg);
+
+  frag.appendChild(el("p",{style:"font-size:11px;color:var(--muted2);margin:20px 0 4px;border-top:1px solid var(--border);padding-top:12px;"},
     "Export/import JSON ci-dessous : ta sécurité de secours, indépendante du serveur — toujours disponible même sans connexion."));
 
   frag.appendChild(el("p",{class:"sublabel"},"Sauvegarde complète en un clic : bibliothèque, connaissances, direction artistique, styles, historique, audits et campagnes en cours — tout ce que contient Viewfinder, dans un seul fichier JSON. Utile pour ne jamais perdre ton travail ou pour le transférer sur un autre appareil."));
@@ -3011,6 +3096,7 @@ function buildSettingsTab(){
     "vf-images":"Bibliothèque", "vf-modules":"Connaissances", "vf-da":"Direction artistique",
     "vf-styles":"Styles", "vf-history":"Base de prompts (historique)", "vf-audit":"Audits IA",
     "vf-campaign":"Campagne en cours", "vf-lab":"Laboratoire IA", "vf-api-providers":"Paramètres API (clés incluses)", "vf-modes":"Modes de production",
+    "vf-pack-imports":"Historique des imports Pack SDZ",
     "vf-scheduled":"Calendrier de programmation", "vf-make-webhook":"Webhook Make",
   };
   const keys = getAllVfKeys();
