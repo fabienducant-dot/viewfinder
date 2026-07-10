@@ -120,7 +120,7 @@
 /* Clés synchronisées avec le serveur (Netlify Blobs) — doit rester identique à la
    liste ALLOWED_KEYS des fonctions serveur save-data / load-data / sync-data.
    Volontairement exclues : vf-images (trop lourd), toute clé API. */
-const SYNC_KEYS = ["vf-modules","vf-styles","vf-da","vf-history","vf-audit","vf-lab","vf-api-providers","vf-modes","vf-campaign","vf-scheduled","vf-make-webhook","vf-pack-imports"];
+const SYNC_KEYS = ["vf-modules","vf-styles","vf-da","vf-history","vf-audit","vf-lab","vf-api-providers","vf-modes","vf-campaign","vf-scheduled","vf-make-webhook","vf-pack-imports","vf-pack-versions"];
 
 let autoSyncTimer = null;
 function scheduleAutoSync(){
@@ -356,7 +356,8 @@ const state = {
   overlay: { text: "", x: 50, y: 85, size: 56, color: "#F4F1EA" },
   logoOverlay: { assetId: "", x: 50, y: 88, size: 16 },
   modules: LS.get("vf-modules", DEFAULT_MODULES),
-  lastPackImports: LS.get("vf-pack-imports", []),
+  packHistory: LS.get("vf-pack-imports", []),
+  packVersions: LS.get("vf-pack-versions", {}),
   newModule: { category: CATEGORIES[0], title:"", content:"" },
   moduleFilter: "Toutes",
   configPrompt: "", configPasted: "",
@@ -2906,6 +2907,149 @@ function buildLabTab(){
   return frag;
 }
 
+/* ============================================================
+   PACK PRODUCTION SDZ — import définitif, transactionnel, versionné
+============================================================ */
+const KNOWN_PACK_TYPES = ["MASTER_PRODUCTION_SDZ","MASTER_IMAGE_SDZ","MASTER_CAMPAIGN_SDZ"];
+const PACK_TARGETS = { "MASTER_PRODUCTION_SDZ":48, "MASTER_IMAGE_SDZ":62, "MASTER_CAMPAIGN_SDZ":54 };
+const PACK_LABELS = { "MASTER_PRODUCTION_SDZ":"MASTER PRODUCTION", "MASTER_IMAGE_SDZ":"MASTER IMAGE", "MASTER_CAMPAIGN_SDZ":"MASTER CAMPAIGN" };
+
+function compareVersions(a,b){
+  const pa = parseFloat(a), pb = parseFloat(b);
+  if(isNaN(pa) || isNaN(pb)) return 0;
+  if(pa===pb) return 0;
+  return pa<pb ? -1 : 1;
+}
+
+/* Validation stricte AVANT toute écriture : un fichier structurellement invalide, ou contenant
+   ne serait-ce qu'un seul module incomplet, est intégralement rejeté (tout ou rien). */
+function validatePackFile(raw){
+  const structuralErrors = [];
+  if(!raw || typeof raw!=="object") return { valid:false, structuralErrors:["Le fichier ne contient pas un objet JSON valide."], moduleErrors:[] };
+  if(!raw.packType) structuralErrors.push('Champ "packType" manquant.');
+  else if(!KNOWN_PACK_TYPES.includes(raw.packType)) structuralErrors.push(`packType "${raw.packType}" non reconnu (attendu : ${KNOWN_PACK_TYPES.join(", ")}).`);
+  if(!Array.isArray(raw.modules)) structuralErrors.push('Champ "modules" manquant ou n\'est pas une liste.');
+
+  const moduleErrors = [];
+  if(Array.isArray(raw.modules)){
+    raw.modules.forEach((m,i)=>{
+      const label = (m && m.title && String(m.title).trim()) || `module #${i+1}`;
+      if(!m || typeof m!=="object"){ moduleErrors.push({title:label, reason:"n'est pas un objet valide"}); return; }
+      if(!m.category || !String(m.category).trim()) moduleErrors.push({title:label, reason:"catégorie manquante"});
+      if(!m.title || !String(m.title).trim()) moduleErrors.push({title:label, reason:"titre manquant"});
+      if(!m.content || !String(m.content).trim()) moduleErrors.push({title:label, reason:"contenu manquant"});
+    });
+  }
+  return { valid: structuralErrors.length===0 && moduleErrors.length===0, structuralErrors, moduleErrors };
+}
+
+/* Analyse un fichier déjà validé. dryRun=true (Mode Test) ne touche jamais à state.modules/state.da. */
+function analyzePackFile(raw, dryRun){
+  const packType = raw.packType;
+  const incomingVersion = String(raw.version || "1.0");
+  const installedVersionBefore = state.packVersions[packType] || null;
+  const versionComparison = installedVersionBefore ? compareVersions(installedVersionBefore, incomingVersion) : null;
+
+  let added=0, updated=0, identical=0;
+  const moduleResults = [];
+  const unknownCategories = new Set();
+
+  raw.modules.forEach(m=>{
+    const title = String(m.title).trim(), content = String(m.content).trim(), category = String(m.category).trim();
+    if(!CATEGORIES.includes(category)) unknownCategories.add(category);
+    const existing = state.modules.find(x=>x.title.trim().toLowerCase()===title.toLowerCase() && x.category===category);
+    if(existing){
+      if(existing.content.trim() !== content){
+        if(!dryRun){ existing.content = content; existing.updatedAt = Date.now(); existing.sourcePack = packType; existing.packVersion = incomingVersion; }
+        updated++; moduleResults.push({title, status:"updated"});
+      } else {
+        identical++; moduleResults.push({title, status:"identical"});
+      }
+    } else {
+      if(!dryRun) state.modules.push({ id: uid(), category, title, content, enabled:true, createdAt:Date.now(), sourcePack:packType, packVersion:incomingVersion });
+      added++; moduleResults.push({title, status:"added"});
+    }
+  });
+
+  let daUpdated = 0;
+  if(!dryRun && raw.direction_artistique && typeof raw.direction_artistique==="object"){
+    Object.keys(raw.direction_artistique).forEach(k=>{
+      if(raw.direction_artistique[k]!=null && raw.direction_artistique[k]!==""){ state.da[k]=raw.direction_artistique[k]; daUpdated++; }
+    });
+  }
+  if(!dryRun) state.packVersions[packType] = incomingVersion;
+
+  return {
+    packType, version:incomingVersion, installedVersionBefore, versionComparison,
+    modulesRead: raw.modules.length, added, updated, identical, ignored:0,
+    moduleResults, unknownCategories:[...unknownCategories], daUpdated,
+  };
+}
+
+/* Traite un fichier de bout en bout : parsing → validation stricte (tout ou rien) → analyse. */
+async function processPackFile(file, dryRun){
+  let raw;
+  try{ raw = JSON.parse(await file.text()); }
+  catch(err){ return { fileName:file.name, ok:false, packType:null, structuralErrors:[`JSON invalide : ${err.message}`], moduleErrors:[] }; }
+
+  const validation = validatePackFile(raw);
+  if(!validation.valid){
+    return { fileName:file.name, ok:false, packType:raw.packType||null, structuralErrors:validation.structuralErrors, moduleErrors:validation.moduleErrors };
+  }
+  const result = analyzePackFile(raw, dryRun);
+  return { fileName:file.name, ok:true, ...result };
+}
+
+function formatPackReportText(r){
+  const lines = [];
+  lines.push("==================================================");
+  lines.push(dryRun_marker(r));
+  lines.push("");
+  lines.push(`Fichier : ${r.fileName}`);
+  if(!r.ok){
+    lines.push(`Statut : ✖ REJETÉ (aucune modification appliquée)`);
+    if(r.structuralErrors && r.structuralErrors.length){
+      lines.push("");
+      lines.push("Erreurs de structure :");
+      r.structuralErrors.forEach(e=> lines.push(`✖ ${e}`));
+    }
+    if(r.moduleErrors && r.moduleErrors.length){
+      lines.push("");
+      lines.push("Modules invalides :");
+      r.moduleErrors.forEach(e=> lines.push(`✖ ${e.title} — ${e.reason}`));
+    }
+    lines.push("==================================================");
+    return lines.join("\n");
+  }
+  lines.push(`Pack : ${r.packType}  (v${r.version})`);
+  if(r.installedVersionBefore){
+    if(r.versionComparison===0) lines.push(`Version : identique à celle déjà installée (v${r.installedVersionBefore}) — déjà à jour.`);
+    else if(r.versionComparison<0) lines.push(`Version : mise à jour v${r.installedVersionBefore} → v${r.version}.`);
+    else lines.push(`⚠ Version : le pack importé (v${r.version}) est PLUS ANCIEN que celui déjà installé (v${r.installedVersionBefore}).`);
+  } else {
+    lines.push(`Version : première installation de ce pack (v${r.version}).`);
+  }
+  lines.push(`Date : ${new Date().toLocaleString("fr-FR")}`);
+  lines.push("");
+  lines.push(`Modules lus : ${r.modulesRead}`);
+  lines.push(`Ajoutés : ${r.added}`);
+  lines.push(`Mis à jour : ${r.updated}`);
+  lines.push(`Déjà identiques : ${r.identical}`);
+  lines.push(`Ignorés : ${r.ignored}`);
+  lines.push(`Erreurs : 0`);
+  if(r.unknownCategories && r.unknownCategories.length) lines.push(`⚠ Catégories non reconnues : ${r.unknownCategories.join(", ")}`);
+  if(!dryRunFlagFromReport(r)) lines.push(`Synchronisation serveur : ${r.blobsStatus==="ok"?"✔ OK":r.blobsStatus==="failed"?"⚠ échec (local conservé)":"—"}`);
+  lines.push("==================================================");
+  lines.push("");
+  r.moduleResults.forEach(mr=>{
+    const mark = mr.status==="added" ? "✔ (ajouté)" : mr.status==="updated" ? "✔ (mis à jour)" : "✔ (déjà identique)";
+    lines.push(`${mark} ${mr.title}`);
+  });
+  return lines.join("\n");
+}
+function dryRun_marker(r){ return r.isDryRun ? `TEST PACK SDZ (aucune donnée modifiée)` : `IMPORT PACK SDZ`; }
+function dryRunFlagFromReport(r){ return !!r.isDryRun; }
+
 function buildSettingsTab(){
   const frag = el("div",{});
 
@@ -2996,87 +3140,147 @@ function buildSettingsTab(){
   frag.appendChild(syncMsg);
 
   frag.appendChild(el("p",{style:"font-size:11px;color:var(--muted2);margin:20px 0 4px;border-top:1px solid var(--border);padding-top:12px;"},
-    "Import rapide d'un Pack Production SDZ — évite de recopier les règles module par module."));
-  frag.appendChild(el("p",{class:"sublabel"}, "Sélectionne 1 à 3 fichiers JSON (MASTER_PRODUCTION_SDZ.json, MASTER_IMAGE_SDZ.json, MASTER_CAMPAIGN_SDZ.json). Le type de chaque fichier est détecté automatiquement via son champ \"packType\" — les règles sont fusionnées dans les bonnes zones sans écraser ce qui existe déjà, ni créer de doublons."));
+    "Pack Production SDZ — système d'import définitif."));
+  frag.appendChild(el("p",{class:"sublabel"}, "Sélectionne 1 à 3 fichiers JSON (MASTER_PRODUCTION_SDZ, MASTER_IMAGE_SDZ, MASTER_CAMPAIGN_SDZ). Le type et la version sont détectés automatiquement. Un fichier structurellement invalide, ou contenant un seul module incomplet, est intégralement rejeté (aucune modification partielle)."));
 
-  const KNOWN_PACK_TYPES = ["MASTER_PRODUCTION_SDZ","MASTER_IMAGE_SDZ","MASTER_CAMPAIGN_SDZ"];
-  const packMsg = el("div",{style:"font-size:12px;min-height:16px;margin:8px 0 12px;white-space:pre-wrap;"},"");
-  const packFileInput = el("input",{type:"file", accept:".json,application/json", multiple:true, style:"display:none"});
+  // --- Compteurs de modules (48/62/54, progression globale 164) ---
+  const counterRow = el("div",{style:"display:grid;grid-template-columns:repeat(2,1fr);gap:8px;margin-bottom:14px;"});
+  let globalCount = 0, globalTarget = 0;
+  KNOWN_PACK_TYPES.forEach(pt=>{
+    const count = state.modules.filter(m=>m.sourcePack===pt).length;
+    const target = PACK_TARGETS[pt];
+    globalCount += count; globalTarget += target;
+    counterRow.appendChild(el("div",{class:"card", style:"text-align:center;padding:10px 6px;"},[
+      el("div",{style:`font-size:16px;font-weight:700;color:${count>=target?"var(--green)":"var(--muted)"};`}, `${count} / ${target}`),
+      el("div",{style:"font-size:10px;color:var(--muted2);"}, PACK_LABELS[pt]),
+      state.packVersions[pt] ? el("div",{style:"font-size:9px;color:var(--muted2);"}, `v${state.packVersions[pt]}`) : null,
+    ]));
+  });
+  counterRow.appendChild(el("div",{class:"card", style:"text-align:center;padding:10px 6px;grid-column:span 2;"},[
+    el("div",{style:`font-size:18px;font-weight:700;color:${globalCount>=globalTarget?"var(--green)":"var(--amber)"};`}, `${globalCount} / ${globalTarget}`),
+    el("div",{style:"font-size:10px;color:var(--muted2);"}, "Progression globale"),
+  ]));
+  frag.appendChild(counterRow);
 
-  packFileInput.addEventListener("change", async (e)=>{
-    const files = Array.from(e.target.files||[]);
-    if(!files.length) return;
-    const lines = [];
+  const packReportBox = el("div",{class:"card", style:"font-family:monospace;font-size:11px;white-space:pre-wrap;margin:8px 0 12px;display:none;max-height:420px;overflow:auto;"});
+  const packMsg = el("p",{style:"font-size:12px;min-height:16px;margin:4px 0 12px;"},"");
+
+  function showPackReports(reports){
+    packReportBox.style.display = "block";
+    packReportBox.textContent = reports.map(formatPackReportText).join("\n\n");
+  }
+
+  async function runPackImport(files, isDryRun){
+    const reports = [];
     let touchedModules = false, touchedDa = false;
 
     for(const file of files){
-      let raw;
-      try{ raw = JSON.parse(await file.text()); }
-      catch(err){ lines.push(`❌ ${file.name} : JSON invalide (${err.message}).`); continue; }
+      const preview = await processPackFile(file, true); // toujours un essai à blanc d'abord, pour connaître la version avant d'écrire quoi que ce soit
+      if(!preview.ok){ reports.push({...preview, isDryRun}); continue; }
 
-      const packType = raw.packType;
-      if(!packType || !KNOWN_PACK_TYPES.includes(packType)){
-        lines.push(`⚠️ ${file.name} : champ "packType" absent ou non reconnu (attendu : ${KNOWN_PACK_TYPES.join(", ")}) — fichier ignoré.`);
+      if(!isDryRun && preview.versionComparison>0){
+        const proceed = confirm(`${PACK_LABELS[preview.packType]||preview.packType} : le pack importé (v${preview.version}) est PLUS ANCIEN que celui déjà installé (v${preview.installedVersionBefore}). Importer quand même et écraser avec cette version plus ancienne ?`);
+        if(!proceed){
+          reports.push({ fileName:file.name, ok:false, packType:preview.packType, isDryRun, structuralErrors:["Import annulé : version plus ancienne que l'installée, refusé par l'utilisateur."], moduleErrors:[] });
+          continue;
+        }
+      }
+
+      if(isDryRun){
+        reports.push({...preview, isDryRun:true});
         continue;
       }
 
-      const incomingModules = Array.isArray(raw.modules) ? raw.modules : [];
-      let added = 0, updated = 0, skipped = 0;
-      incomingModules.forEach(m=>{
-        const title = (m.title||"").trim();
-        const content = (m.content||"").trim();
-        const category = (m.category||"Univers de marque").trim();
-        if(!title || !content){ skipped++; return; }
-        const existing = state.modules.find(x=>x.title.trim().toLowerCase()===title.toLowerCase() && x.category===category);
-        if(existing){
-          if(existing.content.trim() !== content){
-            existing.content = content;
-            existing.updatedAt = Date.now();
-            existing.sourcePack = packType;
-            updated++;
-          } else {
-            skipped++; // contenu identique : rien à faire, pas de doublon créé
-          }
-        } else {
-          state.modules.push({ id: uid(), category, title, content, enabled:true, createdAt: Date.now(), sourcePack: packType });
-          added++;
-        }
-      });
-      if(added || updated) touchedModules = true;
+      const real = await processPackFile(file, false); // deuxième lecture : commit réel cette fois
+      real.isDryRun = false;
+      if(real.added || real.updated || real.daUpdated) touchedModules = touchedModules || !!(real.added||real.updated);
+      if(real.daUpdated) touchedDa = true;
+      reports.push(real);
+    }
 
-      let daUpdated = 0;
-      if(raw.direction_artistique && typeof raw.direction_artistique==="object"){
-        Object.keys(raw.direction_artistique).forEach(k=>{
-          if(raw.direction_artistique[k]!=null && raw.direction_artistique[k]!==""){
-            state.da[k] = raw.direction_artistique[k];
-            daUpdated++;
-          }
-        });
-        if(daUpdated) touchedDa = true;
-      }
-
-      state.lastPackImports = state.lastPackImports || [];
-      state.lastPackImports.unshift({ packType, fileName:file.name, importedAt: Date.now(), added, updated, skipped, daUpdated });
-
-      lines.push(`✅ ${file.name} (${packType}) : ${added} ajouté(s), ${updated} mis à jour, ${skipped} déjà à jour${daUpdated?`, ${daUpdated} réglage(s) de direction artistique appliqué(s)`:""}.`);
+    if(isDryRun){
+      showPackReports(reports);
+      packMsg.style.color = "var(--muted2)";
+      packMsg.textContent = "Mode test : aucune donnée n'a été modifiée.";
+      renderMain();
+      return;
     }
 
     if(touchedModules) LS.set("vf-modules", state.modules);
     if(touchedDa) LS.set("vf-da", state.da);
-    LS.set("vf-pack-imports", state.lastPackImports||[]);
+    LS.set("vf-pack-versions", state.packVersions);
 
     packMsg.style.color = "var(--muted2)";
-    packMsg.textContent = lines.join("\n") + "\n\nSauvegarde en cours vers le serveur...";
+    packMsg.textContent = "Sauvegarde vers le serveur...";
     renderMain();
-    const synced = (touchedModules||touchedDa) ? await pushToServerSilent() : true;
+    const anyRealChange = touchedModules || touchedDa;
+    const synced = anyRealChange ? await pushToServerSilent() : true;
+    const blobsStatus = !anyRealChange ? "skipped" : synced ? "ok" : "failed";
+    reports.forEach(r=>{ if(r.ok) r.blobsStatus = blobsStatus; });
+
+    reports.filter(r=>r.ok).forEach(r=>{
+      state.packHistory.unshift({
+        id: uid(), packType:r.packType, version:r.version, fileName:r.fileName, importedAt: Date.now(),
+        modulesRead:r.modulesRead, added:r.added, updated:r.updated, identical:r.identical,
+        errors: 0, blobsStatus,
+      });
+    });
+    reports.filter(r=>!r.ok).forEach(r=>{
+      state.packHistory.unshift({
+        id: uid(), packType:r.packType||"(inconnu)", version:null, fileName:r.fileName, importedAt: Date.now(),
+        modulesRead:0, added:0, updated:0, identical:0,
+        errors: (r.structuralErrors||[]).length + (r.moduleErrors||[]).length, blobsStatus:"skipped",
+      });
+    });
+    state.packHistory = state.packHistory.slice(0,50);
+    LS.set("vf-pack-imports", state.packHistory);
+
+    showPackReports(reports);
     packMsg.style.color = synced ? "var(--green)" : "var(--coral)";
-    packMsg.textContent = lines.join("\n") + (synced ? "\n\nSauvegardé sur le serveur ✓" : "\n\nSauvegardé en local, mais la synchro serveur a échoué — réessaie depuis \"Sauvegarder sur serveur\" plus haut.");
-    packFileInput.value = "";
+    packMsg.textContent = blobsStatus==="ok" ? "✔ Sauvegarde serveur réussie."
+      : blobsStatus==="failed" ? "⚠ Sauvegarde serveur impossible — les données restent enregistrées en local, réessaie depuis \"Sauvegarder sur serveur\" plus haut."
+      : "Aucune modification à sauvegarder (fichiers déjà à jour ou rejetés).";
     renderMain();
+  }
+
+  const packFileInput = el("input",{type:"file", accept:".json,application/json", multiple:true, style:"display:none"});
+  packFileInput.addEventListener("change", async (e)=>{
+    const files = Array.from(e.target.files||[]);
+    if(!files.length) return;
+    await runPackImport(files, false);
+    packFileInput.value = "";
   });
   frag.appendChild(packFileInput);
   frag.appendChild(el("button",{class:"btn-primary", style:"margin-bottom:8px;", onclick:()=>packFileInput.click()}, [svgIcon(ICONS.upload,16), el("span",{},"Importer Pack SDZ")]));
+
+  const testFileInput = el("input",{type:"file", accept:".json,application/json", multiple:true, style:"display:none"});
+  testFileInput.addEventListener("change", async (e)=>{
+    const files = Array.from(e.target.files||[]);
+    if(!files.length) return;
+    await runPackImport(files, true);
+    testFileInput.value = "";
+  });
+  frag.appendChild(testFileInput);
+  frag.appendChild(el("button",{class:"btn-secondary", style:"margin-bottom:12px;", onclick:()=>testFileInput.click()}, [svgIcon(ICONS.sparkles,14), el("span",{},"Tester un Pack (sans importer)")]));
+
   frag.appendChild(packMsg);
+  frag.appendChild(packReportBox);
+
+  if(state.packHistory.length){
+    frag.appendChild(el("p",{class:"label", style:"margin-top:6px;"}, "Historique des imports"));
+    state.packHistory.slice(0,15).forEach(h=>{
+      const ok = h.errors===0 && h.blobsStatus!=="skipped-error";
+      frag.appendChild(el("div",{class:"history-card", style:"padding:8px 10px;margin-bottom:6px;"},[
+        el("div",{class:"history-top", style:"font-size:12px;"},[
+          el("span",{}, `${new Date(h.importedAt).toLocaleString("fr-FR")} · ${PACK_LABELS[h.packType]||h.packType}${h.version?` v${h.version}`:""}`),
+          el("span",{style:`color:${h.errors>0?"var(--coral)":"var(--green)"};`}, h.errors>0 ? `⚠ ${h.errors} erreur(s)` : "✔ Succès"),
+        ]),
+        el("div",{style:"font-size:11px;color:var(--muted2);"}, h.errors>0
+          ? `Fichier rejeté (${h.fileName})`
+          : `${h.modulesRead} module(s) lus · ${h.added} ajouté(s) · ${h.updated} mis à jour · sauvegarde serveur : ${h.blobsStatus==="ok"?"✔":h.blobsStatus==="failed"?"⚠":"—"}`),
+      ]));
+    });
+  }
 
   frag.appendChild(el("p",{style:"font-size:11px;color:var(--muted2);margin:20px 0 4px;border-top:1px solid var(--border);padding-top:12px;"},
     "Export/import JSON ci-dessous : ta sécurité de secours, indépendante du serveur — toujours disponible même sans connexion."));
@@ -3096,7 +3300,7 @@ function buildSettingsTab(){
     "vf-images":"Bibliothèque", "vf-modules":"Connaissances", "vf-da":"Direction artistique",
     "vf-styles":"Styles", "vf-history":"Base de prompts (historique)", "vf-audit":"Audits IA",
     "vf-campaign":"Campagne en cours", "vf-lab":"Laboratoire IA", "vf-api-providers":"Paramètres API (clés incluses)", "vf-modes":"Modes de production",
-    "vf-pack-imports":"Historique des imports Pack SDZ",
+    "vf-pack-imports":"Historique des imports Pack SDZ", "vf-pack-versions":"Versions des Packs SDZ installés",
     "vf-scheduled":"Calendrier de programmation", "vf-make-webhook":"Webhook Make",
   };
   const keys = getAllVfKeys();
