@@ -263,6 +263,7 @@ const DEFAULT_DA = {
   stylePhoto:"", styleGraphique:"", palette:"", textures:"", composition:"", realisme:"Réaliste",
   eclairage:"", presenceTexte:false, presenceLogo:false, cible:"",
   angle:"", distance:"", profondeurChamp:"", contraste:"", elementsInterdits:"",
+  geometries:"", symbolesSDZ:"", elementsObligatoires:"", contraintes:"",
 };
 
 /* ---------- Missions : chaque mission oriente réseau, ton, CTA, structure ---------- */
@@ -765,7 +766,17 @@ function prestationPromptBlock(){
   return out;
 }
 function styleBlock(style){
-  return style ? `STYLE VISUEL SÉLECTIONNÉ : ${style.name}\n${style.description}\n` : "";
+  if(!style) return "";
+  const lines = [`STYLE VISUEL SÉLECTIONNÉ : ${style.name}`, style.description];
+  if(style.objectif) lines.push(`Objectif du style : ${style.objectif}`);
+  if(style.ambiance) lines.push(`Ambiance : ${style.ambiance}`);
+  if(style.palette) lines.push(`Palette : ${style.palette}`);
+  if(style.matieres) lines.push(`Matières : ${style.matieres}`);
+  if(style.lumiere) lines.push(`Lumière : ${style.lumiere}`);
+  if(style.composition) lines.push(`Composition : ${style.composition}`);
+  if(style.emotion) lines.push(`Émotion : ${style.emotion}`);
+  if(style.interdits) lines.push(`Interdits propres à ce style : ${style.interdits}`);
+  return lines.filter(Boolean).join("\n") + "\n";
 }
 /* Garde-fou permanent, toujours inclus dans tout prompt image, quel que soit le sujet.
    Politique générale de sécurité — jamais de description visuelle détaillée générée automatiquement
@@ -825,6 +836,10 @@ function daLinesText(){
     `Rendu : ${da.realisme}`,
     da.eclairage && `Éclairage : ${da.eclairage}`,
     da.cible && `Cible : ${da.cible}`,
+    da.geometries && `Géométries / motifs récurrents : ${da.geometries}`,
+    da.symbolesSDZ && `Symboles de marque à évoquer (sans logo) : ${da.symbolesSDZ}`,
+    da.elementsObligatoires && `Éléments obligatoires dans l'image : ${da.elementsObligatoires}`,
+    da.contraintes && `Contraintes supplémentaires : ${da.contraintes}`,
     da.elementsInterdits && `Éléments interdits dans l'image : ${da.elementsInterdits}`,
   ].filter(Boolean).join("\n");
 }
@@ -1656,6 +1671,11 @@ function buildKnowledgeTab(){
 function buildDaTab(){
   const frag = el("div",{});
   frag.appendChild(el("p",{class:"sublabel"},"Ces paramètres sont injectés automatiquement dans chaque prompt d'image généré."));
+  if(state.packVersions["MASTER_DIRECTION_ARTISTIQUE"]){
+    frag.appendChild(el("p",{style:"font-size:11px;color:var(--muted2);margin-bottom:10px;"}, `Dernier import : MASTER_DIRECTION_ARTISTIQUE v${state.packVersions["MASTER_DIRECTION_ARTISTIQUE"]}. Modifiable librement ci-dessous — tes changements manuels ne seront écrasés qu'en réimportant un pack.`));
+  } else {
+    frag.appendChild(el("p",{style:"font-size:11px;color:var(--muted2);margin-bottom:10px;"}, "Astuce : tu peux aussi importer tous ces champs d'un coup via un fichier MASTER_DIRECTION_ARTISTIQUE.json, dans Réglages → \"Importer Pack SDZ\"."));
+  }
 
   function textField(key, label, placeholder){
     const wrap = el("div",{class:"field"});
@@ -1697,6 +1717,10 @@ function buildDaTab(){
   textField("eclairage","Type d'éclairage", "Ex : lumière douce en fin de journée");
   textField("cible","Cible", "Ex : clientèle locale 30-55 ans");
   textField("elementsInterdits","Éléments interdits dans l'image", "Ex : pas de visage reconnaissable, pas de texte, pas de logo concurrent");
+  textField("elementsObligatoires","Éléments obligatoires dans l'image", "Ex : toujours un élément végétal, toujours une bougie allumée");
+  textField("geometries","Géométries / motifs récurrents", "Ex : cercles, lignes dorées, cadres circulaires");
+  textField("symbolesSDZ","Symboles de marque à évoquer (hors logo)", "Ex : rayures de zèbre, motifs zodiacaux, halo doré");
+  textField("contraintes","Contraintes supplémentaires", "Ex : toujours format portrait pour les réseaux sociaux");
 
   const realismeRow = el("div",{class:"field"});
   realismeRow.appendChild(el("label",{},"Réalisme / rendu"));
@@ -1716,7 +1740,8 @@ function buildDaTab(){
 ============================================================ */
 function buildStylesTab(){
   const frag = el("div",{});
-  frag.appendChild(el("p",{class:"sublabel"},"Ces styles sont sélectionnables lors de la création d'un post ; leur description est injectée dans le prompt image."));
+  frag.appendChild(el("p",{class:"sublabel"},"Ces styles sont sélectionnables lors de la création d'un post ; leur description (et leurs champs détaillés) sont injectés dans le prompt image."));
+  frag.appendChild(el("p",{style:"font-size:11px;color:var(--muted2);margin-bottom:10px;"}, "Astuce : tu peux importer plusieurs styles complets d'un coup via un fichier STYLES.json, dans Réglages → \"Importer Pack SDZ\"."));
 
   frag.appendChild(el("h2",{class:"section"},"Ajouter un style"));
   const nameInput = el("input",{type:"text", placeholder:"Nom du style (ex : Refuge d'hiver)"});
@@ -1730,6 +1755,11 @@ function buildStylesTab(){
     renderMain();
   }}, [svgIcon(ICONS.plus,16), el("span",{},"Ajouter le style")]));
 
+  const STYLE_DETAIL_FIELDS = [
+    ["objectif","Objectif"], ["ambiance","Ambiance"], ["palette","Palette"], ["matieres","Matières"],
+    ["lumiere","Lumière"], ["composition","Composition"], ["emotion","Émotion"], ["interdits","Interdits"],
+  ];
+
   frag.appendChild(el("h2",{class:"section"},"Styles enregistrés"));
   state.styles.forEach(s=>{
     const delBtn = el("button",{class:"btn-small", onclick: ()=>{
@@ -1737,10 +1767,38 @@ function buildStylesTab(){
       if(state.styleId===s.id) state.styleId="";
       renderMain();
     }}, svgIcon(ICONS.trash,12));
-    frag.appendChild(el("div",{class:"module-card"},[
+
+    const card = el("div",{class:"module-card"},[
       el("div",{class:"module-head"},[ el("div",{class:"module-title"}, s.name), delBtn ]),
       el("div",{class:"module-content"}, s.description),
-    ]));
+    ]);
+    if(s.sourcePack) card.appendChild(el("div",{style:"font-size:10px;color:var(--muted2);margin-top:4px;"}, `Importé via ${PACK_LABELS[s.sourcePack]||s.sourcePack}${s.packVersion?` v${s.packVersion}`:""}`));
+
+    const detailGrid = el("div",{style:"display:grid;grid-template-columns:1fr 1fr;gap:6px;margin-top:8px;"});
+    STYLE_DETAIL_FIELDS.forEach(([key,label])=>{
+      const wrap = el("div",{});
+      wrap.appendChild(el("label",{style:"font-size:10px;color:var(--muted2);display:block;"}, label));
+      const input = el("input",{type:"text", value: s[key]||"", style:"font-size:12px;padding:6px 8px;"});
+      input.addEventListener("input", e=>{ s[key]=e.target.value; LS.set("vf-styles", state.styles); });
+      wrap.appendChild(input);
+      detailGrid.appendChild(wrap);
+    });
+    const prioWrap = el("div",{});
+    prioWrap.appendChild(el("label",{style:"font-size:10px;color:var(--muted2);display:block;"}, "Priorité"));
+    const prioInput = el("input",{type:"number", value: s.priorite||1, min:"1", max:"10", style:"font-size:12px;padding:6px 8px;"});
+    prioInput.addEventListener("input", e=>{ s.priorite=Number(e.target.value); LS.set("vf-styles", state.styles); });
+    prioWrap.appendChild(prioInput);
+    detailGrid.appendChild(prioWrap);
+
+    const utilWrap = el("div",{});
+    utilWrap.appendChild(el("label",{style:"font-size:10px;color:var(--muted2);display:block;"}, "Utilisation (séparée par virgules)"));
+    const utilInput = el("input",{type:"text", value:(s.utilisation||[]).join(", "), style:"font-size:12px;padding:6px 8px;"});
+    utilInput.addEventListener("input", e=>{ s.utilisation = e.target.value.split(",").map(x=>x.trim()).filter(Boolean); LS.set("vf-styles", state.styles); });
+    utilWrap.appendChild(utilInput);
+    detailGrid.appendChild(utilWrap);
+
+    card.appendChild(detailGrid);
+    frag.appendChild(card);
   });
   return frag;
 }
@@ -2911,9 +2969,11 @@ function buildLabTab(){
 /* ============================================================
    PACK PRODUCTION SDZ — import définitif, transactionnel, versionné
 ============================================================ */
-const KNOWN_PACK_TYPES = ["MASTER_PRODUCTION_SDZ","MASTER_IMAGE_SDZ","MASTER_CAMPAIGN_SDZ"];
+const KNOWN_PACK_TYPES = ["MASTER_PRODUCTION_SDZ","MASTER_IMAGE_SDZ","MASTER_CAMPAIGN_SDZ","MASTER_DIRECTION_ARTISTIQUE","STYLES"];
+const MODULE_PACK_TYPES = ["MASTER_PRODUCTION_SDZ","MASTER_IMAGE_SDZ","MASTER_CAMPAIGN_SDZ"]; // les 3 packs "164 modules", figés
 const PACK_TARGETS = { "MASTER_PRODUCTION_SDZ":48, "MASTER_IMAGE_SDZ":62, "MASTER_CAMPAIGN_SDZ":54 };
-const PACK_LABELS = { "MASTER_PRODUCTION_SDZ":"MASTER PRODUCTION", "MASTER_IMAGE_SDZ":"MASTER IMAGE", "MASTER_CAMPAIGN_SDZ":"MASTER CAMPAIGN" };
+const PACK_LABELS = { "MASTER_PRODUCTION_SDZ":"MASTER PRODUCTION", "MASTER_IMAGE_SDZ":"MASTER IMAGE", "MASTER_CAMPAIGN_SDZ":"MASTER CAMPAIGN",
+  "MASTER_DIRECTION_ARTISTIQUE":"DIRECTION ARTISTIQUE", "STYLES":"STYLES" };
 
 function compareVersions(a,b){
   const pa = parseFloat(a), pb = parseFloat(b);
@@ -2929,11 +2989,25 @@ function validatePackFile(raw){
   if(!raw || typeof raw!=="object") return { valid:false, structuralErrors:["Le fichier ne contient pas un objet JSON valide."], moduleErrors:[] };
   if(!raw.packType) structuralErrors.push('Champ "packType" manquant.');
   else if(!KNOWN_PACK_TYPES.includes(raw.packType)) structuralErrors.push(`packType "${raw.packType}" non reconnu (attendu : ${KNOWN_PACK_TYPES.join(", ")}).`);
-  if(!Array.isArray(raw.modules)) structuralErrors.push('Champ "modules" manquant ou n\'est pas une liste.');
 
   const moduleErrors = [];
-  if(Array.isArray(raw.modules)){
-    raw.modules.forEach((m,i)=>{
+  const packType = raw.packType;
+
+  if(packType==="MASTER_DIRECTION_ARTISTIQUE"){
+    if(!raw.direction_artistique || typeof raw.direction_artistique!=="object" || Array.isArray(raw.direction_artistique)){
+      structuralErrors.push('Champ "direction_artistique" manquant ou n\'est pas un objet.');
+    }
+  } else if(packType==="STYLES"){
+    if(!Array.isArray(raw.styles)) structuralErrors.push('Champ "styles" manquant ou n\'est pas une liste.');
+    else raw.styles.forEach((s,i)=>{
+      const label = (s && s.name && String(s.name).trim()) || `style #${i+1}`;
+      if(!s || typeof s!=="object"){ moduleErrors.push({title:label, reason:"n'est pas un objet valide"}); return; }
+      if(!s.name || !String(s.name).trim()) moduleErrors.push({title:label, reason:"nom manquant"});
+    });
+  } else {
+    // MASTER_PRODUCTION_SDZ / MASTER_IMAGE_SDZ / MASTER_CAMPAIGN_SDZ : liste de modules
+    if(!Array.isArray(raw.modules)) structuralErrors.push('Champ "modules" manquant ou n\'est pas une liste.');
+    else raw.modules.forEach((m,i)=>{
       const label = (m && m.title && String(m.title).trim()) || `module #${i+1}`;
       if(!m || typeof m!=="object"){ moduleErrors.push({title:label, reason:"n'est pas un objet valide"}); return; }
       if(!m.category || !String(m.category).trim()) moduleErrors.push({title:label, reason:"catégorie manquante"});
@@ -2944,13 +3018,65 @@ function validatePackFile(raw){
   return { valid: structuralErrors.length===0 && moduleErrors.length===0, structuralErrors, moduleErrors };
 }
 
-/* Analyse un fichier déjà validé. dryRun=true (Mode Test) ne touche jamais à state.modules/state.da. */
+/* Analyse un fichier déjà validé. dryRun=true (Mode Test) ne touche jamais à state.modules/state.da/state.styles. */
 function analyzePackFile(raw, dryRun){
   const packType = raw.packType;
   const incomingVersion = String(raw.version || "1.0");
   const installedVersionBefore = state.packVersions[packType] || null;
   const versionComparison = installedVersionBefore ? compareVersions(installedVersionBefore, incomingVersion) : null;
 
+  if(packType==="MASTER_DIRECTION_ARTISTIQUE"){
+    let added=0, updated=0, identical=0;
+    const moduleResults = [];
+    Object.keys(raw.direction_artistique).forEach(k=>{
+      const incomingVal = raw.direction_artistique[k];
+      if(incomingVal==null || incomingVal==="") return;
+      const currentVal = state.da[k];
+      const wasEmpty = currentVal===undefined || currentVal===null || currentVal==="";
+      const changed = JSON.stringify(currentVal) !== JSON.stringify(incomingVal);
+      if(!changed){ identical++; moduleResults.push({title:k, status:"identical"}); return; }
+      if(!dryRun) state.da[k] = incomingVal;
+      if(wasEmpty){ added++; moduleResults.push({title:k, status:"added"}); }
+      else { updated++; moduleResults.push({title:k, status:"updated"}); }
+    });
+    if(!dryRun) state.packVersions[packType] = incomingVersion;
+    return {
+      packType, version:incomingVersion, installedVersionBefore, versionComparison,
+      modulesRead: Object.keys(raw.direction_artistique).length, added, updated, identical, ignored:0,
+      moduleResults, unknownCategories:[], daUpdated: added+updated,
+    };
+  }
+
+  if(packType==="STYLES"){
+    let added=0, updated=0, identical=0;
+    const moduleResults = [];
+    raw.styles.forEach(s=>{
+      const name = String(s.name).trim();
+      const incoming = { ...s, name };
+      delete incoming.id;
+      const existing = state.styles.find(x=>(x.name||"").trim().toLowerCase()===name.toLowerCase());
+      if(existing){
+        const existingComparable = { ...existing }; delete existingComparable.id;
+        if(JSON.stringify(existingComparable) !== JSON.stringify(incoming)){
+          if(!dryRun){ Object.assign(existing, incoming); existing.updatedAt = Date.now(); existing.sourcePack = packType; existing.packVersion = incomingVersion; }
+          updated++; moduleResults.push({title:name, status:"updated"});
+        } else {
+          identical++; moduleResults.push({title:name, status:"identical"});
+        }
+      } else {
+        if(!dryRun) state.styles.push({ id: uid(), ...incoming, createdAt:Date.now(), sourcePack:packType, packVersion:incomingVersion });
+        added++; moduleResults.push({title:name, status:"added"});
+      }
+    });
+    if(!dryRun) state.packVersions[packType] = incomingVersion;
+    return {
+      packType, version:incomingVersion, installedVersionBefore, versionComparison,
+      modulesRead: raw.styles.length, added, updated, identical, ignored:0,
+      moduleResults, unknownCategories:[], daUpdated:0,
+    };
+  }
+
+  // MASTER_PRODUCTION_SDZ / MASTER_IMAGE_SDZ / MASTER_CAMPAIGN_SDZ : liste de modules (comportement historique, inchangé)
   let added=0, updated=0, identical=0;
   const moduleResults = [];
   const unknownCategories = new Set();
@@ -3142,12 +3268,12 @@ function buildSettingsTab(){
 
   frag.appendChild(el("p",{style:"font-size:11px;color:var(--muted2);margin:20px 0 4px;border-top:1px solid var(--border);padding-top:12px;"},
     "Pack Production SDZ — système d'import définitif."));
-  frag.appendChild(el("p",{class:"sublabel"}, "Sélectionne 1 à 3 fichiers JSON (MASTER_PRODUCTION_SDZ, MASTER_IMAGE_SDZ, MASTER_CAMPAIGN_SDZ). Le type et la version sont détectés automatiquement. Un fichier structurellement invalide, ou contenant un seul module incomplet, est intégralement rejeté (aucune modification partielle)."));
+  frag.appendChild(el("p",{class:"sublabel"}, "Sélectionne des fichiers JSON (MASTER_PRODUCTION_SDZ, MASTER_IMAGE_SDZ, MASTER_CAMPAIGN_SDZ, MASTER_DIRECTION_ARTISTIQUE, STYLES). Le type et la version sont détectés automatiquement. Un fichier structurellement invalide, ou contenant un seul élément incomplet, est intégralement rejeté (aucune modification partielle)."));
 
   // --- Compteurs de modules (48/62/54, progression globale 164) ---
   const counterRow = el("div",{style:"display:grid;grid-template-columns:repeat(2,1fr);gap:8px;margin-bottom:14px;"});
   let globalCount = 0, globalTarget = 0;
-  KNOWN_PACK_TYPES.forEach(pt=>{
+  MODULE_PACK_TYPES.forEach(pt=>{
     const count = state.modules.filter(m=>m.sourcePack===pt).length;
     const target = PACK_TARGETS[pt];
     globalCount += count; globalTarget += target;
@@ -3159,9 +3285,63 @@ function buildSettingsTab(){
   });
   counterRow.appendChild(el("div",{class:"card", style:"text-align:center;padding:10px 6px;grid-column:span 2;"},[
     el("div",{style:`font-size:18px;font-weight:700;color:${globalCount>=globalTarget?"var(--green)":"var(--amber)"};`}, `${globalCount} / ${globalTarget}`),
-    el("div",{style:"font-size:10px;color:var(--muted2);"}, "Progression globale"),
+    el("div",{style:"font-size:10px;color:var(--muted2);"}, "Progression globale (164 modules)"),
   ]));
   frag.appendChild(counterRow);
+
+  // --- Direction Artistique et Styles : compteurs séparés (pas de cible fixe comme les 164 modules) ---
+  const daTextFields = Object.keys(DEFAULT_DA).filter(k=>typeof DEFAULT_DA[k]==="string");
+  const daFieldsFilled = daTextFields.filter(k=> (state.da[k]||"").toString().trim()!=="").length;
+  const daRow = el("div",{style:"display:grid;grid-template-columns:repeat(2,1fr);gap:8px;margin-bottom:16px;"},[
+    el("div",{class:"card", style:"text-align:center;padding:10px 6px;"},[
+      el("div",{style:"font-size:16px;font-weight:700;"}, `${daFieldsFilled} / ${daTextFields.length}`),
+      el("div",{style:"font-size:10px;color:var(--muted2);"}, "Direction artistique (champs renseignés)"),
+      state.packVersions["MASTER_DIRECTION_ARTISTIQUE"] ? el("div",{style:"font-size:9px;color:var(--muted2);"}, `v${state.packVersions["MASTER_DIRECTION_ARTISTIQUE"]}`) : null,
+    ]),
+    el("div",{class:"card", style:"text-align:center;padding:10px 6px;"},[
+      el("div",{style:"font-size:16px;font-weight:700;"}, String(state.styles.length)),
+      el("div",{style:"font-size:10px;color:var(--muted2);"}, "Styles enregistrés"),
+      state.packVersions["STYLES"] ? el("div",{style:"font-size:9px;color:var(--muted2);"}, `v${state.packVersions["STYLES"]}`) : null,
+    ]),
+  ]);
+  frag.appendChild(daRow);
+
+  {
+    const total = state.modules.length;
+    const byPack = {};
+    MODULE_PACK_TYPES.forEach(pt=> byPack[pt]=0);
+    let autres = 0;
+    state.modules.forEach(m=>{
+      if(m.sourcePack && MODULE_PACK_TYPES.includes(m.sourcePack)) byPack[m.sourcePack]++;
+      else autres++;
+    });
+    const byCategory = {};
+    state.modules.forEach(m=>{
+      const cat = m.category || "(sans catégorie)";
+      byCategory[cat] = (byCategory[cat]||0)+1;
+    });
+    const idCounts = {};
+    state.modules.forEach(m=> idCounts[m.id] = (idCounts[m.id]||0)+1);
+    const duplicateIds = Object.keys(idCounts).filter(id=>idCounts[id]>1);
+
+    const auditLines = [];
+    auditLines.push(`${total} modules au total`);
+    auditLines.push("");
+    auditLines.push("Répartition par pack :");
+    MODULE_PACK_TYPES.forEach(pt=> auditLines.push(`  ${PACK_LABELS[pt]} : ${byPack[pt]}`));
+    auditLines.push(`  Autres (hors pack officiel) : ${autres}`);
+    auditLines.push("");
+    auditLines.push("Répartition par catégorie :");
+    Object.keys(byCategory).sort((a,b)=>byCategory[b]-byCategory[a]).forEach(cat=>{
+      auditLines.push(`  ${cat} : ${byCategory[cat]}`);
+    });
+    auditLines.push("");
+    auditLines.push(duplicateIds.length ? `⚠ IDs dupliqués détectés : ${duplicateIds.length}` : "IDs dupliqués : aucun ✓");
+
+    const auditBox = el("div",{class:"card", style:"font-family:monospace;font-size:11px;white-space:pre-wrap;margin:0 0 16px;max-height:360px;overflow:auto;"}, auditLines.join("\n"));
+    frag.appendChild(el("p",{class:"label", style:"margin-bottom:6px;"}, "Audit des modules"));
+    frag.appendChild(auditBox);
+  }
 
   const packReportBox = el("div",{class:"card", style:"font-family:monospace;font-size:11px;white-space:pre-wrap;margin:8px 0 12px;display:none;max-height:420px;overflow:auto;"});
   const packMsg = el("p",{style:"font-size:12px;min-height:16px;margin:4px 0 12px;"},"");
@@ -3173,7 +3353,7 @@ function buildSettingsTab(){
 
   async function runPackImport(files, isDryRun){
     const reports = [];
-    let touchedModules = false, touchedDa = false;
+    let touchedModules = false, touchedDa = false, touchedStyles = false;
 
     for(const file of files){
       const preview = await processPackFile(file, true); // toujours un essai à blanc d'abord, pour connaître la version avant d'écrire quoi que ce soit
@@ -3194,8 +3374,13 @@ function buildSettingsTab(){
 
       const real = await processPackFile(file, false); // deuxième lecture : commit réel cette fois
       real.isDryRun = false;
-      if(real.added || real.updated || real.daUpdated) touchedModules = touchedModules || !!(real.added||real.updated);
-      if(real.daUpdated) touchedDa = true;
+      const hasChange = real.added || real.updated;
+      if(hasChange){
+        if(MODULE_PACK_TYPES.includes(real.packType)) touchedModules = true;
+        else if(real.packType==="MASTER_DIRECTION_ARTISTIQUE") touchedDa = true;
+        else if(real.packType==="STYLES") touchedStyles = true;
+      }
+      if(real.daUpdated && MODULE_PACK_TYPES.includes(real.packType)) touchedDa = true; // bonus direction_artistique glissé dans un pack de modules
       reports.push(real);
     }
 
@@ -3209,12 +3394,13 @@ function buildSettingsTab(){
 
     if(touchedModules) LS.set("vf-modules", state.modules);
     if(touchedDa) LS.set("vf-da", state.da);
+    if(touchedStyles) LS.set("vf-styles", state.styles);
     LS.set("vf-pack-versions", state.packVersions);
 
     packMsg.style.color = "var(--muted2)";
     packMsg.textContent = "Sauvegarde vers le serveur...";
     renderMain();
-    const anyRealChange = touchedModules || touchedDa;
+    const anyRealChange = touchedModules || touchedDa || touchedStyles;
     const synced = anyRealChange ? await pushToServerSilent() : true;
     const blobsStatus = !anyRealChange ? "skipped" : synced ? "ok" : "failed";
     reports.forEach(r=>{ if(r.ok) r.blobsStatus = blobsStatus; });
@@ -3282,6 +3468,27 @@ function buildSettingsTab(){
       ]));
     });
   }
+
+  frag.appendChild(el("p",{class:"label", style:"margin-top:10px;"}, "Exporter la Direction artistique / les Styles"));
+  frag.appendChild(el("p",{class:"sublabel"}, "Génère un fichier au même format que celui attendu à l'import — pratique pour sauvegarder l'état actuel, le transférer, ou repartir d'une base pour la faire évoluer avec ChatGPT."));
+  const exportRow = el("div",{style:"display:flex;gap:8px;flex-wrap:wrap;margin-bottom:16px;"});
+  exportRow.appendChild(el("button",{class:"btn-secondary", style:"flex:1;", onclick:()=>{
+    const payload = { packType:"MASTER_DIRECTION_ARTISTIQUE", version: state.packVersions["MASTER_DIRECTION_ARTISTIQUE"]||"1.0", direction_artistique: state.da };
+    const blob = new Blob([JSON.stringify(payload,null,2)], {type:"application/json"});
+    const link = document.createElement("a");
+    link.download = "MASTER_DIRECTION_ARTISTIQUE.json";
+    link.href = URL.createObjectURL(blob);
+    link.click();
+  }}, [svgIcon(ICONS.download,14), el("span",{},"Exporter la DA")]));
+  exportRow.appendChild(el("button",{class:"btn-secondary", style:"flex:1;", onclick:()=>{
+    const payload = { packType:"STYLES", version: state.packVersions["STYLES"]||"1.0", styles: state.styles };
+    const blob = new Blob([JSON.stringify(payload,null,2)], {type:"application/json"});
+    const link = document.createElement("a");
+    link.download = "STYLES.json";
+    link.href = URL.createObjectURL(blob);
+    link.click();
+  }}, [svgIcon(ICONS.download,14), el("span",{},"Exporter les Styles")]));
+  frag.appendChild(exportRow);
 
   frag.appendChild(el("p",{style:"font-size:11px;color:var(--muted2);margin:20px 0 4px;border-top:1px solid var(--border);padding-top:12px;"},
     "Export/import JSON ci-dessous : ta sécurité de secours, indépendante du serveur — toujours disponible même sans connexion."));
