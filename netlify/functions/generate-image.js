@@ -23,15 +23,29 @@ async function fetchAsBlob(url){
   return new Blob([buf], { type: contentType });
 }
 
-async function generateWithReferenceImages({ key, prompt, size, model, referenceImageUrls }){
+function dataUrlToBlob(dataUrl){
+  const match = String(dataUrl).match(/^data:(image\/[a-zA-Z0-9.+-]+);base64,(.+)$/);
+  if(!match) throw new Error("Image de référence en base64 invalide");
+  const contentType = match[1];
+  const binary = Buffer.from(match[2], "base64");
+  return new Blob([binary], { type: contentType });
+}
+
+async function generateWithReferenceImages({ key, prompt, size, model, referenceImageUrls, referenceImageData }){
   const form = new FormData();
   form.append("model", model || "gpt-image-1");
   form.append("prompt", prompt);
   form.append("size", size || "1024x1024");
   form.append("n", "1");
-  for(const url of referenceImageUrls.slice(0, 3)){ // 3 images de référence maximum, largement suffisant
+  const urls = (referenceImageUrls || []).slice(0, 3);
+  const dataUrls = (referenceImageData || []).slice(0, 3 - urls.length);
+  for(const url of urls){
     const blob = await fetchAsBlob(url);
     form.append("image[]", blob, "reference.png");
+  }
+  for(const dataUrl of dataUrls){
+    const blob = dataUrlToBlob(dataUrl);
+    form.append("image[]", blob, "campaign-reference.png");
   }
   const res = await fetch("https://api.openai.com/v1/images/edits", {
     method: "POST",
@@ -74,7 +88,7 @@ exports.handler = async (event) => {
   } catch (e) {
     return { statusCode: 400, body: JSON.stringify({ error: "Corps de requête invalide" }) };
   }
-  const { prompt, size, model, referenceImageUrls } = payload;
+  const { prompt, size, model, referenceImageUrls, referenceImageData } = payload;
 
   try {
     const key = process.env.OPENAI_API_KEY;
@@ -82,9 +96,11 @@ exports.handler = async (event) => {
 
     let data;
     let usedReference = false;
-    if (Array.isArray(referenceImageUrls) && referenceImageUrls.length) {
+    const hasUrls = Array.isArray(referenceImageUrls) && referenceImageUrls.length;
+    const hasData = Array.isArray(referenceImageData) && referenceImageData.length;
+    if (hasUrls || hasData) {
       try {
-        data = await generateWithReferenceImages({ key, prompt, size, model, referenceImageUrls });
+        data = await generateWithReferenceImages({ key, prompt, size, model, referenceImageUrls, referenceImageData });
         usedReference = true;
       } catch (refErr) {
         // dégradation propre : on retombe sur la génération standard, jamais d'échec côté utilisateur
