@@ -637,12 +637,55 @@ function loadImage(src){
 /* L'IA ne doit jamais être chargée de dessiner le logo (elle ne peut que l'approximer, jamais le reproduire
    fidèlement) : on lui demande de laisser une zone dégagée, puis on incruste ici le vrai fichier logo
    marqué comme actif de marque dans la Bibliothèque, exactement à la position réglée dans state.logoOverlay. */
+/* Certains logos fournis ont un vrai fond blanc plein (pas transparent) plutôt qu'un PNG
+   transparent — plutôt que d'imposer à Fabien de refaire le fichier, on détecte ce cas et on
+   retire automatiquement le fond blanc avant d'incruster le logo, avec un léger adoucissement
+   des bords pour éviter un contour crénelé. Mis en cache par image pour ne le calculer qu'une
+   fois par session. */
+let _autoTransparentLogoCache = null; // { key, canvas }
+async function getAutoTransparentLogo(logoAsset){
+  const cacheKey = logoAsset.id + ":" + logoAsset.dataUrl.length;
+  if(_autoTransparentLogoCache && _autoTransparentLogoCache.key===cacheKey) return _autoTransparentLogoCache.canvas;
+
+  const img = await loadImage(logoAsset.dataUrl);
+  const canvas = document.createElement("canvas");
+  canvas.width = img.width; canvas.height = img.height;
+  const ctx = canvas.getContext("2d");
+  ctx.drawImage(img, 0, 0);
+
+  // Le fond est-il réellement opaque ? (coins non transparents) — sinon on ne touche à rien.
+  const corners = [[0,0],[canvas.width-1,0],[0,canvas.height-1],[canvas.width-1,canvas.height-1]];
+  const looksOpaque = corners.every(([x,y])=> ctx.getImageData(x,y,1,1).data[3] >= 250);
+  if(!looksOpaque){
+    _autoTransparentLogoCache = { key: cacheKey, canvas };
+    return canvas;
+  }
+
+  const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+  const d = imageData.data;
+  const WHITE_THRESHOLD = 235; // au-delà, considéré comme "fond" à retirer
+  const FEATHER_RANGE = 40;    // adoucissement du contour pour éviter un bord crénelé
+  for(let i=0; i<d.length; i+=4){
+    const r=d[i], g=d[i+1], b=d[i+2];
+    const minChannel = Math.min(r,g,b);
+    if(minChannel >= WHITE_THRESHOLD){
+      d[i+3] = 0;
+    } else if(minChannel >= WHITE_THRESHOLD - FEATHER_RANGE){
+      const t = (minChannel - (WHITE_THRESHOLD - FEATHER_RANGE)) / FEATHER_RANGE;
+      d[i+3] = Math.round(d[i+3] * (1 - t));
+    }
+  }
+  ctx.putImageData(imageData, 0, 0);
+  _autoTransparentLogoCache = { key: cacheKey, canvas };
+  return canvas;
+}
+
 async function compositeRealLogo(baseDataUrl){
   const logoAsset = state.images.find(i=>i.assetType==="logo");
   if(!logoAsset) return { dataUrl: baseDataUrl, applied:false };
   try{
     const baseImg = await loadImage(baseDataUrl);
-    const logoImg = await loadImage(logoAsset.dataUrl);
+    const logoImg = await getAutoTransparentLogo(logoAsset); // canvas prêt à dessiner, fond blanc déjà retiré si besoin
     const canvas = document.createElement("canvas");
     canvas.width = baseImg.width; canvas.height = baseImg.height;
     const ctx = canvas.getContext("2d");
