@@ -736,6 +736,7 @@ function extractFicheFields(block){
 /* Retourne les infos de la prestation actuellement sélectionnée, ou null si aucune. */
 function getSelectedPrestationInfo(){
   if(!state.prestationName) return null;
+  if(state.prestationName === "Tous sujets") return { name:"Tous sujets", generic:true, block:"", duree:null, tarif:null, fiche:{} };
   const blocks = extractPrestationBlocks(getMergedPrestationsText());
   const block = blocks[state.prestationName] || "";
   return {
@@ -899,6 +900,9 @@ function seasonBlock(){
 function prestationPromptBlock(){
   const info = getSelectedPrestationInfo();
   if(!info) return "";
+  if(info.generic){
+    return `SUJET GÉNÉRAL : ce contenu ne met volontairement en avant aucune prestation précise (annonce, information, actualité, contenu institutionnel...). Reste généraliste, ne force pas la mention d'un soin en particulier, et ne cite aucun nom de prestation de la base de connaissances sauf si le sujet décrit ci-dessous l'exige naturellement.\n`;
+  }
   let out = `PRESTATION CONCERNÉE : ${info.name}\nIMPORTANT : reprends ce nom de prestation EXACTEMENT tel qu'écrit ci-dessus (mêmes majuscules, même orthographe) partout où tu le mentionnes — ne le reformule pas, ne le traduis pas, ne change pas sa casse.\n`;
   if(info.duree) out += `Durée : ${info.duree}\n`;
   if(info.tarif) out += `Tarif : ${info.tarif}\n`;
@@ -1157,11 +1161,13 @@ function suggestProviderFor(ctx){
 
 /* Empreinte simple (djb2) pour détecter un prompt identique déjà généré — évite un appel API inutile. */
 function hashPrompt(text){
+  const t = text || "";
   let h = 5381;
-  for(let i=0;i<text.length;i++){ h = ((h*33) ^ text.charCodeAt(i)) >>> 0; }
+  for(let i=0;i<t.length;i++){ h = ((h*33) ^ t.charCodeAt(i)) >>> 0; }
   return h.toString(36);
 }
 function findCachedResult(providerLabel, promptText){
+  if(!promptText) return null;
   const hash = hashPrompt(promptText);
   return state.lab.find(l=> l.provider===providerLabel && l.promptHash===hash && l.status==="accepted") || null;
 }
@@ -1439,14 +1445,17 @@ function buildAccueilTab(){
     ]));
   }
 
-  const activeModules = state.modules.filter(m=>m.enabled).length;
-  const countByStatus = (s)=> state.scheduled.filter(p=>p.status===s).length;
+  const modulesArr = Array.isArray(state.modules) ? state.modules : [];
+  const scheduledArr = Array.isArray(state.scheduled) ? state.scheduled : [];
+  const imagesArr = Array.isArray(state.images) ? state.images : [];
+  const activeModules = modulesArr.filter(m=>m && m.enabled).length;
+  const countByStatus = (s)=> scheduledArr.filter(p=>p && p.status===s).length;
   const nbProgramme = countByStatus("programmé");
   const nbEnvoye = countByStatus("envoyé");
   const nbErreur = countByStatus("erreur");
 
   frag.appendChild(el("div",{style:"display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-bottom:22px;"},[
-    el("div",{class:"card", style:"text-align:center;padding:12px 6px;"},[el("div",{style:"font-size:20px;font-weight:700;"},String(state.images.length)),el("div",{style:"font-size:10px;color:var(--muted2);"},"visuels")]),
+    el("div",{class:"card", style:"text-align:center;padding:12px 6px;"},[el("div",{style:"font-size:20px;font-weight:700;"},String(imagesArr.length)),el("div",{style:"font-size:10px;color:var(--muted2);"},"visuels")]),
     el("div",{class:"card", style:"text-align:center;padding:12px 6px;"},[el("div",{style:"font-size:20px;font-weight:700;"},String(activeModules)),el("div",{style:"font-size:10px;color:var(--muted2);"},"modules actifs")]),
     el("div",{class:"card", style:"text-align:center;padding:12px 6px;"},[el("div",{style:"font-size:20px;font-weight:700;color:var(--amber, var(--lime));"},String(nbProgramme)),el("div",{style:"font-size:10px;color:var(--muted2);"},"programmés")]),
     el("div",{class:"card", style:"text-align:center;padding:12px 6px;"},[el("div",{style:"font-size:20px;font-weight:700;color:var(--green);"},String(nbEnvoye)),el("div",{style:"font-size:10px;color:var(--muted2);"},"envoyés")]),
@@ -2139,12 +2148,15 @@ function buildPostTab(){
   const prestationBlocksAvail = extractPrestationBlocks(getMergedPrestationsText());
   const presSelect = el("select",{}, [
     el("option",{value:""}, "Non spécifiée"),
+    el("option",{value:"Tous sujets"}, "Tous sujets (pas de prestation en particulier)"),
     ...KNOWN_PRESTATIONS.map(name=> el("option",{value:name}, prestationBlocksAvail[name] ? name : `${name} (non documentée)`)),
   ]);
   presSelect.value = state.prestationName;
   presSelect.addEventListener("change", e=>{ state.prestationName = e.target.value; renderMain(); });
   frag.appendChild(el("div",{style:"margin-bottom:6px;"}, presSelect));
-  if(state.prestationName && !prestationBlocksAvail[state.prestationName]){
+  if(state.prestationName === "Tous sujets"){
+    frag.appendChild(el("p",{class:"sublabel"},"Contenu généraliste — aucune prestation en particulier ne sera mise en avant."));
+  } else if(state.prestationName && !prestationBlocksAvail[state.prestationName]){
     frag.appendChild(el("p",{class:"sublabel"},"Aucun détail trouvé pour cette prestation dans la base de connaissances — seul son nom sera transmis à l'IA."));
   } else {
     frag.appendChild(el("div",{style:"margin-bottom:14px;"}));
@@ -2279,7 +2291,7 @@ function buildPostTab(){
       ]));
     }
 
-    if(provider){
+    if(provider && state.textPrompt){
       const cached = findCachedResult(provider.label, state.textPrompt);
       if(cached){
         frag.appendChild(el("div",{class:"card", style:"margin-bottom:16px;border-color:var(--gold-soft);"},[
@@ -2469,7 +2481,7 @@ function buildPostTab(){
       platform, topic: state.topic, imagePrompt: state.imagePrompt, textPrompt: state.textPrompt,
       getTextResult: ()=>state.textPasted,
       hasImage: !!previewImg, logoApplied: !!(previewImg && previewImg.logoApplied),
-      prestationName: state.prestationName || null, missionKey: state.mission,
+      prestationName: (state.prestationName && state.prestationName!=="Tous sujets") ? state.prestationName : null, missionKey: state.mission,
       schedulable: platform !== "Article Blog Wix" && platform !== "Story",
     }));
 
@@ -3722,7 +3734,6 @@ function buildSettingsTab(){
    ROUTEUR
 ============================================================ */
 function renderMain(){
-  normalizeState();
   const main = document.getElementById("main");
   main.innerHTML = "";
   const builders = {
@@ -3731,6 +3742,7 @@ function renderMain(){
     history: buildHistoryTab, settings: buildSettingsTab,
   };
   try{
+    normalizeState();
     const builder = builders[state.tab] || buildAccueilTab;
     main.appendChild(builder());
   }catch(err){
