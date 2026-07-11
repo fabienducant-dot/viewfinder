@@ -172,22 +172,21 @@ const ASPECTS = {
 
 const PLATFORMS = ["Instagram","Facebook","Google Business","Article Blog Wix","Story"];
 
-const PLATFORM_ASPECT = { "Instagram":"4:5", "Facebook":"1:1", "Google Business":"4:3", "Article Blog Wix":"16:9", "Story":"9:16" };
-const PLATFORM_OVERLAY = { "Instagram":"léger", "Facebook":"léger", "Google Business":"aucun", "Article Blog Wix":"aucun", "Story":"aucun" };
-const PLATFORM_MAXCHARS = { "Instagram":40, "Facebook":50, "Google Business":0, "Article Blog Wix":0, "Story":60 };
+const PLATFORM_ASPECT = { "Instagram":"1:1", "Facebook":"4:5", "Google Business":"4:3", "Article Blog Wix":"16:9", "Story":"9:16" };
+const PLATFORM_OVERLAY = { "Instagram":"léger", "Facebook":"léger", "Google Business":"aucun", "Article Blog Wix":"fiche", "Story":"fort" };
+const PLATFORM_MAXCHARS = { "Instagram":110, "Facebook":120, "Google Business":0, "Article Blog Wix":220, "Story":220 };
 const PLATFORM_NOTE = {
-  "Instagram": "Format portrait, texte léger toléré sur l'image (accroche courte).",
-  "Facebook": "Format carré, texte léger toléré sur l'image.",
+  "Instagram": "Format carré, 1 à 2 phrases courtes incrustées sur l'image (pas un simple mot-clé, une vraie accroche).",
+  "Facebook": "Format portrait, 1 à 2 phrases courtes incrustées sur l'image (pas un simple mot-clé, une vraie accroche).",
   "Google Business": "Aucun texte sur l'image (recommandation Google) — le texte porte tout le SEO.",
-  "Article Blog Wix": "Image de couverture épurée, sans texte incrusté — le titre est géré par la mise en page Wix.",
-  "Story": "Format vertical plein écran, avec une ou plusieurs phrases d'accroche incrustées et le logo en bas, centré — publiée simultanément sur Instagram et Facebook.",
+  "Article Blog Wix": "Image de couverture avec un texte court façon fiche explicative, élégant et sobre — jamais de faux logo, badge ou icône générés par l'IA.",
+  "Story": "Format vertical plein écran, 4 à 5 phrases fortes disposées avec des tailles de police variées (hiérarchie visuelle, jamais uniforme) et le logo en bas, centré — publiée simultanément sur Instagram et Facebook.",
 };
 const TEXT_STRUCTURE = {
   "Instagram": "Réponds avec :\n1) Légende (2 à 4 phrases)\n2) 5 à 8 hashtags\n3) Une suggestion d'alt text (accessibilité)",
   "Facebook": "Réponds avec :\n1) Texte du post\n2) 2 à 4 hashtags optionnels\n3) Une suggestion d'alt text",
   "Google Business": "Réponds avec :\n1) Texte du post (150 à 300 mots, sans hashtags, mots-clés SEO locaux intégrés naturellement)\n2) Un bouton d'action suggéré (Réserver, En savoir plus, Acheter...)\n3) Un alt text descriptif SEO pour l'image",
   "Article Blog Wix": "Réponds avec :\n1) Titre SEO (H1)\n2) Meta description (155 caractères max)\n3) Slug d'URL suggéré\n4) Introduction\n5) 2 à 3 sections avec sous-titres H2\n6) Conclusion avec appel à l'action\n7) 5 mots-clés SEO\n8) Catégorie suggérée",
-  "Story": "Réponds avec :\n1) Une phrase courte d'accroche optionnelle (facultative, la Story reste avant tout visuelle)\n2) Une suggestion d'alt text",
 };
 /* MASTER SDZ et CODEX SDZ sont les documents de plus haute autorité : toujours injectés,
    quelle que soit la plateforme ou la mission — c'est le socle non négociable de la marque. */
@@ -704,6 +703,24 @@ async function compositeRealLogo(baseDataUrl){
 /* Signature de marque complète et obligatoire après toute génération : vrai logo + nom de la
    marque + ville, toujours au même endroit, avec le même rendu — jamais une signature "imaginée"
    par l'IA. C'est la seule signature considérée comme valide. */
+/* Découpe un texte en plusieurs lignes centrées qui tiennent dans une largeur maximale donnée. */
+function wrapText(ctx, text, maxWidth){
+  const words = text.split(/\s+/).filter(Boolean);
+  const lines = [];
+  let current = "";
+  words.forEach(word=>{
+    const test = current ? current + " " + word : word;
+    if(ctx.measureText(test).width > maxWidth && current){
+      lines.push(current);
+      current = word;
+    } else {
+      current = test;
+    }
+  });
+  if(current) lines.push(current);
+  return lines;
+}
+
 async function compositeBrandSignature(baseDataUrl, platform){
   const logoResult = await compositeRealLogo(baseDataUrl);
   if(!logoResult.applied) return logoResult; // sans logo réel disponible, rien de fiable à ancrer le texte dessus
@@ -713,6 +730,25 @@ async function compositeBrandSignature(baseDataUrl, platform){
     canvas.width = img.width; canvas.height = img.height;
     const ctx = canvas.getContext("2d");
     ctx.drawImage(img, 0, 0);
+
+    // --- Accroche / titre visuel : texte saisi par Fabien, jamais généré par l'IA (fiabilité à 100%) ---
+    if(state.visualAccroche && state.visualAccroche.trim()){
+      const zone = state.textOverlayZone || { y: 60, maxWidthPct: 82 };
+      const maxWidth = canvas.width * (zone.maxWidthPct/100);
+      const titleFontSize = Math.max(20, Math.round(canvas.width * 0.052));
+      ctx.textAlign = "center";
+      ctx.textBaseline = "middle";
+      ctx.shadowColor = "rgba(0,0,0,0.7)";
+      ctx.shadowBlur = 8;
+      ctx.fillStyle = "#F5F4EF"; // blanc cassé de la charte SDZ
+      ctx.font = `700 ${titleFontSize}px Georgia, 'Times New Roman', serif`;
+      const lines = wrapText(ctx, state.visualAccroche.trim().toUpperCase(), maxWidth);
+      const lineHeight = titleFontSize * 1.25;
+      const totalHeight = lines.length * lineHeight;
+      const startY = (canvas.height * (zone.y/100)) - totalHeight/2 + lineHeight/2;
+      lines.forEach((line,i)=>{ ctx.fillText(line, canvas.width/2, startY + i*lineHeight); });
+      ctx.shadowBlur = 0;
+    }
 
     const logoW = canvas.width * (state.logoOverlay.size/100);
     const cx = (state.logoOverlay.x/100) * canvas.width;
@@ -1129,7 +1165,7 @@ function buildAntiRepeatNote(platform, kind){
   if(kind==="texte"){
     return `\nÉVITE ABSOLUMENT de reproduire, sur ce contenu :\n- les mêmes accroches / premières phrases\n- les mêmes CTA\n- les mêmes structures de texte\n- les mêmes émotions mises en avant\n- les mêmes formulations\nVoici des extraits déjà utilisés récemment pour cette plateforme, à ne pas reproduire :\n${recent.filter(h=>h.textResult).map(h=>`- "${h.textResult.slice(0,70).replace(/\n/g," ")}..."`).join("\n")}\n`;
   }
-  return `\nÉVITE ABSOLUMENT de reproduire une composition, une idée visuelle ou un sujet déjà traité récemment sur cette plateforme :\n${recent.map(h=>`- ${h.topic}`).join("\n")}\nPropose un angle visuel différent tout en restant fidèle à la charte.\n`;
+  return `\nÉVITE ABSOLUMENT de reproduire une composition, une idée visuelle ou un sujet déjà traité récemment sur cette plateforme :\n${recent.map(h=>`- ${h.topic}`).join("\n")}\nPropose un angle visuel différent tout en restant fidèle à la charte.\nVARIÉTÉ OBLIGATOIRE DU DÉCOR : ne reviens pas systématiquement au même motif monumental (le portail, par exemple, ne doit pas devenir un réflexe par défaut). L'univers SDZ dispose de bien d'autres éléments possibles — mets-en un différent en avant à chaque génération plutôt que de répéter toujours le même symbole.\n`;
 }
 
 function buildTextPromptFull(platform, topic, missionKey){
@@ -1158,15 +1194,17 @@ function keywordVariantBlock(style, aspectKey){
   if(!parts.length) return "";
   return `\nVERSION MOTS-CLÉS (pour générateurs préférant ce format) : ${parts.join(", ")}\n`;
 }
-function buildImagePromptFull(platform, topic, aspectKey, missionKey){
+function buildImagePromptFull(platform, topic, aspectKey, missionKey, isCampaign){
   const mods = imageModulesFor();
   const modText = mods.length ? modulesToText(mods) : "(Aucun module visuel activé — active-en dans l'onglet Connaissances.)";
   const style = getSelectedStyle();
   const overlayRule = platform==="Story"
-    ? "Une ou plusieurs phrases d'accroche courtes et percutantes, incrustées sur l'image, bien lisibles en un coup d'œil (format Story, lecture rapide)."
+    ? "4 à 5 phrases courtes et fortes, incrustées sur l'image, disposées avec une hiérarchie visuelle claire — des tailles de police variées (jamais toutes identiques, comme sur une affiche), agencées pour harmoniser avec le reste de la composition plutôt qu'empilées au centre."
     : PLATFORM_OVERLAY[platform]==="aucun"
       ? "Pas de texte incrusté sur l'image."
-      : `Texte léger toléré sur l'image (accroche courte, ${PLATFORM_MAXCHARS[platform]} caractères max).`;
+      : PLATFORM_OVERLAY[platform]==="fiche"
+        ? `Texte court intégré façon fiche explicative élégante (${PLATFORM_MAXCHARS[platform]} caractères max), sobre et luxueux dans sa mise en forme — jamais de faux logo, badge, icône ou pictogramme générés par l'IA pour l'accompagner.`
+        : `1 à 2 phrases courtes incrustées sur l'image (une vraie accroche, pas un simple mot-clé), ${PLATFORM_MAXCHARS[platform]} caractères max.`;
   const wantsRealLogo = logoRequiredFor(platform);
   const usingLogoReference = wantsRealLogo && !!state.logoPublicUrl;
   const logoRule = usingLogoReference
@@ -1175,6 +1213,9 @@ function buildImagePromptFull(platform, topic, aspectKey, missionKey){
       ? "Ne dessine et n'invente aucun logo, symbole, monogramme ou texte de marque sur l'image — le vrai logo de l'entreprise sera ajouté automatiquement après coup par-dessus. Laisse simplement, en bas de l'image, une zone dégagée et sobre (pas de motif chargé ni de texte à cet endroit) pour l'accueillir proprement."
       : "Pas de logo sur cette image.";
   const brandAuthenticityRule = "Interdiction stricte : aucun faux logo, aucun faux zèbre, aucun faux emblème de marque, aucun nom de marque généré, aucune mention inventée de \"Raismes\" ou de tout autre lieu, aucune URL ou @identifiant inventé, aucun slogan ou mot-dièse imité — le seul texte autorisé sur l'image est l'accroche définie ci-dessus, s'il y en a une.";
+  const campaignCoherenceRule = isCampaign
+    ? "CAMPAGNE MULTI-FORMATS : ce visuel fait partie d'une campagne de 5 déclinaisons (Instagram, Facebook, Google Business, Story, Blog Wix) sur le même sujet. Le décor, la scène et le sujet visuel doivent rester rigoureusement identiques ou immédiatement reconnaissables comme faisant partie de la même série que les autres formats de cette campagne — seuls le cadrage, le format et le texte changent selon les exigences propres à chaque plateforme. Si une image de référence de cette même campagne est fournie, reproduis fidèlement sa scène et son décor plutôt que d'en inventer un nouveau."
+    : "";
   const selectedProvider = state.apiProviders.find(p=>p.id===state.selectedProviderId);
   const wantsKeywords = selectedProvider && KEYWORD_STYLE_PROVIDERS.includes(selectedProvider.label);
   return cleanPrompt(`Génère une image pour cette marque en respectant strictement :
@@ -1184,6 +1225,7 @@ ${modText}
 ${missionBlock(missionKey)}${prestationPromptBlock()}${brandAssetsBlock()}DIRECTION ARTISTIQUE :
 ${daLinesText() || "(non définie — configure-la dans l'onglet Direction artistique)"}
 ${styleBlock(style)}
+${campaignCoherenceRule}
 Plateforme : ${platform} — format ${aspectKey} (${ASPECTS[aspectKey].w}x${ASPECTS[aspectKey].h})
 ${overlayRule}
 ${logoRule}
@@ -1319,18 +1361,31 @@ async function callProviderText(provider, systemPrompt, userPrompt){
   if(!res.ok || data.error) throw new Error(data.error || `Erreur ${res.status}`);
   return data.text || "";
 }
-async function callProviderImage(prompt, size){
+async function callProviderImage(prompt, size, extraReferenceDataUrls){
   const referenceImageUrls = getBrandReferenceImages();
+  const referenceImageData = (extraReferenceDataUrls||[]).filter(Boolean);
   const res = await fetch("/.netlify/functions/generate-image", {
     method:"POST",
     headers: { "Content-Type":"application/json" },
-    body: JSON.stringify({ prompt, size, referenceImageUrls: referenceImageUrls.length ? referenceImageUrls : undefined }),
+    body: JSON.stringify({
+      prompt, size,
+      referenceImageUrls: referenceImageUrls.length ? referenceImageUrls : undefined,
+      referenceImageData: referenceImageData.length ? referenceImageData : undefined,
+    }),
   });
   const data = await res.json();
   if(!res.ok || data.error) throw new Error(data.error || `Erreur ${res.status}`);
   if(data.b64) return `data:image/png;base64,${data.b64}`;
   if(data.url) return data.url;
   throw new Error("Aucune image reçue du fournisseur.");
+}
+
+/* Cherche, parmi les autres formats de la MÊME campagne, une image déjà générée — pour la
+   transmettre comme référence visuelle et garantir que tous les formats montrent la même scène. */
+function getCampaignSiblingImage(campaignId, excludeItemId){
+  if(!campaignId) return null;
+  const sibling = state.scheduled.find(p=> p.campaignId===campaignId && p.id!==excludeItemId && p.imageDataUrl);
+  return sibling ? sibling.imageDataUrl : null;
 }
 
 /* Estimation grossière (≈4 caractères/token) — précision dépendante des tarifs que l'utilisateur renseigne. */
@@ -1434,7 +1489,7 @@ function generateCampaignPosts(topic, missionKey){
     return {
       id: uid(), campaignId, campaignTopic: topic, campaignLabel: item.label,
       platform: item.platform, mission: missionKey, topic,
-      imagePrompt: buildImagePromptFull(item.platform, topic, aspect, missionKey),
+      imagePrompt: buildImagePromptFull(item.platform, topic, aspect, missionKey, true),
       textPrompt: isStory ? null : buildTextPromptFull(item.platform, topic, missionKey),
       textFinal: isStory ? null : "", imageDataUrl: null,
       schedulable: item.platform !== "Article Blog Wix" && item.platform !== "Story",
@@ -2423,7 +2478,7 @@ function buildPostTab(){
       textMods: txtDetail.kept, textIgnored: txtDetail.ignored, imageMods: imgDetail.kept, imageIgnored: imgDetail.ignored,
       duplicatesRemoved: txtDetail.duplicatesRemoved + imgDetail.duplicatesRemoved,
       aspect: PLATFORM_ASPECT[platform],
-      overlayRule: platform==="Story" ? "accroche obligatoire + logo bas centré" : (PLATFORM_OVERLAY[platform]==="aucun" ? "aucun texte sur l'image" : `texte léger toléré (${PLATFORM_MAXCHARS[platform]} car. max)`),
+      overlayRule: platform==="Story" ? "4-5 phrases fortes, tailles variées + logo bas centré" : (PLATFORM_OVERLAY[platform]==="aucun" ? "aucun texte sur l'image" : PLATFORM_OVERLAY[platform]==="fiche" ? `fiche explicative élégante (${PLATFORM_MAXCHARS[platform]} car. max)` : `1-2 phrases courtes (${PLATFORM_MAXCHARS[platform]} car. max)`),
     }));
 
     const risks = currentRiskFlags();
@@ -2797,7 +2852,8 @@ function buildCalendarCard(item, inCampaign){
         const ratio = ASPECTS[aspectKey].w / ASPECTS[aspectKey].h;
         const size = ratio > 1.15 ? "1792x1024" : ratio < 0.85 ? "1024x1792" : "1024x1024";
         try{
-          let dataUrl = await callProviderImage(item.imagePrompt, size);
+          const siblingImage = getCampaignSiblingImage(item.campaignId, item.id);
+          let dataUrl = await callProviderImage(item.imagePrompt, size, siblingImage ? [siblingImage] : undefined);
           let logoApplied = false;
           if(logoRequiredFor(item.platform)){
             const composited = await compositeBrandSignature(dataUrl, item.platform);
@@ -3523,6 +3579,61 @@ function formatPackReportText(r){
 function dryRun_marker(r){ return r.isDryRun ? `TEST PACK SDZ (aucune donnée modifiée)` : `IMPORT PACK SDZ`; }
 function dryRunFlagFromReport(r){ return !!r.isDryRun; }
 
+function buildModulesReportText(){
+  const lines = [];
+  lines.push("RAPPORT DES MODULES SDZ APP");
+  lines.push(`Généré le ${new Date().toLocaleString("fr-FR")}`);
+  lines.push("");
+  lines.push("=== PROGRESSION ===");
+  let totalOfficial = 0, totalTarget = 0;
+  MODULE_PACK_TYPES.forEach(pt=>{
+    const count = state.modules.filter(m=>m.sourcePack===pt).length;
+    const target = PACK_TARGETS[pt];
+    totalOfficial += count; totalTarget += target;
+    lines.push(`${PACK_LABELS[pt]} : ${count} / ${target}${state.packVersions[pt] ? ` (v${state.packVersions[pt]})` : ""}`);
+  });
+  lines.push(`TOTAL OFFICIEL : ${totalOfficial} / ${totalTarget}`);
+  const autresCount = state.modules.length - totalOfficial;
+  if(autresCount>0) lines.push(`Autres modules (hors des 3 packs officiels) : ${autresCount}`);
+  lines.push("");
+
+  lines.push("=== RÉPARTITION PAR CATÉGORIE (tous modules confondus) ===");
+  const byCategory = {};
+  state.modules.forEach(m=>{ const c=m.category||"(sans catégorie)"; byCategory[c]=(byCategory[c]||0)+1; });
+  CATEGORIES.forEach(cat=>{ lines.push(`${cat} : ${byCategory[cat]||0} module(s)`); });
+  const unknownCats = Object.keys(byCategory).filter(c=>!CATEGORIES.includes(c));
+  unknownCats.forEach(cat=> lines.push(`${cat} (catégorie non standard) : ${byCategory[cat]} module(s)`));
+  lines.push("");
+
+  const groups = {};
+  state.modules.forEach(m=>{
+    const pack = (m.sourcePack && MODULE_PACK_TYPES.includes(m.sourcePack)) ? m.sourcePack : "AUTRES";
+    groups[pack] = groups[pack] || {};
+    const cat = m.category || "(sans catégorie)";
+    groups[pack][cat] = groups[pack][cat] || [];
+    groups[pack][cat].push(m);
+  });
+
+  [...MODULE_PACK_TYPES, "AUTRES"].forEach(pack=>{
+    if(!groups[pack]) return;
+    lines.push(`\n========================================`);
+    lines.push(pack==="AUTRES" ? "AUTRES MODULES (hors pack officiel)" : `${PACK_LABELS[pack]} (${pack})`);
+    lines.push(`========================================`);
+    Object.keys(groups[pack]).sort().forEach(cat=>{
+      lines.push(`\n--- ${cat} ---`);
+      groups[pack][cat].forEach(m=>{
+        lines.push(`\n[${m.title}]`);
+        lines.push(m.content);
+      });
+    });
+  });
+
+  lines.push("\n========================================");
+  lines.push("FIN DU RAPPORT");
+  lines.push("========================================");
+  return lines.join("\n");
+}
+
 function buildSettingsTab(){
   const frag = el("div",{});
 
@@ -3687,6 +3798,17 @@ function buildSettingsTab(){
     const auditBox = el("div",{class:"card", style:"font-family:monospace;font-size:11px;white-space:pre-wrap;margin:0 0 16px;max-height:360px;overflow:auto;"}, auditLines.join("\n"));
     frag.appendChild(el("p",{class:"label", style:"margin-bottom:6px;"}, "Audit des modules"));
     frag.appendChild(auditBox);
+
+    frag.appendChild(el("button",{class:"btn-secondary", style:"margin-bottom:16px;", onclick:()=>{
+      const report = buildModulesReportText();
+      const blob = new Blob([report], {type:"text/plain;charset=utf-8"});
+      const link = document.createElement("a");
+      link.download = `SDZ-App-modules-${new Date().toISOString().slice(0,10)}.txt`;
+      link.href = URL.createObjectURL(blob);
+      link.click();
+    }}, [svgIcon(ICONS.download,14), el("span",{},"Exporter les modules pour ChatGPT")]));
+    frag.appendChild(el("p",{style:"font-size:11px;color:var(--muted2);margin:-12px 0 16px;"},
+      "Génère un fichier texte lisible : progression (X/48, X/62, X/54, X/164), et le contenu complet de chaque module déjà écrit, groupé par pack et catégorie — à coller dans une conversation ChatGPT pour qu'il sache où vous en êtes et ce qu'il reste à créer."));
   }
 
   const packReportBox = el("div",{class:"card", style:"font-family:monospace;font-size:11px;white-space:pre-wrap;margin:8px 0 12px;display:none;max-height:420px;overflow:auto;"});
