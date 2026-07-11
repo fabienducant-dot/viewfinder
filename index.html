@@ -1963,7 +1963,7 @@ function sendToAudit(ctx){
 function buildInspector({ platform, missionKey, prestation, style, textMods, imageMods, textIgnored, imageIgnored, duplicatesRemoved, aspect, overlayRule }){
   const row = (label, val) => el("div",{style:"display:flex;justify-content:space-between;gap:10px;font-size:12px;padding:4px 0;border-bottom:1px solid var(--border);"},
     [el("span",{style:"color:var(--muted2);"}, label), el("span",{style:"text-align:right;color:var(--muted);"}, val || "—")]);
-  const modList = (mods) => mods.length
+  const modList = (mods) => (Array.isArray(mods) && mods.length)
     ? mods.map(m=>`${m.category} · ${m.title}`).join(", ")
     : "aucun module activé";
 
@@ -1977,7 +1977,7 @@ function buildInspector({ platform, missionKey, prestation, style, textMods, ima
   body.appendChild(row("Prestation concernée", prestation ? prestation.name : "non spécifiée"));
   body.appendChild(row("Style visuel", style ? style.name : "aucun"));
   body.appendChild(row("Saison actuelle", getCurrentSeasonFR()));
-  body.appendChild(row("Format image", `${aspect} (${ASPECTS[aspect].w}x${ASPECTS[aspect].h})`));
+  body.appendChild(row("Format image", ASPECTS[aspect] ? `${aspect} (${ASPECTS[aspect].w}x${ASPECTS[aspect].h})` : (aspect || "non défini")));
   body.appendChild(row("Contrainte texte-sur-image", overlayRule));
   body.appendChild(row("Modules texte injectés", modList(textMods)));
   body.appendChild(row("Modules texte ignorés (budget de contexte)", textIgnored && textIgnored.length ? modList(textIgnored) : "aucun"));
@@ -2123,7 +2123,7 @@ function buildPostTab(){
     }}, m));
   });
   frag.appendChild(missionRow);
-  if(state.mission) frag.appendChild(el("p",{class:"sublabel"}, `Ton : ${MISSIONS[state.mission].ton} · CTA suggéré : ${MISSIONS[state.mission].cta}`));
+  if(state.mission && MISSIONS[state.mission]) frag.appendChild(el("p",{class:"sublabel"}, `Ton : ${MISSIONS[state.mission].ton} · CTA suggéré : ${MISSIONS[state.mission].cta}`));
 
   if(!isCampaign){
     frag.appendChild(el("p",{class:"label"},"Plateforme"));
