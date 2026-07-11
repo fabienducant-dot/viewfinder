@@ -368,6 +368,7 @@ const state = {
   filters: { brightness: 100, contrast: 105, saturate: 110, grayscale: 0 },
   overlay: { text: "", x: 50, y: 85, size: 56, color: "#F4F1EA" },
   logoOverlay: { assetId: "", x: 50, y: 88, size: 16 },
+  logoPublicUrl: (LS.get("vf-logo-sync", null) || {}).publicUrl || "",
   modules: LS.get("vf-modules", DEFAULT_MODULES),
   packHistory: LS.get("vf-pack-imports", []),
   packVersions: LS.get("vf-pack-versions", {}),
@@ -536,6 +537,7 @@ function normalizeState(){
   state.qualityScores = (state.qualityScores && typeof state.qualityScores==="object" && !Array.isArray(state.qualityScores))
     ? state.qualityScores : { charte:7, coherence:7, adaptation:7, originalite:7, clarte:7, conversion:7 };
   state.makeWebhook = typeof state.makeWebhook==="string" ? state.makeWebhook : "";
+  state.logoPublicUrl = typeof state.logoPublicUrl==="string" ? state.logoPublicUrl : "";
   state.mission = typeof state.mission==="string" ? state.mission : "";
   state.topic = typeof state.topic==="string" ? state.topic : "";
   state.prestationName = typeof state.prestationName==="string" ? state.prestationName : "";
@@ -656,9 +658,93 @@ async function compositeRealLogo(baseDataUrl){
   }
 }
 
+/* Signature de marque complète et obligatoire après toute génération : vrai logo + nom de la
+   marque + ville, toujours au même endroit, avec le même rendu — jamais une signature "imaginée"
+   par l'IA. C'est la seule signature considérée comme valide. */
+async function compositeBrandSignature(baseDataUrl, platform){
+  const logoResult = await compositeRealLogo(baseDataUrl);
+  if(!logoResult.applied) return logoResult; // sans logo réel disponible, rien de fiable à ancrer le texte dessus
+  try{
+    const img = await loadImage(logoResult.dataUrl);
+    const canvas = document.createElement("canvas");
+    canvas.width = img.width; canvas.height = img.height;
+    const ctx = canvas.getContext("2d");
+    ctx.drawImage(img, 0, 0);
+
+    const logoW = canvas.width * (state.logoOverlay.size/100);
+    const cx = (state.logoOverlay.x/100) * canvas.width;
+    const logoBottomY = (state.logoOverlay.y/100) * canvas.height + logoW/2;
+
+    const brandFontSize = Math.max(14, Math.round(canvas.width * 0.026));
+    const cityFontSize = Math.max(10, Math.round(canvas.width * 0.016));
+
+    ctx.textAlign = "center";
+    ctx.textBaseline = "top";
+    ctx.shadowColor = "rgba(0,0,0,0.65)";
+    ctx.shadowBlur = 5;
+
+    ctx.fillStyle = "#F5F4EF"; // blanc cassé de la charte SDZ
+    ctx.font = `600 ${brandFontSize}px Georgia, 'Times New Roman', serif`;
+    ctx.fillText("LA SANTÉ DES ZÈBRES", cx, logoBottomY + 8);
+
+    ctx.fillStyle = "#C9A227"; // or officiel SDZ
+    ctx.font = `${cityFontSize}px Georgia, 'Times New Roman', serif`;
+    ctx.fillText("RAISMES", cx, logoBottomY + 8 + brandFontSize + 6);
+
+    ctx.shadowBlur = 0;
+    return { dataUrl: canvas.toDataURL("image/png"), applied:true };
+  }catch(e){
+    return logoResult; // dégradation propre : au pire, le logo reste appliqué sans le texte
+  }
+}
+
 /* true si cette plateforme/ce réglage exige le vrai logo sur l'image (Story : toujours ; sinon selon la DA). */
 function logoRequiredFor(platform){
   return platform==="Story" || state.da.presenceLogo;
+}
+
+/* ---------- Logo comme véritable image de référence pour les générations API compatibles ---------- */
+let _brandRefUrlCache = null; // ne recalcule/re-télécharge jamais deux fois dans la même session
+function getBrandReferenceImages(){
+  if(_brandRefUrlCache) return _brandRefUrlCache;
+  const urls = [];
+  if(state.logoPublicUrl) urls.push(state.logoPublicUrl);
+  // Montages de marque validés, marqués "reference" dans la Bibliothèque (optionnel, 1 seul suffit en pratique)
+  const validatedRef = state.images.find(i=>i.assetType==="reference");
+  if(validatedRef && state.logoPublicUrl) {
+    // seule l'URL publique du logo est transmissible à l'API (l'image de montage reste locale pour l'instant) ;
+    // on ne pousse pas ici une seconde URL non hébergée pour éviter d'envoyer une donnée invalide à l'API.
+  }
+  _brandRefUrlCache = urls;
+  return urls;
+}
+function resetBrandReferenceCache(){ _brandRefUrlCache = null; }
+
+/* Pousse le logo actuellement marqué comme "logo" au serveur (une seule fois par changement réel),
+   et déduit l'URL publique stable. Ne re-télécharge/reconvertit jamais inutilement. */
+async function syncOfficialLogoToServer(){
+  const logoAsset = state.images.find(i=>i.assetType==="logo");
+  if(!logoAsset) return { ok:false, reason:"Aucune image marquée comme logo dans la Bibliothèque." };
+  const already = LS.get("vf-logo-sync", null);
+  if(already && already.assetId===logoAsset.id && already.dataUrlHash===hashPrompt(logoAsset.dataUrl)){
+    state.logoPublicUrl = already.publicUrl;
+    resetBrandReferenceCache();
+    return { ok:true, alreadySynced:true, publicUrl: already.publicUrl };
+  }
+  try{
+    const res = await fetch("/.netlify/functions/save-logo", {
+      method:"POST", headers: syncHeaders(),
+      body: JSON.stringify({ dataUrl: logoAsset.dataUrl }),
+    });
+    if(!res.ok) return { ok:false, reason:`Échec de l'envoi au serveur (HTTP ${res.status}).` };
+    const publicUrl = `${location.origin}/logo.png`;
+    LS.set("vf-logo-sync", { assetId: logoAsset.id, dataUrlHash: hashPrompt(logoAsset.dataUrl), publicUrl, syncedAt: Date.now() });
+    state.logoPublicUrl = publicUrl;
+    resetBrandReferenceCache();
+    return { ok:true, alreadySynced:false, publicUrl };
+  }catch(e){
+    return { ok:false, reason: String(e.message||e) };
+  }
 }
 
 /* ============================================================
@@ -1039,10 +1125,13 @@ function buildImagePromptFull(platform, topic, aspectKey, missionKey){
       ? "Pas de texte incrusté sur l'image."
       : `Texte léger toléré sur l'image (accroche courte, ${PLATFORM_MAXCHARS[platform]} caractères max).`;
   const wantsRealLogo = logoRequiredFor(platform);
-  const logoRule = wantsRealLogo
-    ? "Ne dessine et n'invente aucun logo, symbole, monogramme ou texte de marque sur l'image — le vrai logo de l'entreprise sera ajouté automatiquement après coup par-dessus. Laisse simplement, en bas de l'image, une zone dégagée et sobre (pas de motif chargé ni de texte à cet endroit) pour l'accueillir proprement."
-    : "Pas de logo sur cette image.";
-  const brandAuthenticityRule = "Ne crée aucun logo. Ne dessine aucun emblème, écusson ou monogramme de marque, même approximatif. N'invente aucun nom de marque, aucun slogan, aucun @identifiant ou pseudo de réseau social, et n'écris aucun texte qui imiterait une marque ou un mot-dièse — le seul texte autorisé sur l'image est l'accroche définie ci-dessus, s'il y en a une.";
+  const usingLogoReference = wantsRealLogo && !!state.logoPublicUrl;
+  const logoRule = usingLogoReference
+    ? "Le fichier logo fourni est une référence d'identité officielle. Ne le redessine pas, ne le réinterprète pas, ne le simplifie pas et ne génère aucune variante. Utilise-le uniquement pour comprendre les proportions, l'or officiel et la présence visuelle attendue. Prévois une zone signature naturelle dans la composition. Le vrai logo et les textes officiels seront appliqués ensuite par le logiciel."
+    : wantsRealLogo
+      ? "Ne dessine et n'invente aucun logo, symbole, monogramme ou texte de marque sur l'image — le vrai logo de l'entreprise sera ajouté automatiquement après coup par-dessus. Laisse simplement, en bas de l'image, une zone dégagée et sobre (pas de motif chargé ni de texte à cet endroit) pour l'accueillir proprement."
+      : "Pas de logo sur cette image.";
+  const brandAuthenticityRule = "Interdiction stricte : aucun faux logo, aucun faux zèbre, aucun faux emblème de marque, aucun nom de marque généré, aucune mention inventée de \"Raismes\" ou de tout autre lieu, aucune URL ou @identifiant inventé, aucun slogan ou mot-dièse imité — le seul texte autorisé sur l'image est l'accroche définie ci-dessus, s'il y en a une.";
   const selectedProvider = state.apiProviders.find(p=>p.id===state.selectedProviderId);
   const wantsKeywords = selectedProvider && KEYWORD_STYLE_PROVIDERS.includes(selectedProvider.label);
   return cleanPrompt(`Génère une image pour cette marque en respectant strictement :
@@ -1188,10 +1277,11 @@ async function callProviderText(provider, systemPrompt, userPrompt){
   return data.text || "";
 }
 async function callProviderImage(prompt, size){
+  const referenceImageUrls = getBrandReferenceImages();
   const res = await fetch("/.netlify/functions/generate-image", {
     method:"POST",
     headers: { "Content-Type":"application/json" },
-    body: JSON.stringify({ prompt, size }),
+    body: JSON.stringify({ prompt, size, referenceImageUrls: referenceImageUrls.length ? referenceImageUrls : undefined }),
   });
   const data = await res.json();
   if(!res.ok || data.error) throw new Error(data.error || `Erreur ${res.status}`);
@@ -1512,8 +1602,8 @@ function buildLibraryTab(){
   frag.appendChild(el("p",{class:"sublabel", style:"margin-top:0;"},
     "Astuce : marque tes actifs de marque (logo, signature, filigrane, texture, cadre, motif) via le sélecteur sous chaque vignette — ils seront automatiquement mentionnés dans les prompts image, pour que l'IA les utilise tels quels au lieu d'en recréer."));
 
-  const ASSET_TYPES = ["", "logo", "signature", "filigrane", "texture", "cadre", "motif"];
-  const ASSET_LABELS = { "": "Pas un actif de marque", logo:"Logo", signature:"Signature", filigrane:"Filigrane", texture:"Texture", cadre:"Cadre", motif:"Motif" };
+  const ASSET_TYPES = ["", "logo", "signature", "filigrane", "texture", "cadre", "motif", "reference"];
+  const ASSET_LABELS = { "": "Pas un actif de marque", logo:"Logo", signature:"Signature", filigrane:"Filigrane", texture:"Texture", cadre:"Cadre", motif:"Motif", reference:"Montage de référence validé" };
 
   const filterRow = el("div",{class:"pillrow", style:"margin-bottom:14px;"});
   filterRow.appendChild(el("button",{class:"pill"+(!state.libraryAssetFilter?" active":""), onclick:()=>{ state.libraryAssetFilter=false; renderLibraryGrid(); }}, "Toutes les photos"));
@@ -1562,13 +1652,68 @@ function buildLibraryTab(){
       assetSelect.addEventListener("change", e=>{
         img.assetType = e.target.value || null;
         LS.set("vf-images", state.images);
+        renderLibraryGrid();
       });
-      grid.appendChild(el("div",{},[vfWrap(thumb), assetSelect]));
+      const wrap = el("div",{}, [vfWrap(thumb), assetSelect]);
+
+      if(img.assetType==="logo"){
+        const syncRecord = LS.get("vf-logo-sync", null);
+        const isActiveOfficialLogo = syncRecord && syncRecord.assetId===img.id;
+        const logoBox = el("div",{style:"margin-top:6px;padding:8px;border:1px solid var(--border);border-radius:8px;"});
+        const logoMsg = el("p",{style:"font-size:11px;min-height:14px;margin:4px 0 0;"},"");
+
+        if(isActiveOfficialLogo){
+          logoBox.appendChild(el("p",{style:"font-size:11px;color:var(--green);font-weight:600;margin:0 0 4px;"}, "✓ Logo officiel actif"));
+          logoBox.appendChild(el("p",{style:"font-size:10px;color:var(--muted2);word-break:break-all;margin:0;"}, syncRecord.publicUrl));
+        } else {
+          const btn = el("button",{class:"btn-small", onclick: async (e)=>{
+            e.stopPropagation();
+            logoMsg.textContent = "Envoi en cours...";
+            const result = await syncOfficialLogoToServer();
+            logoMsg.style.color = result.ok ? "var(--green)" : "var(--coral)";
+            logoMsg.textContent = result.ok ? "✓ Logo officiel défini et hébergé." : `Échec : ${result.reason}`;
+            renderLibraryGrid();
+          }}, "Définir comme logo officiel SDZ");
+          logoBox.appendChild(btn);
+        }
+        logoBox.appendChild(logoMsg);
+
+        // Avertissement fond opaque (asynchrone, ne bloque pas l'affichage)
+        const warnMsg = el("p",{style:"font-size:10px;color:var(--amber);margin:4px 0 0;display:none;"}, "⚠ Fond opaque détecté — un PNG transparent est recommandé pour un rendu propre.");
+        logoBox.appendChild(warnMsg);
+        checkImageHasTransparency(img.dataUrl).then(hasTransparency=>{
+          if(!hasTransparency) warnMsg.style.display = "block";
+        });
+
+        wrap.appendChild(logoBox);
+      }
+
+      grid.appendChild(wrap);
     });
     gridHolder.appendChild(grid);
   }
   renderLibraryGrid();
   return frag;
+}
+
+/* Vérification légère (coins de l'image) pour avertir si un logo semble ne pas avoir de fond
+   transparent — un PNG transparent est recommandé pour un rendu propre en surimpression. */
+async function checkImageHasTransparency(dataUrl){
+  try{
+    const img = await loadImage(dataUrl);
+    const canvas = document.createElement("canvas");
+    canvas.width = img.width; canvas.height = img.height;
+    const ctx = canvas.getContext("2d");
+    ctx.drawImage(img, 0, 0);
+    const corners = [[0,0],[canvas.width-1,0],[0,canvas.height-1],[canvas.width-1,canvas.height-1]];
+    for(const [x,y] of corners){
+      const [,,,a] = ctx.getImageData(x, y, 1, 1).data;
+      if(a < 250) return true; // au moins un coin transparent ou semi-transparent détecté
+    }
+    return false;
+  }catch(e){
+    return true; // en cas de doute (erreur de lecture), ne pas afficher un faux avertissement
+  }
 }
 
 /* ============================================================
@@ -2323,7 +2468,7 @@ function buildPostTab(){
           let dataUrl = await callProviderImage(state.imagePrompt, size);
           let logoApplied = false;
           if(logoRequiredFor(platform)){
-            const composited = await compositeRealLogo(dataUrl);
+            const composited = await compositeBrandSignature(dataUrl, platform);
             dataUrl = composited.dataUrl; logoApplied = composited.applied;
           }
           const id = uid();
@@ -2353,7 +2498,7 @@ function buildPostTab(){
       let dataUrl = await resizeImageFile(file);
       let logoApplied = false;
       if(logoRequiredFor(platform)){
-        const composited = await compositeRealLogo(dataUrl);
+        const composited = await compositeBrandSignature(dataUrl, platform);
         dataUrl = composited.dataUrl; logoApplied = composited.applied;
       }
       const id = uid();
@@ -2612,7 +2757,7 @@ function buildCalendarCard(item, inCampaign){
           let dataUrl = await callProviderImage(item.imagePrompt, size);
           let logoApplied = false;
           if(logoRequiredFor(item.platform)){
-            const composited = await compositeRealLogo(dataUrl);
+            const composited = await compositeBrandSignature(dataUrl, item.platform);
             dataUrl = composited.dataUrl; logoApplied = composited.applied;
           }
           item.imageDataUrl = dataUrl; item.logoApplied = logoApplied;
@@ -2634,7 +2779,7 @@ function buildCalendarCard(item, inCampaign){
       let dataUrl = await resizeImageFile(file);
       let logoApplied = false;
       if(logoRequiredFor(item.platform)){
-        const composited = await compositeRealLogo(dataUrl);
+        const composited = await compositeBrandSignature(dataUrl, item.platform);
         dataUrl = composited.dataUrl; logoApplied = composited.applied;
       }
       item.imageDataUrl = dataUrl; item.logoApplied = logoApplied;
