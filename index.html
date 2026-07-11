@@ -132,7 +132,18 @@ function getLocalUpdatedAt(){ return Number(localStorage.getItem("vf-updated-at"
 function bumpLocalUpdatedAt(){ localStorage.setItem("vf-updated-at", String(Date.now())); }
 
 const LS = {
-  get(key, fallback){ try{ const v = localStorage.getItem(key); return v===null? fallback : JSON.parse(v);}catch(e){return fallback;} },
+  get(key, fallback){
+    try{
+      const v = localStorage.getItem(key);
+      if(v===null) return fallback;
+      const parsed = JSON.parse(v);
+      // guérison rétroactive : une valeur stockée "null" ou de mauvais type ne doit jamais remplacer un tableau/objet attendu
+      if(parsed===null || parsed===undefined) return fallback;
+      if(Array.isArray(fallback) && !Array.isArray(parsed)) return fallback;
+      if(fallback && typeof fallback==="object" && !Array.isArray(fallback) && (typeof parsed!=="object" || Array.isArray(parsed))) return fallback;
+      return parsed;
+    }catch(e){ return fallback; }
+  },
   set(key, val){
     try{
       localStorage.setItem(key, JSON.stringify(val));
@@ -396,11 +407,145 @@ const state = {
   auditHistory: LS.get("vf-audit", []),
   auditFilter: "Toutes",
 };
+state.images = Array.isArray(state.images) ? state.images : [];
+state.styles = Array.isArray(state.styles) ? state.styles : [];
 state.selectedId = state.images[0] ? state.images[0].id : null;
 (function setDefaultStyle(){
-  const luxe = state.styles.find(s => (s.name||"").trim().toLowerCase()==="luxe silencieux");
+  const luxe = state.styles.find(s => s && (s.name||"").trim().toLowerCase()==="luxe silencieux");
   if(luxe) state.styleId = luxe.id;
 })();
+
+/* ============================================================
+   NORMALISATION — garantit qu'aucune propriété utilisée par l'app
+   ne peut jamais être null/undefined/du mauvais type, quelle que soit
+   la provenance de la donnée (localStorage, Netlify Blobs, import JSON,
+   ancienne version de sauvegarde...).
+============================================================ */
+function normalizeModule(m){
+  if(!m || typeof m!=="object") return null;
+  return {
+    id: m.id || uid(),
+    category: (typeof m.category==="string" && m.category) ? m.category : (CATEGORIES[0]||"Univers de marque"),
+    title: typeof m.title==="string" ? m.title : "",
+    content: typeof m.content==="string" ? m.content : "",
+    enabled: typeof m.enabled==="boolean" ? m.enabled : true,
+    createdAt: m.createdAt || Date.now(),
+    updatedAt: m.updatedAt || undefined,
+    sourcePack: m.sourcePack || undefined,
+    packVersion: m.packVersion || undefined,
+  };
+}
+function normalizeStyle(s){
+  if(!s || typeof s!=="object") return null;
+  return {
+    id: s.id || uid(),
+    name: typeof s.name==="string" && s.name ? s.name : "(style sans nom)",
+    description: typeof s.description==="string" ? s.description : "",
+    objectif: typeof s.objectif==="string" ? s.objectif : "",
+    ambiance: typeof s.ambiance==="string" ? s.ambiance : "",
+    palette: typeof s.palette==="string" ? s.palette : "",
+    matieres: typeof s.matieres==="string" ? s.matieres : "",
+    lumiere: typeof s.lumiere==="string" ? s.lumiere : "",
+    composition: typeof s.composition==="string" ? s.composition : "",
+    emotion: typeof s.emotion==="string" ? s.emotion : "",
+    interdits: typeof s.interdits==="string" ? s.interdits : "",
+    utilisation: Array.isArray(s.utilisation) ? s.utilisation : [],
+    priorite: typeof s.priorite==="number" && !isNaN(s.priorite) ? s.priorite : 1,
+    sourcePack: s.sourcePack || undefined,
+    packVersion: s.packVersion || undefined,
+    createdAt: s.createdAt || undefined,
+  };
+}
+function normalizeImage(img){
+  if(!img || typeof img!=="object") return null;
+  return {
+    id: img.id || uid(),
+    name: typeof img.name==="string" ? img.name : "image",
+    dataUrl: typeof img.dataUrl==="string" ? img.dataUrl : "",
+    tags: Array.isArray(img.tags) ? img.tags : [],
+    favorite: !!img.favorite,
+    assetType: img.assetType || undefined,
+    logoApplied: !!img.logoApplied,
+  };
+}
+function normalizeScheduledPost(p){
+  if(!p || typeof p!=="object") return null;
+  return {
+    id: p.id || uid(),
+    campaignId: p.campaignId || undefined,
+    campaignTopic: p.campaignTopic || undefined,
+    campaignLabel: p.campaignLabel || undefined,
+    platform: typeof p.platform==="string" && p.platform ? p.platform : "Instagram",
+    mission: typeof p.mission==="string" ? p.mission : "",
+    topic: typeof p.topic==="string" ? p.topic : "",
+    imagePrompt: typeof p.imagePrompt==="string" ? p.imagePrompt : "",
+    textPrompt: p.textPrompt===undefined ? "" : p.textPrompt, // null volontairement conservé (Story / formats sans texte)
+    textFinal: p.textFinal===undefined ? "" : p.textFinal,     // idem
+    imageDataUrl: typeof p.imageDataUrl==="string" ? p.imageDataUrl : null,
+    logoApplied: !!p.logoApplied,
+    schedulable: p.schedulable===undefined ? true : !!p.schedulable,
+    scheduledAt: typeof p.scheduledAt==="number" ? p.scheduledAt : null,
+    status: typeof p.status==="string" && p.status ? p.status : "brouillon",
+    createdAt: p.createdAt || Date.now(),
+    sentAt: p.sentAt || null,
+    error: p.error || null,
+  };
+}
+function normalizeDirectionArtistique(da){
+  const base = { ...DEFAULT_DA };
+  if(da && typeof da==="object" && !Array.isArray(da)){
+    Object.keys(DEFAULT_DA).forEach(k=>{
+      if(da[k]!==undefined && da[k]!==null) base[k] = da[k];
+    });
+  }
+  return base;
+}
+function normalizeCampaignHistoryEntry(h){
+  if(!h || typeof h!=="object") return null;
+  return {
+    id: h.id || uid(),
+    packType: h.packType || "(inconnu)",
+    version: h.version || null,
+    fileName: h.fileName || "",
+    importedAt: h.importedAt || Date.now(),
+    modulesRead: h.modulesRead || 0,
+    added: h.added || 0,
+    updated: h.updated || 0,
+    identical: h.identical || 0,
+    errors: h.errors || 0,
+    blobsStatus: h.blobsStatus || "skipped",
+  };
+}
+/* Point d'entrée unique : à appeler après tout chargement externe (localStorage au démarrage,
+   restauration Netlify Blobs, import JSON, restauration de sauvegarde) et avant chaque rendu/génération. */
+function normalizeState(){
+  state.modules = Array.isArray(state.modules) ? state.modules.map(normalizeModule).filter(Boolean) : [];
+  state.styles = Array.isArray(state.styles) ? state.styles.map(normalizeStyle).filter(Boolean) : [];
+  if(!state.styles.length) state.styles = DEFAULT_STYLES.map(normalizeStyle);
+  state.images = Array.isArray(state.images) ? state.images.map(normalizeImage).filter(Boolean) : [];
+  state.da = normalizeDirectionArtistique(state.da);
+  state.history = Array.isArray(state.history) ? state.history : [];
+  state.auditHistory = Array.isArray(state.auditHistory) ? state.auditHistory : [];
+  state.lab = Array.isArray(state.lab) ? state.lab : [];
+  state.apiProviders = Array.isArray(state.apiProviders) ? state.apiProviders : [];
+  state.productionModes = Array.isArray(state.productionModes) ? state.productionModes : [];
+  state.campaign = Array.isArray(state.campaign) ? state.campaign : [];
+  state.scheduled = Array.isArray(state.scheduled) ? state.scheduled.map(normalizeScheduledPost).filter(Boolean) : [];
+  state.packHistory = Array.isArray(state.packHistory) ? state.packHistory.map(normalizeCampaignHistoryEntry).filter(Boolean) : [];
+  state.packVersions = (state.packVersions && typeof state.packVersions==="object" && !Array.isArray(state.packVersions)) ? state.packVersions : {};
+  state.qualityScores = (state.qualityScores && typeof state.qualityScores==="object" && !Array.isArray(state.qualityScores))
+    ? state.qualityScores : { charte:7, coherence:7, adaptation:7, originalite:7, clarte:7, conversion:7 };
+  state.makeWebhook = typeof state.makeWebhook==="string" ? state.makeWebhook : "";
+  state.mission = typeof state.mission==="string" ? state.mission : "";
+  state.topic = typeof state.topic==="string" ? state.topic : "";
+  state.prestationName = typeof state.prestationName==="string" ? state.prestationName : "";
+  state.textPasted = typeof state.textPasted==="string" ? state.textPasted : "";
+  // l'id sélectionné doit toujours pointer vers un élément qui existe réellement, sinon on le réinitialise
+  if(state.selectedId && !state.images.some(i=>i.id===state.selectedId)) state.selectedId = state.images[0] ? state.images[0].id : null;
+  if(state.postImageId && !state.images.some(i=>i.id===state.postImageId)) state.postImageId = null;
+  if(state.styleId && !state.styles.some(s=>s.id===state.styleId)) state.styleId = state.styles[0] ? state.styles[0].id : "";
+}
+normalizeState();
 
 /* ============================================================
    HELPERS DOM
@@ -1082,7 +1227,7 @@ function gatherSyncData(){
 function applySyncData(data){
   if(!data || typeof data!=="object") return;
   Object.entries(data).forEach(([k,v])=>{
-    if(SYNC_KEYS.includes(k) && v!==undefined){
+    if(SYNC_KEYS.includes(k) && v!==undefined && v!==null){
       // écriture directe dans localStorage : on ne veut pas redéclencher une synchro auto ici
       try{ localStorage.setItem(k, JSON.stringify(v)); }catch(e){}
     }
@@ -3393,6 +3538,7 @@ function buildSettingsTab(){
       return;
     }
 
+    normalizeState();
     if(touchedModules) LS.set("vf-modules", state.modules);
     if(touchedDa) LS.set("vf-da", state.da);
     if(touchedStyles) LS.set("vf-styles", state.styles);
@@ -3576,6 +3722,7 @@ function buildSettingsTab(){
    ROUTEUR
 ============================================================ */
 function renderMain(){
+  normalizeState();
   const main = document.getElementById("main");
   main.innerHTML = "";
   const builders = {
