@@ -662,15 +662,24 @@ async function getAutoTransparentLogo(logoAsset){
 
   const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
   const d = imageData.data;
-  const WHITE_THRESHOLD = 235; // au-delà, considéré comme "fond" à retirer
-  const FEATHER_RANGE = 40;    // adoucissement du contour pour éviter un bord crénelé
+
+  // La couleur de fond réelle est déduite des coins (peu importe qu'elle soit blanche, noire, ou autre),
+  // plutôt que de supposer un fond blanc — sinon un fond noir plein (comme ici) n'était jamais détecté.
+  const cornerSamples = corners.map(([x,y])=>{
+    const p = ctx.getImageData(x,y,1,1).data;
+    return [p[0], p[1], p[2]];
+  });
+  const bg = [0,1,2].map(ch => Math.round(cornerSamples.reduce((s,c)=>s+c[ch],0) / cornerSamples.length));
+
+  const DIST_THRESHOLD = 40;   // en dessous, considéré comme faisant partie du fond à retirer
+  const FEATHER_RANGE = 35;    // adoucissement du contour pour éviter un bord crénelé
   for(let i=0; i<d.length; i+=4){
     const r=d[i], g=d[i+1], b=d[i+2];
-    const minChannel = Math.min(r,g,b);
-    if(minChannel >= WHITE_THRESHOLD){
+    const dist = Math.sqrt((r-bg[0])**2 + (g-bg[1])**2 + (b-bg[2])**2);
+    if(dist <= DIST_THRESHOLD){
       d[i+3] = 0;
-    } else if(minChannel >= WHITE_THRESHOLD - FEATHER_RANGE){
-      const t = (minChannel - (WHITE_THRESHOLD - FEATHER_RANGE)) / FEATHER_RANGE;
+    } else if(dist <= DIST_THRESHOLD + FEATHER_RANGE){
+      const t = 1 - (dist - DIST_THRESHOLD) / FEATHER_RANGE;
       d[i+3] = Math.round(d[i+3] * (1 - t));
     }
   }
