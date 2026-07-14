@@ -3932,6 +3932,52 @@ function buildSettingsTab(){
 
   frag.appendChild(syncMsg);
 
+  /* ============================================================
+     RÉINITIALISATION CIBLÉE DE LA BIBLIOTHÈQUE LOCALE
+     Fonction simple, sécurisée, ciblée : cases à cocher indépendantes, double
+     confirmation explicite, jamais de restauration serveur automatique.
+     Ne touche à rien d'autre (images, clés API, calendrier, campagnes,
+     historiques de contenus) que les clés localStorage cochées.
+  ============================================================ */
+  frag.appendChild(el("h2",{class:"section", style:"margin-top:20px;"},"Réinitialiser la bibliothèque"));
+  frag.appendChild(el("p",{class:"sublabel"}, "Supprime uniquement ce que tu coches ci-dessous, sur cet appareil. N'affecte jamais les images, les clés API, le calendrier, les campagnes, ni les historiques de contenus."));
+
+  const RESET_OPTIONS = [
+    { key:"modules", label:"Modules et connaissances", storageKeys:["vf-modules"], checkedByDefault:true },
+    { key:"da", label:"Direction artistique", storageKeys:["vf-da"], checkedByDefault:false },
+    { key:"styles", label:"Styles", storageKeys:["vf-styles"], checkedByDefault:false },
+    { key:"imports", label:"Historique et versions des imports", storageKeys:["vf-pack-versions","vf-pack-imports"], checkedByDefault:true },
+  ];
+  const resetChecks = {};
+  RESET_OPTIONS.forEach(opt=>{
+    const box = el("input",{type:"checkbox"});
+    box.checked = opt.checkedByDefault;
+    resetChecks[opt.key] = box;
+    frag.appendChild(el("label",{style:"display:flex;align-items:center;gap:8px;margin-bottom:8px;font-size:13px;"}, [box, el("span",{}, opt.label)]));
+  });
+
+  const resetMsg = el("p",{class:"sublabel"});
+  frag.appendChild(el("button",{class:"btn-secondary", style:"margin:10px 0 4px;", onclick:()=>{
+    const selected = RESET_OPTIONS.filter(opt=>resetChecks[opt.key].checked);
+    if(selected.length===0){ resetMsg.style.color="var(--coral)"; resetMsg.textContent="Coche au moins un élément à réinitialiser."; return; }
+    const detail = selected.map(opt=>`• ${opt.label}`).join("\n");
+    if(!confirm(`Tu es sur le point de réinitialiser :\n${detail}\n\nCette action supprimera définitivement les éléments sélectionnés sur cet appareil. Continuer ?`)) return;
+    if(!confirm("Deuxième confirmation : cette suppression est irréversible sur cet appareil (aucune restauration automatique depuis le serveur). Continuer ?")) return;
+
+    selected.forEach(opt=>{
+      opt.storageKeys.forEach(k=> localStorage.removeItem(k));
+      if(opt.key==="modules") state.modules = [];
+      if(opt.key==="da") state.da = normalizeDirectionArtistique({...DEFAULT_DA});
+      if(opt.key==="styles") state.styles = [];
+      // "imports" ne touche à aucun champ de `state` directement : vf-pack-versions/vf-pack-imports
+      // sont relus depuis le stockage au moment de l'import suivant, pas conservés en mémoire ailleurs.
+    });
+    resetMsg.style.color = "var(--green)";
+    resetMsg.textContent = "Réinitialisation effectuée. Rechargement...";
+    setTimeout(()=>location.reload(), 600);
+  }}, [svgIcon(ICONS.trash,14), el("span",{},"Réinitialiser la sélection")]));
+  frag.appendChild(resetMsg);
+
   frag.appendChild(el("p",{style:"font-size:11px;color:var(--muted2);margin:20px 0 4px;border-top:1px solid var(--border);padding-top:12px;"},
     "Pack Production SDZ — système d'import définitif."));
   frag.appendChild(el("p",{class:"sublabel"}, "Sélectionne des fichiers JSON (MASTER_PRODUCTION_SDZ, MASTER_IMAGE_SDZ, MASTER_CAMPAIGN_SDZ, MASTER_DIRECTION_ARTISTIQUE, STYLES). Le type et la version sont détectés automatiquement. Un fichier structurellement invalide, ou contenant un seul élément incomplet, est intégralement rejeté (aucune modification partielle)."));
