@@ -3646,24 +3646,65 @@ function analyzePackFile(raw, dryRun){
     };
   }
 
-  // MASTER_PRODUCTION_SDZ / MASTER_IMAGE_SDZ / MASTER_CAMPAIGN_SDZ : liste de modules (comportement historique, inchangé)
+  // MASTER_PRODUCTION_SDZ / MASTER_IMAGE_SDZ / MASTER_CAMPAIGN_SDZ : liste de modules (comportement historique,
+  // conservé à l'identique pour title/content/category/dédoublonnage — seul ajout : préservation des métadonnées
+  // MASTER_IMAGE V2 (criteres/tags/status/updatedAt/id) quand le module entrant les porte, et dérivation d'un
+  // registre explicite depuis le packId du fichier importé (ex: "noir_or_v2_04" → "noir_or").
   let added=0, updated=0, identical=0;
   const moduleResults = [];
   const unknownCategories = new Set();
+  const packIdMatch = String(raw.packId||"").match(/^(.*)_v2_\d+$/);
+  const packRegistre = packIdMatch ? packIdMatch[1] : null;
 
   raw.modules.forEach(m=>{
     const title = String(m.title).trim(), content = String(m.content).trim(), category = String(m.category).trim();
     if(!CATEGORIES.includes(category)) unknownCategories.add(category);
-    const existing = state.modules.find(x=>x.title.trim().toLowerCase()===title.toLowerCase() && x.category===category);
+    // Un module V2 porte un id stable et propre : deux modules de registres différents peuvent légitimement
+    // partager un même titre (ex: "Adaptation Portrait" en Cinématographie et en Fantastique) sans être le
+    // même module. On les identifie donc par id quand il existe, et on ne retombe sur title+category — le
+    // mécanisme historique — que pour les modules qui n'en fournissent aucun (anciens packs, inchangé).
+    const incomingId = (typeof m.id==="string" && m.id.trim()) ? m.id.trim() : null;
+    const existing = incomingId
+      ? state.modules.find(x=> x.id===incomingId)
+      : state.modules.find(x=>x.title.trim().toLowerCase()===title.toLowerCase() && x.category===category);
+    const incomingCriteres = (m.criteres && typeof m.criteres==="object" && !Array.isArray(m.criteres)) ? m.criteres : undefined;
+    const incomingTags = Array.isArray(m.tags) ? m.tags : undefined;
+    const incomingStatus = (typeof m.status==="string" && m.status.trim()) ? m.status.trim() : undefined;
+    const incomingRegistre = (typeof m.registre==="string" && m.registre.trim()) ? m.registre.trim() : (packRegistre || undefined);
     if(existing){
-      if(existing.content.trim() !== content){
-        if(!dryRun){ existing.content = content; existing.updatedAt = Date.now(); existing.sourcePack = packType; existing.packVersion = incomingVersion; }
+      const contentChanged = existing.content.trim() !== content;
+      const metaChanged = JSON.stringify(existing.criteres||null)!==JSON.stringify(incomingCriteres||null)
+        || JSON.stringify(existing.tags||null)!==JSON.stringify(incomingTags||null)
+        || (existing.status||undefined)!==incomingStatus
+        || (existing.registre||undefined)!==incomingRegistre;
+      if(contentChanged || metaChanged){
+        if(!dryRun){
+          existing.content = content; existing.updatedAt = Date.now();
+          existing.sourcePack = packType; existing.packVersion = incomingVersion;
+          if(incomingCriteres!==undefined) existing.criteres = incomingCriteres;
+          if(incomingTags!==undefined) existing.tags = incomingTags;
+          if(incomingStatus!==undefined) existing.status = incomingStatus;
+          if(incomingRegistre!==undefined) existing.registre = incomingRegistre;
+        }
         updated++; moduleResults.push({title, status:"updated"});
       } else {
         identical++; moduleResults.push({title, status:"identical"});
       }
     } else {
-      if(!dryRun) state.modules.push({ id: uid(), category, title, content, enabled:true, createdAt:Date.now(), sourcePack:packType, packVersion:incomingVersion });
+      if(!dryRun){
+        const newModule = {
+          id: (typeof m.id==="string" && m.id.trim()) ? m.id.trim() : uid(),
+          category, title, content, enabled:true,
+          createdAt: Date.now(),
+          updatedAt: m.updatedAt || Date.now(),
+          sourcePack: packType, packVersion: incomingVersion,
+        };
+        if(incomingCriteres!==undefined) newModule.criteres = incomingCriteres;
+        if(incomingTags!==undefined) newModule.tags = incomingTags;
+        if(incomingStatus!==undefined) newModule.status = incomingStatus;
+        if(incomingRegistre!==undefined) newModule.registre = incomingRegistre;
+        state.modules.push(newModule);
+      }
       added++; moduleResults.push({title, status:"added"});
     }
   });
