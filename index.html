@@ -1565,6 +1565,14 @@ async function callProviderImage(prompt, size, extraReferenceDataUrls){
       referenceImageData: referenceImageData.length ? referenceImageData : undefined,
     }),
   });
+  // Contrôle du content-type avant de parser : une réponse HTML (ex: page d'erreur passerelle Netlify
+  // en cas de dépassement du délai d'exécution) ferait échouer res.json() avec un message cryptique
+  // ("Unexpected token '<'") qui masque la vraie cause. On affiche ici le statut et le corps brut à la place.
+  const contentType = res.headers.get("content-type") || "";
+  if(!contentType.includes("application/json")){
+    const rawBody = await res.text();
+    throw new Error(`Réponse non-JSON du serveur (statut ${res.status}) — probable coupure d'exécution côté Netlify si la génération a dépassé le délai autorisé. Corps brut : ${rawBody.slice(0, 300)}`);
+  }
   const data = await res.json();
   if(!res.ok || data.error) throw new Error(data.error || `Erreur ${res.status}`);
   if(data.b64) return `data:image/png;base64,${data.b64}`;
