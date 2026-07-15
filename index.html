@@ -173,6 +173,15 @@ const ASPECTS = {
 const PLATFORMS = ["Instagram","Facebook","Google Business","Article Blog Wix","Story"];
 
 const PLATFORM_ASPECT = { "Instagram":"1:1", "Facebook":"4:5", "Google Business":"4:3", "Article Blog Wix":"16:9", "Story":"9:16" };
+// Tailles réellement acceptées par gpt-image-1 (1024x1024, 1024x1536, 1536x1024 — pas les tailles
+// DALL·E 3 comme 1792x1024). Mapping direct par plateforme, pas par ratio calculé.
+const API_IMAGE_SIZE_BY_PLATFORM = {
+  "Story": "1024x1536",
+  "Instagram": "1024x1536",
+  "Facebook": "1024x1536",
+  "Google Business": "1024x1024",
+  "Article Blog Wix": "1536x1024",
+};
 const PLATFORM_OVERLAY = { "Instagram":"léger", "Facebook":"léger", "Google Business":"aucun", "Article Blog Wix":"fiche", "Story":"fort" };
 const PLATFORM_MAXCHARS = { "Instagram":110, "Facebook":120, "Google Business":0, "Article Blog Wix":220, "Story":220 };
 const PLATFORM_NOTE = {
@@ -2755,8 +2764,7 @@ function buildPostTab(){
         if(!confirm("Lancer la génération d'image via OpenAI ? Ceci consomme du crédit API.")) return;
         imgApiStatus.textContent = "Génération en cours (peut prendre 10-20 s)...";
         const t0 = Date.now();
-        const ratio = ASPECTS[PLATFORM_ASPECT[platform]].w / ASPECTS[PLATFORM_ASPECT[platform]].h;
-        const size = ratio > 1.15 ? "1792x1024" : ratio < 0.85 ? "1024x1792" : "1024x1024";
+        const size = API_IMAGE_SIZE_BY_PLATFORM[platform] || "1024x1024";
         try{
           let dataUrl = await callProviderImage(state.imagePrompt, size);
           let logoApplied = false;
@@ -3043,9 +3051,7 @@ function buildCalendarCard(item, inCampaign){
         if(!confirm("Lancer la génération d'image via OpenAI ? Ceci consomme du crédit API.")) return;
         imgApiStatus.textContent = "Génération en cours (peut prendre 10-20 s)...";
         const t0 = Date.now();
-        const aspectKey = PLATFORM_ASPECT[item.platform];
-        const ratio = ASPECTS[aspectKey].w / ASPECTS[aspectKey].h;
-        const size = ratio > 1.15 ? "1792x1024" : ratio < 0.85 ? "1024x1792" : "1024x1024";
+        const size = API_IMAGE_SIZE_BY_PLATFORM[item.platform] || "1024x1024";
         try{
           const siblingImage = getCampaignSiblingImage(item.campaignId, item.id);
           let dataUrl = await callProviderImage(item.imagePrompt, size, siblingImage ? [siblingImage] : undefined);
