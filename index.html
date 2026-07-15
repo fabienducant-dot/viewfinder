@@ -3957,7 +3957,10 @@ function buildSettingsTab(){
   frag.appendChild(el("p",{class:"sublabel"}, "Supprime uniquement ce que tu coches ci-dessous, sur cet appareil. N'affecte jamais les images, les clés API, le calendrier, les campagnes, ni les historiques de contenus."));
 
   const RESET_OPTIONS = [
-    { key:"modules", label:"Modules et connaissances", storageKeys:["vf-modules"], checkedByDefault:true },
+    // resetValue défini : la clé est réécrite avec cette valeur vide explicite plutôt que supprimée,
+    // pour éviter que LS.get(clé, DEFAUT) ne recrée un contenu par défaut au rechargement suivant
+    // (ex : vf-modules retombant sur DEFAULT_MODULES si la clé est simplement absente).
+    { key:"modules", label:"Modules et connaissances", storageKeys:["vf-modules"], checkedByDefault:true, resetValue:[] },
     { key:"da", label:"Direction artistique", storageKeys:["vf-da"], checkedByDefault:false },
     { key:"styles", label:"Styles", storageKeys:["vf-styles"], checkedByDefault:false },
     { key:"imports", label:"Historique et versions des imports", storageKeys:["vf-pack-versions","vf-pack-imports"], checkedByDefault:true },
@@ -3979,7 +3982,10 @@ function buildSettingsTab(){
     if(!confirm("Deuxième confirmation : cette suppression est irréversible sur cet appareil (aucune restauration automatique depuis le serveur). Continuer ?")) return;
 
     selected.forEach(opt=>{
-      opt.storageKeys.forEach(k=> localStorage.removeItem(k));
+      opt.storageKeys.forEach(k=>{
+        if(Object.prototype.hasOwnProperty.call(opt,"resetValue")) LS.set(k, opt.resetValue);
+        else localStorage.removeItem(k);
+      });
       if(opt.key==="modules") state.modules = [];
       if(opt.key==="da") state.da = normalizeDirectionArtistique({...DEFAULT_DA});
       if(opt.key==="styles") state.styles = [];
