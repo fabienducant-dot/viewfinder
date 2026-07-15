@@ -951,18 +951,26 @@ function logoRequiredFor(platform){
 let _brandRefUrlCache = null; // ne recalcule/re-télécharge jamais deux fois dans la même session
 function getBrandReferenceImages(){
   if(_brandRefUrlCache) return _brandRefUrlCache;
+  // Le logo n'est volontairement plus transmis ici comme référence stylistique (décision explicite :
+  // envoyer le logo à l'édition d'image risque de pousser le modèle à inventer de faux médaillons ou
+  // emblèmes proches du logo). Le vrai logo reste appliqué séparément par Canvas (voir drawCanvas()),
+  // mécanisme totalement indépendant de cette fonction, non modifié.
   const urls = [];
-  if(state.logoPublicUrl) urls.push(state.logoPublicUrl);
-  // Montages de marque validés, marqués "reference" dans la Bibliothèque (optionnel, 1 seul suffit en pratique)
-  const validatedRef = state.images.find(i=>i.assetType==="reference");
-  if(validatedRef && state.logoPublicUrl) {
-    // seule l'URL publique du logo est transmissible à l'API (l'image de montage reste locale pour l'instant) ;
-    // on ne pousse pas ici une seconde URL non hébergée pour éviter d'envoyer une donnée invalide à l'API.
-  }
   _brandRefUrlCache = urls;
   return urls;
 }
 function resetBrandReferenceCache(){ _brandRefUrlCache = null; }
+/* Images de la Bibliothèque explicitement marquées comme référence visuelle validée
+   (assetType === "reference"), transmises en base64 à la génération d'image — jamais une
+   image simplement générée ou enregistrée, uniquement celles marquées à la main. Plafonné à 3
+   (limite déjà appliquée aussi côté serveur dans generate-image.js). */
+function getValidatedReferenceImageData(){
+  return state.images
+    .filter(i=> i.assetType==="reference" && typeof i.dataUrl==="string" && i.dataUrl)
+    .slice(0, 3)
+    .map(i=> i.dataUrl);
+}
+
 
 /* Pousse le logo actuellement marqué comme "logo" au serveur (une seule fois par changement réel),
    et déduit l'URL publique stable. Ne re-télécharge/reconvertit jamais inutilement. */
@@ -1533,7 +1541,12 @@ async function callProviderText(provider, systemPrompt, userPrompt){
 }
 async function callProviderImage(prompt, size, extraReferenceDataUrls){
   const referenceImageUrls = getBrandReferenceImages();
-  const referenceImageData = (extraReferenceDataUrls||[]).filter(Boolean);
+  // Références visuelles validées en premier (assetType "reference"), puis l'éventuelle image de
+  // cohérence de campagne déjà existante (siblingImage) — combinées, plafonnées à 3 (repris côté
+  // serveur dans generate-image.js).
+  const referenceImageData = [...getValidatedReferenceImageData(), ...(extraReferenceDataUrls||[])]
+    .filter(Boolean)
+    .slice(0, 3);
   const res = await fetch("/.netlify/functions/generate-image", {
     method:"POST",
     headers: { "Content-Type":"application/json" },
