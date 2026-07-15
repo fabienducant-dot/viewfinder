@@ -385,43 +385,6 @@ function selectMasterImageModules(platform){
       if(idx!==-1){ total-=x.m.content.length; kept.splice(idx,1); }
     }
   }
-  // --- INSTRUMENTATION CIBLÉE (demandée) : détail complet pour les 4 modules d'adaptation Noir & Or ---
-  const DEBUG_TARGET_IDS = ["noir_or_c4_story","noir_or_c4_instagram_facebook","noir_or_c4_google_business","noir_or_c4_blog_wix"];
-  const debugDetail = DEBUG_TARGET_IDS.map(targetId=>{
-    const entry = entries.find(x=>x.m.id===targetId);
-    if(!entry){
-      return { id: targetId, trouve: false };
-    }
-    const passesPlatform = matchesPlatform(entry.criteres);
-    let raison = "aucune (exclu)";
-    if(permanentEntries.includes(entry)) raison = "permanent";
-    else if(foundationKept.includes(entry.m)) raison = "fondation Noir & Or (budget) — passesPlatform=" + passesPlatform;
-    else if(registryKept.includes(entry.m)) raison = "registre contextuel actif (budget)";
-    else if(foundationEntries.includes(entry) && !foundationKept.includes(entry.m)) raison = "éligible fondation mais coupé par le budget";
-    return {
-      id: targetId,
-      trouve: true,
-      registre: entry.registre,
-      criteres_brut: JSON.stringify(entry.m.criteres),
-      plateforme_brut: JSON.stringify(entry.m.criteres ? entry.m.criteres.plateforme : undefined),
-      apres_normalizeCriteres: JSON.stringify(entry.criteres),
-      plateforme_demandee: platform || state.network,
-      platformCriteresId_resultat: platformId,
-      matchesPlatform_resultat: passesPlatform,
-      dans_permanentEntries: permanentEntries.includes(entry),
-      dans_foundationEntries: foundationEntries.includes(entry),
-      dans_foundationKept: foundationKept.includes(entry.m),
-      dans_registryKept: registryKept.includes(entry.m),
-      dans_kept_final: kept.includes(entry.m),
-      raison_retenue: raison,
-    };
-  });
-  window.__vfDebugCible = debugDetail;
-  console.log("[DEBUG CIBLÉ] détail des 4 modules d'adaptation :", debugDetail);
-
-  // --- INSTRUMENTATION TEMPORAIRE (étape 1/3) : trace exacte de ce que renvoie cette fonction ---
-  window.__vfDebugStep1_selectMasterImageModules = kept.map(m=>({ id:m.id, title:m.title, registre:m.registre }));
-  console.log("[DEBUG 1/3] selectMasterImageModules(", platform, ") ->", window.__vfDebugStep1_selectMasterImageModules);
   return kept;
 }
 
@@ -609,6 +572,20 @@ function normalizeModule(m){
     updatedAt: m.updatedAt || undefined,
     sourcePack: m.sourcePack || undefined,
     packVersion: m.packVersion || undefined,
+    criteres: m.criteres && typeof m.criteres === "object"
+      ? {
+          ...m.criteres,
+          plateforme: Array.isArray(m.criteres.plateforme)
+            ? [...m.criteres.plateforme]
+            : m.criteres.plateforme,
+          objectif: Array.isArray(m.criteres.objectif)
+            ? [...m.criteres.objectif]
+            : m.criteres.objectif,
+        }
+      : undefined,
+    tags: Array.isArray(m.tags) ? [...m.tags] : [],
+    registre: typeof m.registre === "string" ? m.registre : undefined,
+    status: m.status || undefined,
   };
 }
 function normalizeStyle(s){
@@ -1235,11 +1212,7 @@ function imageModulesFor(platform){
   // `platform` reçu explicitement (ex : item.platform dans une campagne) prime sur state.network,
   // pour que chaque déclinaison d'une campagne applique sa propre adaptation plateforme — l'univers
   // (registres, concept, émotion) reste lui identique, seule l'adaptation doit varier.
-  const finalList = [...kept, ...selectMasterImageModules(platform || state.network)];
-  // --- INSTRUMENTATION TEMPORAIRE (étape 2/3) : trace exacte de ce que renvoie cette fonction ---
-  window.__vfDebugStep2_imageModulesFor = finalList.map(m=>({ id:m.id, title:m.title, category:m.category }));
-  console.log("[DEBUG 2/3] imageModulesFor(", platform, ") ->", window.__vfDebugStep2_imageModulesFor);
-  return finalList;
+  return [...kept, ...selectMasterImageModules(platform || state.network)];
 }
 /* Détail complet (utilisé/ignoré/statistiques) pour l'étape "Auditer" — sans dupliquer la logique de sélection. */
 function textModulesDetail(platform){
@@ -1393,9 +1366,6 @@ function keywordVariantBlock(style, aspectKey){
 }
 function buildImagePromptFull(platform, topic, aspectKey, missionKey, isCampaign){
   const mods = imageModulesFor(platform);
-  // --- INSTRUMENTATION TEMPORAIRE (étape 3/3) : modules réellement écrits dans le texte du prompt ---
-  window.__vfDebugStep3_buildImagePromptFull = mods.map(m=>({ id:m.id, title:m.title, category:m.category }));
-  console.log("[DEBUG 3/3] buildImagePromptFull(", platform, ") — modules écrits dans le prompt ->", window.__vfDebugStep3_buildImagePromptFull);
   const modText = mods.length ? modulesToText(mods) : "(Aucun module visuel activé — active-en dans l'onglet Connaissances.)";
   const style = getSelectedStyle();
   const overlayRule = platform==="Story"
@@ -2763,47 +2733,6 @@ function buildPostTab(){
     frag.appendChild(vfWrap(el("div",{class:"card", style:"margin-bottom:6px;"},[el("pre",{}, state.imagePrompt)])));
     frag.appendChild(copyBtnFor(()=>state.imagePrompt));
     frag.appendChild(el("p",{class:"sublabel"},"Colle ce prompt dans ChatGPT Plus (génération d'image), puis importe le résultat dans ta bibliothèque — ou génère-la directement ci-dessous si OpenAI est configuré."));
-
-    // --- PANNEAU DE DEBUG TEMPORAIRE : 3 étapes de sélection des modules MASTER_IMAGE, à retirer une fois le bug résolu ---
-    if(window.__vfDebugStep1_selectMasterImageModules){
-      const dbgCard = el("div",{class:"card", style:"margin:10px 0;border:1px solid var(--coral);"});
-      dbgCard.appendChild(el("p",{style:"font-weight:bold;margin:0 0 6px;color:var(--coral);"}, "🔍 Debug sélection image (temporaire)"));
-      const fmt = (label, list) => el("div",{style:"margin-bottom:8px;font-size:11px;"}, [
-        el("div",{style:"font-weight:bold;"}, `${label} (${list.length}) :`),
-        el("div",{}, list.map(m=>`• ${m.title} [${m.id}]`).join("\n") || "(vide)"),
-      ]);
-      dbgCard.appendChild(fmt("1/3 — selectMasterImageModules()", (window.__vfDebugStep1_selectMasterImageModules||[]).filter(m=>(m.title||"").startsWith("Adaptation"))));
-      dbgCard.appendChild(fmt("2/3 — imageModulesFor()", (window.__vfDebugStep2_imageModulesFor||[]).filter(m=>(m.title||"").startsWith("Adaptation"))));
-      dbgCard.appendChild(fmt("3/3 — buildImagePromptFull() (écrit dans le prompt)", (window.__vfDebugStep3_buildImagePromptFull||[]).filter(m=>(m.title||"").startsWith("Adaptation"))));
-      dbgCard.appendChild(el("p",{style:"font-size:10px;color:var(--muted2);margin-top:4px;"}, "Ne montre que les modules dont le titre commence par \"Adaptation\", pour isoler le problème signalé."));
-
-      if(window.__vfDebugCible){
-        dbgCard.appendChild(el("p",{style:"font-weight:bold;margin:12px 0 6px;color:var(--coral);"}, "🔍 Détail ciblé des 4 modules d'adaptation"));
-        window.__vfDebugCible.forEach(d=>{
-          const lines = d.trouve
-            ? [
-                `id : ${d.id}`,
-                `registre : ${d.registre}`,
-                `criteres brut : ${d.criteres_brut}`,
-                `criteres.plateforme brut : ${d.plateforme_brut}`,
-                `après normalizeCriteres() : ${d.apres_normalizeCriteres}`,
-                `plateforme demandée : ${d.plateforme_demandee}`,
-                `platformCriteresId(platform) : ${d.platformCriteresId_resultat}`,
-                `matchesPlatform() : ${d.matchesPlatform_resultat}`,
-                `dans permanentEntries : ${d.dans_permanentEntries}`,
-                `dans foundationEntries : ${d.dans_foundationEntries}`,
-                `dans foundationKept : ${d.dans_foundationKept}`,
-                `dans registryKept : ${d.dans_registryKept}`,
-                `RETENU DANS LE RÉSULTAT FINAL : ${d.dans_kept_final}`,
-                `raison : ${d.raison_retenue}`,
-              ]
-            : [`id : ${d.id} — INTROUVABLE dans state.modules`];
-          dbgCard.appendChild(el("div",{style:"margin-bottom:10px;font-size:10px;font-family:monospace;white-space:pre-wrap;border-top:1px solid var(--border);padding-top:6px;"}, lines.join("\n")));
-        });
-      }
-
-      frag.appendChild(dbgCard);
-    }
 
     const openaiProvider = state.apiProviders.find(p=>p.kind==="openai-compatible" && (p.baseUrl||"").includes("api.openai.com")) || DEFAULT_OPENAI_PROVIDER;
     if(openaiProvider){
