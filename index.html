@@ -385,6 +385,9 @@ function selectMasterImageModules(platform){
       if(idx!==-1){ total-=x.m.content.length; kept.splice(idx,1); }
     }
   }
+  // --- INSTRUMENTATION TEMPORAIRE (étape 1/3) : trace exacte de ce que renvoie cette fonction ---
+  window.__vfDebugStep1_selectMasterImageModules = kept.map(m=>({ id:m.id, title:m.title, registre:m.registre }));
+  console.log("[DEBUG 1/3] selectMasterImageModules(", platform, ") ->", window.__vfDebugStep1_selectMasterImageModules);
   return kept;
 }
 
@@ -1198,7 +1201,11 @@ function imageModulesFor(platform){
   // `platform` reçu explicitement (ex : item.platform dans une campagne) prime sur state.network,
   // pour que chaque déclinaison d'une campagne applique sa propre adaptation plateforme — l'univers
   // (registres, concept, émotion) reste lui identique, seule l'adaptation doit varier.
-  return [...kept, ...selectMasterImageModules(platform || state.network)];
+  const finalList = [...kept, ...selectMasterImageModules(platform || state.network)];
+  // --- INSTRUMENTATION TEMPORAIRE (étape 2/3) : trace exacte de ce que renvoie cette fonction ---
+  window.__vfDebugStep2_imageModulesFor = finalList.map(m=>({ id:m.id, title:m.title, category:m.category }));
+  console.log("[DEBUG 2/3] imageModulesFor(", platform, ") ->", window.__vfDebugStep2_imageModulesFor);
+  return finalList;
 }
 /* Détail complet (utilisé/ignoré/statistiques) pour l'étape "Auditer" — sans dupliquer la logique de sélection. */
 function textModulesDetail(platform){
@@ -1352,6 +1359,9 @@ function keywordVariantBlock(style, aspectKey){
 }
 function buildImagePromptFull(platform, topic, aspectKey, missionKey, isCampaign){
   const mods = imageModulesFor(platform);
+  // --- INSTRUMENTATION TEMPORAIRE (étape 3/3) : modules réellement écrits dans le texte du prompt ---
+  window.__vfDebugStep3_buildImagePromptFull = mods.map(m=>({ id:m.id, title:m.title, category:m.category }));
+  console.log("[DEBUG 3/3] buildImagePromptFull(", platform, ") — modules écrits dans le prompt ->", window.__vfDebugStep3_buildImagePromptFull);
   const modText = mods.length ? modulesToText(mods) : "(Aucun module visuel activé — active-en dans l'onglet Connaissances.)";
   const style = getSelectedStyle();
   const overlayRule = platform==="Story"
@@ -2719,6 +2729,21 @@ function buildPostTab(){
     frag.appendChild(vfWrap(el("div",{class:"card", style:"margin-bottom:6px;"},[el("pre",{}, state.imagePrompt)])));
     frag.appendChild(copyBtnFor(()=>state.imagePrompt));
     frag.appendChild(el("p",{class:"sublabel"},"Colle ce prompt dans ChatGPT Plus (génération d'image), puis importe le résultat dans ta bibliothèque — ou génère-la directement ci-dessous si OpenAI est configuré."));
+
+    // --- PANNEAU DE DEBUG TEMPORAIRE : 3 étapes de sélection des modules MASTER_IMAGE, à retirer une fois le bug résolu ---
+    if(window.__vfDebugStep1_selectMasterImageModules){
+      const dbgCard = el("div",{class:"card", style:"margin:10px 0;border:1px solid var(--coral);"});
+      dbgCard.appendChild(el("p",{style:"font-weight:bold;margin:0 0 6px;color:var(--coral);"}, "🔍 Debug sélection image (temporaire)"));
+      const fmt = (label, list) => el("div",{style:"margin-bottom:8px;font-size:11px;"}, [
+        el("div",{style:"font-weight:bold;"}, `${label} (${list.length}) :`),
+        el("div",{}, list.map(m=>`• ${m.title} [${m.id}]`).join("\n") || "(vide)"),
+      ]);
+      dbgCard.appendChild(fmt("1/3 — selectMasterImageModules()", (window.__vfDebugStep1_selectMasterImageModules||[]).filter(m=>(m.title||"").startsWith("Adaptation"))));
+      dbgCard.appendChild(fmt("2/3 — imageModulesFor()", (window.__vfDebugStep2_imageModulesFor||[]).filter(m=>(m.title||"").startsWith("Adaptation"))));
+      dbgCard.appendChild(fmt("3/3 — buildImagePromptFull() (écrit dans le prompt)", (window.__vfDebugStep3_buildImagePromptFull||[]).filter(m=>(m.title||"").startsWith("Adaptation"))));
+      dbgCard.appendChild(el("p",{style:"font-size:10px;color:var(--muted2);margin-top:4px;"}, "Ne montre que les modules dont le titre commence par \"Adaptation\", pour isoler le problème signalé."));
+      frag.appendChild(dbgCard);
+    }
 
     const openaiProvider = state.apiProviders.find(p=>p.kind==="openai-compatible" && (p.baseUrl||"").includes("api.openai.com")) || DEFAULT_OPENAI_PROVIDER;
     if(openaiProvider){
