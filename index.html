@@ -1534,10 +1534,11 @@ function findCachedResult(providerLabel, promptText){
 }
 
 /* Tous les appels passent désormais par les fonctions serveur du même site Netlify
-   (/.netlify/functions/generate-text et /.netlify/functions/generate-image), qui contactent
-   elles-mêmes le fournisseur avec la clé API stockée côté serveur (variables d'environnement
-   Netlify). Le navigateur ne détient plus aucune clé et ne contacte jamais le fournisseur
-   directement — ça évite le blocage CORS et sécurise les clés. */
+   (/.netlify/functions/generate-text pour le texte ; /.netlify/functions/create-image-job +
+   process-image-job-background + get-image-job pour l'image, en flux asynchrone — voir plus bas),
+   qui contactent elles-mêmes le fournisseur avec la clé API stockée côté serveur (variables
+   d'environnement Netlify). Le navigateur ne détient plus aucune clé et ne contacte jamais le
+   fournisseur directement — ça évite le blocage CORS et sécurise les clés. */
 async function callProviderText(provider, systemPrompt, userPrompt){
   const res = await fetch("/.netlify/functions/generate-text", {
     method:"POST",
@@ -1548,15 +1549,44 @@ async function callProviderText(provider, systemPrompt, userPrompt){
   if(!res.ok || data.error) throw new Error(data.error || `Erreur ${res.status}`);
   return data.text || "";
 }
-async function callProviderImage(prompt, size, extraReferenceDataUrls){
+async function fetchJsonOrThrowRaw(res, contextLabel){
+  // Contrôle du content-type avant de parser : une réponse HTML (ex: page d'erreur passerelle Netlify)
+  // ferait échouer res.json() avec un message cryptique ("Unexpected token '<'") qui masque la vraie
+  // cause. On affiche ici le statut et le corps brut à la place.
+  const contentType = res.headers.get("content-type") || "";
+  if(!contentType.includes("application/json")){
+    const rawBody = await res.text();
+    throw new Error(`Réponse non-JSON du serveur (${contextLabel}, statut ${res.status}). Corps brut : ${rawBody.slice(0, 300)}`);
+  }
+  return res.json();
+}
+
+const IMAGE_JOB_POLL_INTERVAL_MS = 2500;
+const IMAGE_JOB_MAX_WAIT_MS = 17 * 60 * 1000; // 17 minutes — au-delà des 15 min max d'une Background
+                                                // Function et des 16 min de seuil de get-image-job.js,
+                                                // pour laisser le temps au statut "failed" calculé
+                                                // côté serveur d'être lu avant que le client n'abandonne
+const IMAGE_JOB_SESSION_KEY = "vf-active-image-job";
+
+/* Génération d'image en flux asynchrone (job + polling) — la connexion HTTP synchrone d'origine
+   pouvait dépasser la limite d'exécution Netlify (10-26s) pour gpt-image-1, en particulier avec
+   une image de référence (/v1/images/edits, plus lente). Ici : create-image-job répond en quelques
+   centaines de ms, puis on interroge get-image-job toutes les 2,5s jusqu'à completed/failed.
+   `onStatus(label)` est optionnel (mise à jour de l'UI) ; `cancelToken` est un objet { cancelled }
+   optionnel que l'appelant peut faire passer à true pour arrêter le suivi (le job continue côté
+   serveur, seul le suivi côté client s'arrête — cf. cahier des charges, l'annulation réelle du job
+   n'est pas requise en V1). */
+async function callProviderImage(prompt, size, extraReferenceDataUrls, onStatus, cancelToken){
   const referenceImageUrls = getBrandReferenceImages();
   // Références visuelles validées en premier (assetType "reference"), puis l'éventuelle image de
   // cohérence de campagne déjà existante (siblingImage) — combinées, plafonnées à 3 (repris côté
-  // serveur dans generate-image.js).
+  // serveur).
   const referenceImageData = [...getValidatedReferenceImageData(), ...(extraReferenceDataUrls||[])]
     .filter(Boolean)
     .slice(0, 3);
-  const res = await fetch("/.netlify/functions/generate-image", {
+
+  if(onStatus) onStatus("Génération lancée…");
+  const createRes = await fetch("/.netlify/functions/create-image-job", {
     method:"POST",
     headers: { "Content-Type":"application/json" },
     body: JSON.stringify({
@@ -1565,20 +1595,68 @@ async function callProviderImage(prompt, size, extraReferenceDataUrls){
       referenceImageData: referenceImageData.length ? referenceImageData : undefined,
     }),
   });
-  // Contrôle du content-type avant de parser : une réponse HTML (ex: page d'erreur passerelle Netlify
-  // en cas de dépassement du délai d'exécution) ferait échouer res.json() avec un message cryptique
-  // ("Unexpected token '<'") qui masque la vraie cause. On affiche ici le statut et le corps brut à la place.
-  const contentType = res.headers.get("content-type") || "";
-  if(!contentType.includes("application/json")){
-    const rawBody = await res.text();
-    throw new Error(`Réponse non-JSON du serveur (statut ${res.status}) — probable coupure d'exécution côté Netlify si la génération a dépassé le délai autorisé. Corps brut : ${rawBody.slice(0, 300)}`);
+  const createData = await fetchJsonOrThrowRaw(createRes, "création du travail");
+  if(!createRes.ok || createData.error) throw new Error(createData.error || `Erreur ${createRes.status}`);
+  const jobId = createData.jobId;
+  try{ sessionStorage.setItem(IMAGE_JOB_SESSION_KEY, jobId); }catch(e){ /* stockage indisponible : tant pis, pas bloquant */ }
+
+  try{
+    return await pollImageJob(jobId, onStatus, cancelToken);
+  } finally {
+    try{
+      if(sessionStorage.getItem(IMAGE_JOB_SESSION_KEY) === jobId) sessionStorage.removeItem(IMAGE_JOB_SESSION_KEY);
+    }catch(e){}
   }
-  const data = await res.json();
-  if(!res.ok || data.error) throw new Error(data.error || `Erreur ${res.status}`);
-  if(data.b64) return `data:image/png;base64,${data.b64}`;
-  if(data.url) return data.url;
-  throw new Error("Aucune image reçue du fournisseur.");
 }
+
+/* Interroge get-image-job jusqu'à completed/failed/annulation/délai dépassé. Séparée de
+   callProviderImage pour pouvoir reprendre le suivi d'un job existant après un rechargement
+   de page (cf. IMAGE_JOB_SESSION_KEY), sans en recréer un nouveau. */
+async function pollImageJob(jobId, onStatus, cancelToken){
+  const startTime = Date.now();
+  if(onStatus) onStatus("Préparation de l'image…");
+  while(true){
+    if(cancelToken && cancelToken.cancelled) throw new Error("__CANCELLED__");
+    if(Date.now() - startTime > IMAGE_JOB_MAX_WAIT_MS) throw new Error("Délai d'attente dépassé (17 minutes) — le travail continue peut-être côté serveur, mais le suivi s'arrête ici.");
+    await new Promise(r=> setTimeout(r, IMAGE_JOB_POLL_INTERVAL_MS));
+    if(cancelToken && cancelToken.cancelled) throw new Error("__CANCELLED__");
+
+    const statusRes = await fetch(`/.netlify/functions/get-image-job?jobId=${encodeURIComponent(jobId)}`);
+    if(statusRes.status===404){
+      const body = await fetchJsonOrThrowRaw(statusRes, "suivi du travail");
+      throw new Error(body.error || "Travail introuvable ou expiré.");
+    }
+    const statusData = await fetchJsonOrThrowRaw(statusRes, "suivi du travail");
+
+    if(statusData.status==="failed") throw new Error((statusData.error && statusData.error.message) || "Échec de la génération.");
+    if(statusData.status==="completed"){
+      if(onStatus) onStatus("Finalisation…");
+      if(!statusData.result || !statusData.result.resultUrl) throw new Error("Aucune image reçue du fournisseur.");
+      const dataUrl = await fetchImageAsDataUrl(statusData.result.resultUrl);
+      return { dataUrl, usedReference: !!statusData.result.usedReference, referenceFallbackReason: statusData.result.referenceFallbackReason || null };
+    }
+    if(onStatus) onStatus(statusData.status==="processing" ? "Génération OpenAI en cours…" : "Préparation de l'image…");
+  }
+}
+
+/* Récupère l'image finale depuis get-image-result (renvoyée en binaire, pas en JSON) et la convertit
+   en data URL exploitable par le reste du flux (compositeBrandSignature, Bibliothèque, campagne). */
+async function fetchImageAsDataUrl(url){
+  const res = await fetch(url);
+  if(!res.ok){
+    let rawBody = "";
+    try{ rawBody = await res.text(); }catch(e){}
+    throw new Error(`Impossible de récupérer l'image générée (statut ${res.status}). ${rawBody.slice(0, 200)}`);
+  }
+  const blob = await res.blob();
+  return new Promise((resolve, reject)=>{
+    const reader = new FileReader();
+    reader.onload = ()=> resolve(reader.result);
+    reader.onerror = ()=> reject(new Error("Échec de lecture de l'image générée."));
+    reader.readAsDataURL(blob);
+  });
+}
+
 
 /* Cherche, parmi les autres formats de la MÊME campagne, une image déjà générée — pour la
    transmettre comme référence visuelle et garantir que tous les formats montrent la même scène. */
@@ -2768,36 +2846,71 @@ function buildPostTab(){
     if(openaiProvider){
       const imgApiStatus = el("p",{style:"font-size:12px;color:var(--muted2);min-height:16px;margin:4px 0 8px;"},"");
       const imgApiBtn = el("button",{class:"btn-secondary", style:"margin-bottom:10px;"}, [svgIcon(ICONS.wand,14), el("span",{},"Générer l'image via l'API (OpenAI)")]);
-      imgApiBtn.addEventListener("click", async ()=>{
-        if(!confirm("Lancer la génération d'image via OpenAI ? Ceci consomme du crédit API.")) return;
-        imgApiStatus.textContent = "Génération en cours (peut prendre 10-20 s)...";
+      const imgCancelBtn = el("button",{class:"btn-secondary", style:"margin:0 0 10px 8px;display:none;"}, "Annuler le suivi");
+      let activeCancelToken = null;
+      imgCancelBtn.addEventListener("click", ()=>{
+        if(activeCancelToken) activeCancelToken.cancelled = true;
+      });
+      // Factorisé pour servir à la fois au clic normal et à la reprise automatique d'un job resté
+      // actif en session après un rechargement de page (cf. IMAGE_JOB_SESSION_KEY).
+      async function runSingleImageGeneration(startGeneration){
+        imgApiBtn.disabled = true; // évite une double génération si l'utilisateur clique plusieurs fois
+        imgCancelBtn.style.display = "inline-block";
         const t0 = Date.now();
-        const size = API_IMAGE_SIZE_BY_PLATFORM[platform] || "1024x1024";
+        const cancelToken = { cancelled:false };
+        activeCancelToken = cancelToken;
         try{
-          let dataUrl = await callProviderImage(state.imagePrompt, size);
+          const generationResult = await startGeneration((label)=>{ imgApiStatus.textContent = label; }, cancelToken);
+          let dataUrl = generationResult.dataUrl;
+          const { usedReference, referenceFallbackReason } = generationResult;
           let logoApplied = false;
           if(logoRequiredFor(platform)){
             const composited = await compositeBrandSignature(dataUrl, platform);
             dataUrl = composited.dataUrl; logoApplied = composited.applied;
           }
           const id = uid();
-          state.images.push({ id, name:`${platform}-${nowStr()}.png`, dataUrl, tags:[platform], favorite:false, logoApplied });
+          state.images.push({ id, name:`${platform}-${nowStr()}.png`, dataUrl, tags:[platform], favorite:false, logoApplied, usedReference, referenceFallbackReason });
           LS.set("vf-images", state.images);
           updateCount();
           state.selectedId = id;
           state.postImageId = id;
           logToLab({ provider:"OpenAI", model:"gpt-image-1-mini", type:"image", prompt: state.imagePrompt, promptHash: hashPrompt(state.imagePrompt), cost:null, durationMs: Date.now()-t0, status:"accepted" });
-          imgApiStatus.textContent = logoRequiredFor(platform)
+          let referenceLabel;
+          if(usedReference) referenceLabel = "Référence visuelle utilisée ✓";
+          else if(referenceFallbackReason) referenceLabel = "Référence non utilisée — génération standard de secours.";
+          else referenceLabel = "Génération standard — aucune référence visuelle fournie.";
+          imgApiStatus.textContent = (logoRequiredFor(platform)
             ? (logoApplied ? "Image générée, logo réel appliqué ✓" : "Image générée — aucun logo marqué comme actif de marque dans la Bibliothèque, rien n'a été ajouté.")
-            : "Image générée et ajoutée à ta bibliothèque ✓";
+            : "Image générée et ajoutée à ta bibliothèque ✓") + " — " + referenceLabel;
           renderMain();
         }catch(err){
-          logToLab({ provider:"OpenAI", model:"gpt-image-1-mini", type:"image", prompt: state.imagePrompt, promptHash: hashPrompt(state.imagePrompt), cost:null, durationMs: Date.now()-t0, status:"refused", reason:String(err.message||err) });
-          imgApiStatus.textContent = `Échec (${err.message||err}) — utilise l'import manuel ci-dessous à la place.`;
+          const cancelled = String(err.message||err)==="__CANCELLED__";
+          if(!cancelled){
+            logToLab({ provider:"OpenAI", model:"gpt-image-1-mini", type:"image", prompt: state.imagePrompt, promptHash: hashPrompt(state.imagePrompt), cost:null, durationMs: Date.now()-t0, status:"refused", reason:String(err.message||err) });
+          }
+          imgApiStatus.textContent = cancelled ? "Suivi annulé (la génération continue peut-être côté serveur)." : `Échec (${err.message||err}) — utilise l'import manuel ci-dessous à la place.`;
         }
+        imgApiBtn.disabled = false;
+        imgCancelBtn.style.display = "none";
+        activeCancelToken = null;
+      }
+      imgApiBtn.addEventListener("click", async ()=>{
+        if(!confirm("Lancer la génération d'image via OpenAI ? Ceci consomme du crédit API.")) return;
+        const size = API_IMAGE_SIZE_BY_PLATFORM[platform] || "1024x1024";
+        await runSingleImageGeneration((onStatus, cancelToken)=> callProviderImage(state.imagePrompt, size, undefined, onStatus, cancelToken));
       });
       frag.appendChild(imgApiBtn);
+      frag.appendChild(imgCancelBtn);
       frag.appendChild(imgApiStatus);
+      // Reprise automatique si un job restait actif en session (ex: page rechargée pendant la
+      // génération) — au minimum requis : le jobId est conservé, le suivi reprend sans recréer de job.
+      try{
+        const leftoverJobId = sessionStorage.getItem(IMAGE_JOB_SESSION_KEY);
+        if(leftoverJobId){
+          runSingleImageGeneration((onStatus, cancelToken)=> pollImageJob(leftoverJobId, onStatus, cancelToken))
+            .finally(()=>{ try{ sessionStorage.removeItem(IMAGE_JOB_SESSION_KEY); }catch(e){} });
+        }
+      }catch(e){ /* sessionStorage indisponible : pas de reprise possible, comportement normal sinon */ }
     }
 
     const imgFileInput = el("input",{type:"file", accept:"image/*", style:"display:none"});
@@ -3055,31 +3168,50 @@ function buildCalendarCard(item, inCampaign){
     const openaiProvider = state.apiProviders.find(p=>p.kind==="openai-compatible" && (p.baseUrl||"").includes("api.openai.com")) || DEFAULT_OPENAI_PROVIDER;
     if(openaiProvider){
       const imgApiBtn = el("button",{class:"btn-secondary", style:"margin:6px 0;"}, [svgIcon(ICONS.wand,14), el("span",{},"Générer l'image via l'API")]);
+      const imgCancelBtn = el("button",{class:"btn-secondary", style:"margin:6px 0 6px 8px;display:none;"}, "Annuler le suivi");
+      let activeCancelToken = null;
+      imgCancelBtn.addEventListener("click", ()=>{
+        if(activeCancelToken) activeCancelToken.cancelled = true;
+      });
       imgApiBtn.addEventListener("click", async ()=>{
         if(!confirm("Lancer la génération d'image via OpenAI ? Ceci consomme du crédit API.")) return;
-        imgApiStatus.textContent = "Génération en cours (peut prendre 10-20 s)...";
+        imgApiBtn.disabled = true; // évite une double génération pour cette même déclinaison
+        imgCancelBtn.style.display = "inline-block";
         const t0 = Date.now();
         const size = API_IMAGE_SIZE_BY_PLATFORM[item.platform] || "1024x1024";
+        const cancelToken = { cancelled:false };
+        activeCancelToken = cancelToken;
         try{
           const siblingImage = getCampaignSiblingImage(item.campaignId, item.id);
-          let dataUrl = await callProviderImage(item.imagePrompt, size, siblingImage ? [siblingImage] : undefined);
+          const generationResult = await callProviderImage(item.imagePrompt, size, siblingImage ? [siblingImage] : undefined, (label)=>{ imgApiStatus.textContent = label; }, cancelToken);
+          let dataUrl = generationResult.dataUrl;
+          const { usedReference, referenceFallbackReason } = generationResult;
           let logoApplied = false;
           if(logoRequiredFor(item.platform)){
             const composited = await compositeBrandSignature(dataUrl, item.platform);
             dataUrl = composited.dataUrl; logoApplied = composited.applied;
           }
-          item.imageDataUrl = dataUrl; item.logoApplied = logoApplied;
+          item.imageDataUrl = dataUrl; item.logoApplied = logoApplied; item.usedReference = usedReference; item.referenceFallbackReason = referenceFallbackReason;
           const saved = LS.set("vf-scheduled", state.scheduled);
           logToLab({ provider:"OpenAI", model:"gpt-image-1-mini", type:"image", prompt:item.imagePrompt, promptHash:hashPrompt(item.imagePrompt), cost:null, durationMs:Date.now()-t0, status:"accepted" });
-          imgApiStatus.textContent = !saved ? "Générée, mais échec d'enregistrement (stockage plein ?)."
+          let referenceLabel;
+          if(usedReference) referenceLabel = "Référence visuelle utilisée ✓";
+          else if(referenceFallbackReason) referenceLabel = "Référence non utilisée — génération standard de secours.";
+          else referenceLabel = "Génération standard — aucune référence visuelle fournie.";
+          imgApiStatus.textContent = (!saved ? "Générée, mais échec d'enregistrement (stockage plein ?)."
             : logoRequiredFor(item.platform) ? (logoApplied ? "Image générée, logo réel appliqué ✓" : "Image générée — aucun logo marqué comme actif de marque, rien n'a été ajouté.")
-            : "Image générée ✓";
+            : "Image générée ✓") + " — " + referenceLabel;
           renderMain();
         }catch(err){
-          imgApiStatus.textContent = `Échec (${err.message||err}) — utilise l'import manuel ci-dessous.`;
+          const cancelled = String(err.message||err)==="__CANCELLED__";
+          imgApiStatus.textContent = cancelled ? "Suivi annulé (la génération continue peut-être côté serveur)." : `Échec (${err.message||err}) — utilise l'import manuel ci-dessous.`;
         }
+        imgApiBtn.disabled = false;
+        imgCancelBtn.style.display = "none";
+        activeCancelToken = null;
       });
       card.appendChild(imgApiBtn);
+      card.appendChild(imgCancelBtn);
     }
     const imgFileInput = el("input",{type:"file", accept:"image/*", style:"display:none"});
     imgFileInput.addEventListener("change", async (e)=>{
