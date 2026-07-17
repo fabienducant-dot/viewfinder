@@ -192,7 +192,7 @@ const PLATFORM_NOTE = {
   "Story": "Format vertical plein écran, 4 à 5 phrases fortes disposées avec des tailles de police variées (hiérarchie visuelle, jamais uniforme) et le logo en bas, centré — publiée simultanément sur Instagram et Facebook.",
 };
 const TEXT_STRUCTURE = {
-  "Instagram": "Réponds avec :\n1) Légende (2 à 4 phrases)\n2) 5 à 8 hashtags\n3) Une suggestion d'alt text (accessibilité)",
+  "Instagram": "Réponds avec :\n1) Légende (2 à 4 phrases)\n2) Exactement 5 hashtags pertinents maximum\n3) Une suggestion d'alt text (accessibilité)",
   "Facebook": "Réponds avec :\n1) Texte du post\n2) 2 à 4 hashtags optionnels\n3) Une suggestion d'alt text",
   "Google Business": "Réponds avec :\n1) Texte du post (150 à 300 mots, sans hashtags, mots-clés SEO locaux intégrés naturellement)\n2) Un bouton d'action suggéré (Réserver, En savoir plus, Acheter...)\n3) Un alt text descriptif SEO pour l'image",
   "Article Blog Wix": "Réponds avec :\n1) Titre SEO (H1)\n2) Meta description (155 caractères max)\n3) Slug d'URL suggéré\n4) Introduction\n5) 2 à 3 sections avec sous-titres H2\n6) Conclusion avec appel à l'action\n7) 5 mots-clés SEO\n8) Catégorie suggérée",
@@ -204,17 +204,17 @@ const ALWAYS_ON_CATEGORIES = ["MASTER SDZ","CODEX SDZ"];
 const TEXT_MODULE_MAP = {
   "Instagram": ["Univers de marque","Règles rédactionnelles","Instagram","Interdits","À ne jamais faire","À faire",
     "Vocabulaire autorisé","Vocabulaire interdit","Exemples excellents","Exemples validés","Exemples refusés",
-    "Erreurs fréquentes","Leçons apprises","Prestations","Offres","CTA","Psychologie client","Personae",
+    "Leçons apprises","Prestations","Offres","CTA","Psychologie client","Personae",
     "Objections clients","Saisonnalité","Missions"],
   "Facebook": ["Univers de marque","Règles rédactionnelles","Facebook","Interdits","À ne jamais faire","À faire",
     "Vocabulaire autorisé","Vocabulaire interdit","Exemples excellents","Exemples validés","Exemples refusés",
-    "Erreurs fréquentes","Leçons apprises","Prestations","Offres","CTA","Psychologie client","Personae",
+    "Leçons apprises","Prestations","Offres","CTA","Psychologie client","Personae",
     "Objections clients","Saisonnalité","Missions"],
   "Google Business": ["SEO","Google Business","Prestations","Offres","Règles rédactionnelles","Interdits",
-    "À ne jamais faire","À faire","Vocabulaire autorisé","Vocabulaire interdit","Erreurs fréquentes","Leçons apprises",
+    "À ne jamais faire","À faire","Vocabulaire autorisé","Vocabulaire interdit","Leçons apprises",
     "CTA","Psychologie client","Objections clients","Saisonnalité","Missions"],
   "Article Blog Wix": ["SEO","Blog Wix","Prestations","Offres","Règles rédactionnelles","Glossaire","Interdits",
-    "À ne jamais faire","À faire","Vocabulaire autorisé","Vocabulaire interdit","Erreurs fréquentes","Leçons apprises",
+    "À ne jamais faire","À faire","Vocabulaire autorisé","Vocabulaire interdit","Leçons apprises",
     "CTA","Psychologie client","Personae","Objections clients","Saisonnalité","Missions"],
   "Story": ["Univers de marque","Règles rédactionnelles","Stories","Interdits","À ne jamais faire","À faire",
     "Vocabulaire autorisé","Vocabulaire interdit","Prestations","Offres","CTA","Saisonnalité","Missions"],
@@ -1214,6 +1214,34 @@ function selectModulesOrdered(categories, budgetChars){
   return { kept, ignored, totalAvailable, totalKept: kept.length, duplicatesRemoved,
     lengthBefore, lengthAfter, gainPercent, tokensSaved, relevanceIndex };
 }
+/* Déduit la plateforme d'un module "Erreurs fréquentes" : champ explicite si présent (retours créés
+   après cette correction), sinon extrait du titre "Retour <plateforme> — ..." pour les anciens
+   modules déjà existants — aucune migration nécessaire, aucune compatibilité cassée. */
+function feedbackPlatform(m){
+  if(m.platform) return m.platform;
+  const match = (m.title||"").match(/^Retour (.+?) —/);
+  return match ? match[1] : null;
+}
+/* Déduit la date de création : champ explicite si présent, sinon extrait de l'id (uid() commence
+   toujours par Date.now()) — fonctionne aussi sur tous les anciens modules sans champ dédié. */
+function feedbackRecency(m){
+  if(m.createdAt) return m.createdAt;
+  const match = String(m.id||"").match(/^(\d+)-/);
+  return match ? Number(match[1]) : 0;
+}
+/* Sélection dédiée des retours ("Erreurs fréquentes") — remplace leur ancien traitement générique
+   plafonné à 2 emplacements partagés avec 7 autres catégories (voir diagnostic précédent). Priorité
+   à la plateforme active, puis aux retours les plus récents ; jusqu'à 5 retours, jamais bloqués
+   indéfiniment par d'anciens retours. Ne supprime rien du stockage : filtre uniquement à l'affichage. */
+function selectRecentFeedback(platform, maxCount){
+  maxCount = maxCount || 5;
+  const all = state.modules.filter(m=> m.enabled && m.category==="Erreurs fréquentes");
+  const withMeta = all.map(m=>({ m, platform: feedbackPlatform(m), recency: feedbackRecency(m) }));
+  const matching = withMeta.filter(x=> x.platform===platform).sort((a,b)=> b.recency-a.recency);
+  const nonMatching = withMeta.filter(x=> x.platform!==platform).sort((a,b)=> b.recency-a.recency);
+  return [...matching, ...nonMatching].slice(0, maxCount).map(x=>x.m);
+}
+
 function textModulesFor(platform){
   const cats = TEXT_MODULE_MAP[platform] || [];
   const budget = PLATFORM_TEXT_BUDGET[platform] || TEXT_CONTEXT_BUDGET;
@@ -1346,13 +1374,38 @@ function daLinesText(){
 }
 
 /* ---------- anti-répétition : s'appuie sur l'historique + leçons apprises ---------- */
+const ANTI_REPEAT_EXCLUDE_KEYWORDS = ["test", "post test", "en test", "🚧"];
+/* Exclut : contenu explicitement rejeté (rating "down"), contenu marqué manuellement à exclure,
+   et tout contenu dont le sujet ou le texte contient un marqueur de test — sans jamais supprimer
+   l'entrée elle-même du stockage (state.history reste intact, seul l'usage dans ce bloc est filtré). */
+function isExcludedFromAntiRepeat(h){
+  if(h.excludedFromAntiRepeat) return true;
+  if(h.rating === "down") return true; // contenu rejeté : ne sert pas de référence "à ne pas reproduire"
+  const haystack = `${h.topic||""} ${h.textResult||""}`.toLowerCase();
+  return ANTI_REPEAT_EXCLUDE_KEYWORDS.some(kw => haystack.includes(kw.toLowerCase()));
+}
 function buildAntiRepeatNote(platform, kind){
-  const recent = state.history.filter(h=>h.platform===platform && (kind==="texte" ? h.textResult : true)).slice(-6);
+  const pool = state.history.filter(h=>h.platform===platform && (kind==="texte" ? h.textResult : true) && !isExcludedFromAntiRepeat(h));
+  // Fenêtre élargie à 10 (certains seront filtrés), puis priorité aux contenus les mieux notés —
+  // meilleur proxy disponible pour "validé" en l'absence d'un statut publié/programmé unifié entre
+  // state.history et state.scheduled (deux structures distinctes aujourd'hui, non reliées par id).
+  const recentPool = pool.slice(-10);
+  const prioritized = recentPool.slice().sort((a,b)=>{
+    const rank = r => r==="up" ? 0 : r==="mid" ? 1 : 2;
+    return rank(a.rating) - rank(b.rating);
+  });
+  const recent = prioritized.slice(0, 6);
   if(!recent.length) return "";
   if(kind==="texte"){
     return `\nÉVITE ABSOLUMENT de reproduire, sur ce contenu :\n- les mêmes accroches / premières phrases\n- les mêmes CTA\n- les mêmes structures de texte\n- les mêmes émotions mises en avant\n- les mêmes formulations\nVoici des extraits déjà utilisés récemment pour cette plateforme, à ne pas reproduire :\n${recent.filter(h=>h.textResult).map(h=>`- "${h.textResult.slice(0,70).replace(/\n/g," ")}..."`).join("\n")}\n`;
   }
   return `\nÉVITE ABSOLUMENT de reproduire une composition, une idée visuelle ou un sujet déjà traité récemment sur cette plateforme :\n${recent.map(h=>`- ${h.topic}`).join("\n")}\nPropose un angle visuel différent tout en restant fidèle à la charte.\nVARIÉTÉ OBLIGATOIRE DU DÉCOR : ne reviens pas systématiquement au même motif monumental (le portail, par exemple, ne doit pas devenir un réflexe par défaut). L'univers SDZ dispose de bien d'autres éléments possibles — mets-en un différent en avant à chaque génération plutôt que de répéter toujours le même symbole.\n`;
+}
+
+function buildRecentFeedbackBlock(platform){
+  const recent = selectRecentFeedback(platform, 5);
+  if(!recent.length) return "";
+  return `\n### Retours récents à respecter en priorité (du plus récent au plus ancien — ces consignes priment sur toute règle plus générale ci-dessus)\n${recent.map(m=>`- ${m.content}`).join("\n")}\n`;
 }
 
 function buildTextPromptFull(platform, topic, missionKey){
@@ -1365,6 +1418,7 @@ ${modText}
 ${missionBlock(missionKey)}${prestationPromptBlock()}${seasonBlock()}${buildAntiRepeatNote(platform, "texte")}
 Plateforme : ${platform}
 Sujet : ${topic}
+${buildRecentFeedbackBlock(platform)}
 
 ${TEXT_STRUCTURE[platform]}`);
 }
@@ -1714,9 +1768,26 @@ async function pushToServerSilent(){
       body: JSON.stringify({ data: gatherSyncData(), updatedAt: getLocalUpdatedAt() || Date.now() }),
     });
     clearTimeout(timeoutId);
-    if(res.ok){ localStorage.setItem("vf-last-server-sync", String(Date.now())); return true; }
+    if(res.ok){ localStorage.setItem("vf-last-server-sync", String(Date.now())); localStorage.setItem("vf-last-sync-failed","0"); return true; }
+    localStorage.setItem("vf-last-sync-failed","1");
     return false;
-  }catch(e){ return false; /* pas de connexion, timeout, ou serveur indisponible : le local reste intact */ }
+  }catch(e){
+    // pas de connexion, timeout, ou serveur indisponible : le local reste intact (rien n'est perdu),
+    // mais l'échec doit rester visible plutôt qu'avalé silencieusement — voir getSyncStatusLabel().
+    localStorage.setItem("vf-last-sync-failed","1");
+    return false;
+  }
+}
+/* Statut de synchronisation affichable dans Réglages — dérivé de signaux déjà existants
+   (horodatage de dernière modification locale, horodatage de dernière synchro réussie, indicateur
+   d'échec explicite ci-dessus) sans nouvelle structure de données lourde. */
+function getSyncStatusLabel(){
+  const failed = localStorage.getItem("vf-last-sync-failed")==="1";
+  if(failed) return "Échec de synchronisation";
+  const lastUpdate = getLocalUpdatedAt();
+  const lastSync = Number(localStorage.getItem("vf-last-server-sync")||0);
+  if(lastUpdate && lastSync < lastUpdate) return "Synchronisation en attente";
+  return "Synchronisé";
 }
 async function checkServerOnLoad(){
   try{
@@ -2611,12 +2682,12 @@ function buildFeedbackBlock(ctx){
       state.modules.push({ id: uid(), category:"Erreurs fréquentes",
         title: `Retour ${ctx.platform} — ${nowStr()}`,
         content: state.feedbackComment.trim() || `Contenu jugé à revoir pour ${ctx.platform} : "${(ctx.getTextResult()||"").slice(0,120)}"`,
-        enabled:true });
+        enabled:true, platform: ctx.platform, createdAt: Date.now() });
     }
     if(rating==="up" && ctx.getTextResult().trim()){
       state.modules.push({ id: uid(), category:"Exemples excellents",
         title: `Exemple validé ${ctx.platform} — ${nowStr()}`,
-        content: ctx.getTextResult().trim(), enabled:true });
+        content: ctx.getTextResult().trim(), enabled:true, platform: ctx.platform, createdAt: Date.now() });
     }
     LS.set("vf-modules", state.modules);
     state.feedbackComment = "";
@@ -3565,6 +3636,9 @@ function buildHistoryTab(){
   list.forEach(h=>{
     const favBtn = el("button",{class:"btn-small"+(h.favorite?" active":""), onclick:()=>{ h.favorite=!h.favorite; LS.set("vf-history", state.history); renderMain(); }},
       [svgIcon(ICONS.star,12), el("span",{}, h.favorite?"Favori":"")]);
+    const excludeBtn = el("button",{class:"btn-small"+(h.excludedFromAntiRepeat?" active":""), title:"Ne plus utiliser ce contenu comme référence \"à ne pas reproduire\" (le contenu reste dans l'historique)",
+      onclick:()=>{ h.excludedFromAntiRepeat=!h.excludedFromAntiRepeat; LS.set("vf-history", state.history); renderMain(); }},
+      h.excludedFromAntiRepeat ? "Exclu de l'anti-répétition ✓" : "Exclure de l'anti-répétition");
     const details = el("details",{style:"margin-top:8px;"},[
       el("summary",{style:"font-size:12px;color:var(--muted2);cursor:pointer;"},"Voir les prompts"),
       el("pre",{style:"margin-top:6px;"}, `--- IMAGE ---\n${h.imagePrompt}\n\n--- TEXTE ---\n${h.textPrompt}`),
@@ -3576,7 +3650,7 @@ function buildHistoryTab(){
       ]),
       el("div",{style:"font-size:13px;color:var(--muted);margin-bottom:4px;"}, `Sujet : ${h.topic}`),
       h.textResult ? el("div",{style:"font-size:13px;white-space:pre-wrap;"}, h.textResult.slice(0,200)+(h.textResult.length>200?"...":"")) : null,
-      favBtn, details,
+      favBtn, excludeBtn, details,
     ]));
   });
   return frag;
@@ -4026,6 +4100,24 @@ function buildSettingsTab(){
   const syncStatus = el("p",{style:"font-size:12px;color:var(--muted2);min-height:16px;margin:6px 0 10px;"},
     lastServerSync ? `Dernière sauvegarde serveur : ${new Date(Number(lastServerSync)).toLocaleString("fr-FR")}` : "Aucune synchronisation effectuée pour l'instant sur cet appareil.");
   frag.appendChild(syncStatus);
+
+  const syncStateLabel = el("p",{style:"font-size:13px;font-weight:600;margin:0 0 10px;"});
+  const retryBtn = el("button",{class:"btn-secondary", style:"margin:0 0 10px 8px;display:none;"}, "Réessayer la synchronisation");
+  const renderSyncState = ()=>{
+    const label = getSyncStatusLabel();
+    syncStateLabel.textContent = label === "Synchronisé" ? "✅ Synchronisé" : label === "Synchronisation en attente" ? "🕓 Synchronisation en attente" : "⚠️ Échec de synchronisation";
+    syncStateLabel.style.color = label === "Synchronisé" ? "var(--green)" : label === "Synchronisation en attente" ? "var(--amber)" : "var(--coral)";
+    retryBtn.style.display = label === "Échec de synchronisation" ? "inline-block" : "none";
+  };
+  renderSyncState();
+  retryBtn.addEventListener("click", async ()=>{
+    retryBtn.disabled = true;
+    const ok = await pushToServerSilent();
+    retryBtn.disabled = false;
+    renderSyncState();
+    if(ok) renderMain();
+  });
+  frag.appendChild(el("div",{style:"display:flex;align-items:center;flex-wrap:wrap;"}, [syncStateLabel, retryBtn]));
 
   const secretInput = el("input",{type:"text", value: localStorage.getItem("vf-sync-secret")||"", placeholder:"Secret de synchronisation (optionnel, seulement si configuré côté Netlify)"});
   secretInput.addEventListener("input", e=>{
