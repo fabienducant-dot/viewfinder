@@ -16,6 +16,49 @@ function openStore(){
   return getStore("viewfinder-data");
 }
 
+/* Le texte collé pour Instagram suit la structure interne "1) Légende / 2) Hashtags / 3) Alt text"
+   (voir TEXT_STRUCTURE côté client) — ces numéros ne doivent jamais être publiés tels quels sur
+   Instagram. On les sépare ici en 3 champs distincts. Tolère 1) / 1. / 1: / 1- comme marqueur.
+   Si le texte ne suit pas ce format (moins de 2 marqueurs trouvés), on le renvoie tel quel comme
+   légende, sans rien inventer. */
+/* Sécurité supplémentaire : quel que soit ce que le modèle a réellement renvoyé (TEXT_STRUCTURE
+   demande 5 hashtags, mais rien ne garantit que la réponse les respecte), on ne laisse jamais
+   passer plus de 5 hashtags uniques vers Make. Ne touche qu'au champ hashtags — jamais la légende
+   ni l'alt text. Si aucun hashtag n'est détecté dans ce champ, il est renvoyé tel quel (repli). */
+function limitHashtags(hashtagsRaw){
+  if(typeof hashtagsRaw !== "string" || !hashtagsRaw.trim()) return hashtagsRaw;
+  const found = hashtagsRaw.match(/#\S+/g);
+  if(!found || !found.length) return hashtagsRaw; // aucun hashtag détecté : comportement actuel conservé
+  const seen = new Set();
+  const unique = [];
+  for(const tag of found){
+    const key = tag.toLowerCase();
+    if(seen.has(key)) continue;
+    seen.add(key);
+    unique.push(tag);
+    if(unique.length >= 5) break;
+  }
+  return unique.join(" ");
+}
+function parseInstagramText(raw){
+  if(typeof raw !== "string" || !raw.trim()) return { caption: raw || "", hashtags: "", altText: "" };
+  const text = raw.trim();
+  const markerRegex = /(?:^|\n)\s*([123])[.):\-]\s*/g;
+  const matches = [...text.matchAll(markerRegex)];
+  if(matches.length < 2) return { caption: text, hashtags: "", altText: "" };
+  const parts = {};
+  for(let i=0; i<matches.length; i++){
+    const start = matches[i].index + matches[i][0].length;
+    const end = i+1 < matches.length ? matches[i+1].index : text.length;
+    parts[matches[i][1]] = text.slice(start, end).trim();
+  }
+  return {
+    caption: (parts["1"]||"").trim(),
+    hashtags: limitHashtags((parts["2"]||"").trim()),
+    altText: (parts["3"]||"").trim(),
+  };
+}
+
 exports.handler = async () => {
   try {
     const store = openStore();
@@ -52,6 +95,15 @@ exports.handler = async () => {
         const imageUrl = post.imageDataUrl && siteUrl
           ? `${siteUrl.replace(/\/$/, "")}/img/${post.id}.jpg`
           : null;
+        // Instagram uniquement : sépare la structure interne "1)/2)/3)" pour ne jamais publier ces
+        // numéros — Make ne reçoit que la légende + les hashtags dans "texte", l'alt text à part.
+        let texteEnvoye = post.textFinal;
+        let altTextEnvoye;
+        if(post.platform === "Instagram" && post.textFinal){
+          const parsed = parseInstagramText(post.textFinal);
+          texteEnvoye = [parsed.caption, parsed.hashtags].filter(Boolean).join("\n\n");
+          altTextEnvoye = parsed.altText || undefined;
+        }
         console.log(`[check-scheduled-posts] Post ${post.id} → appel du webhook Make : ${webhookUrl}`);
         const res = await fetch(webhookUrl, {
           method: "POST",
@@ -60,7 +112,8 @@ exports.handler = async () => {
             plateforme: post.platform,
             mission: post.mission || null,
             sujet: post.topic,
-            texte: post.textFinal,
+            texte: texteEnvoye,
+            alt_text: altTextEnvoye,
             image: post.imageDataUrl || null,
             image_url: imageUrl,
             type_contenu: post.platform,
