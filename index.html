@@ -1041,8 +1041,59 @@ const KNOWN_PRESTATIONS = [
   "Massage Femme enceinte","Massage Enfant","Réflexologie plantaire thaïlandaise",
   "Massage japonais du visage","Massage lymphatique expert","Soin énergétique","Reiki",
   "Luminothérapie PSIO®","Biorésonance quantique","Soin minceur","Offre Sylver","Offre Gold","Massage dos/zone",
+  "Prestations en entreprise",
 ];
 
+/* Table d'alias : chaque nom canonique (celui déjà stocké dans les sélections, historiques,
+   campagnes et modes existants — JAMAIS modifié) peut être reconnu sous plusieurs formulations
+   réelles trouvées sur le site officiel. Alias triés du plus long au plus court par nom : le plus
+   spécifique est toujours testé en premier. */
+const PRESTATION_ALIASES = {
+  "Massage Zébré": ["Massage Zébré — Exclusivité SDZ", "Massage Zébré - Exclusivité SDZ", "Massage Zébré"],
+  "Massage Ayurvédique Abhyanga": ["Massage Ayurvédique Abhyanga"],
+  "Massage Balinais": ["Massage Balinais"],
+  "Massage Thaï traditionnel": ["Massage Thaï Traditionnel", "Massage Thaï traditionnel"],
+  "Massage Femme enceinte": ["Massage Femme Enceinte", "Massage Femme enceinte"],
+  "Massage Enfant": ["Massage Enfant"],
+  "Réflexologie plantaire thaïlandaise": ["Réflexologie Plantaire Thaïlandaise", "Réflexologie plantaire thaïlandaise"],
+  "Massage japonais du visage": ["Massage Japonais du Visage", "Massage japonais du visage"],
+  "Massage lymphatique expert": ["Massage Lymphatique Expert", "Massage lymphatique expert"],
+  "Soin énergétique": ["Soin Énergétique", "Soin énergétique"],
+  "Reiki": ["Reiki"],
+  "Luminothérapie PSIO®": ["Luminothérapie PSiO®", "Luminothérapie PSIO®", "Luminothérapie PSiO", "Luminothérapie PSIO"],
+  "Biorésonance quantique": ["Biorésonance quantique", "Biorésonance"],
+  "Soin minceur": ["Massage Minceur Raffermissant", "Soin minceur"],
+  "Offre Sylver": ["Offre Sylver"],
+  "Offre Gold": ["Offre Gold"],
+  "Massage dos/zone": ["Massage dos/zone"],
+  "Prestations en entreprise": ["Prestations en entreprise", "PRESTATIONS EN ENTREPRISE"],
+};
+function escapeRegExpChar(s){ return s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"); }
+/* Repliement caractère par caractère : chaque lettre de base couvre ses variantes accentuées via
+   une classe de caractères — jamais de décomposition Unicode qui changerait la longueur du texte. */
+const ACCENT_FOLD_CLASSES = { a:"[aàâä]", e:"[eéèêë]", i:"[iîï]", o:"[oôö]", u:"[uùûü]", c:"[cç]", n:"[nñ]", y:"[yÿ]" };
+/* Construit un motif insensible à la casse (flag i) et aux accents (classes ci-dessus), avec des
+   espaces tolérants (\s+) et le symbole ® rendu optionnel/ignoré — appliqué directement au texte
+   ORIGINAL, jamais à une copie modifiée : aucun risque de décalage d'index. */
+function buildAliasPattern(alias){
+  let pattern = "";
+  for(const ch of alias){
+    if(ch === " "){ pattern += "\\s+"; continue; }
+    if(ch === "®"){ pattern += "®?"; continue; }
+    const lower = ch.toLowerCase();
+    pattern += ACCENT_FOLD_CLASSES[lower] || escapeRegExpChar(ch);
+  }
+  return pattern;
+}
+/* Recherche ANCRÉE : l'alias ne compte que s'il occupe (espaces de début tolérés) toute une ligne,
+   éventuellement suivi d'un séparateur de titre (: - – —) — jamais une occurrence au milieu d'une
+   phrase (ex : "Reiki" cité en passant dans le texte de l'Offre Gold). */
+function findAnchoredAliasIndex(text, alias){
+  const pattern = buildAliasPattern(alias);
+  const re = new RegExp(`^[ \\t]*${pattern}[ \\t]*(?:[:\\-–—][ \\t]*)?$`, "im");
+  const m = re.exec(text);
+  return m ? m.index : -1;
+}
 /* Fusionne le contenu de tous les modules "Prestations" activés, en éliminant les doublons exacts
    (si le même texte a été collé dans plusieurs modules). Ne modifie jamais les modules eux-mêmes. */
 function getMergedPrestationsText(){
@@ -1055,13 +1106,20 @@ function getMergedPrestationsText(){
   });
   return parts.join("\n\n");
 }
-/* Repère, dans le texte fusionné, où commence chaque prestation connue et découpe le texte
-   entre deux noms de prestations consécutifs pour isoler le bloc de détails de chacune. */
+/* Repère, dans le texte fusionné, où commence chaque prestation connue (via ses alias, recherche
+   ancrée en début de ligne) et découpe le texte entre deux noms de prestations consécutifs pour
+   isoler le bloc de détails de chacune. Un nom canonique sans entrée dans PRESTATION_ALIASES
+   retombe sur lui-même (compatibilité totale avec l'existant). */
 function extractPrestationBlocks(text){
   const found = [];
   KNOWN_PRESTATIONS.forEach(name=>{
-    const idx = text.indexOf(name);
-    if(idx !== -1) found.push({name, idx});
+    const aliases = (PRESTATION_ALIASES[name] || [name]).slice().sort((a,b)=> b.length - a.length);
+    let bestIdx = -1;
+    for(const alias of aliases){
+      const idx = findAnchoredAliasIndex(text, alias);
+      if(idx !== -1){ bestIdx = idx; break; } // déjà trié du plus long au plus court : premier trouvé = le bon
+    }
+    if(bestIdx !== -1) found.push({name, idx: bestIdx});
   });
   found.sort((a,b)=>a.idx-b.idx);
   const blocks = {};
@@ -1081,7 +1139,8 @@ const PRICE_PATTERNS = [/tarifs?\s*[:\-]\s*([^\n]+)/i, /prix\s*[:\-]\s*([^\n]+)/
    sous la forme "Label : contenu" dans le bloc de la prestation. Ceux non trouvés sont
    simplement omis — le bloc brut complet est de toute façon toujours transmis en renfort. */
 const PRESTATION_FICHE_LABELS = ["histoire","émotion","psychologie","codes visuels","matières",
-  "textures","lumière","composition","vocabulaire","cta","interdits","scène visuelle"];
+  "textures","lumière","composition","vocabulaire","cta","interdits","scène visuelle",
+  "description","déroulé de la séance","bienfaits","public concerné","précautions"];
 function extractFicheFields(block){
   const found = {};
   PRESTATION_FICHE_LABELS.forEach(label=>{
