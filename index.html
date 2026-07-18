@@ -3449,6 +3449,191 @@ function buildPostTab(){
     return frag;
   }
 
+  /* ---------- MOTEUR CRÉATIF — action principale, en deux phases ----------
+     Phase A (gratuite, aucun appel image) : diversité déterministe, Creative Planner, validation
+     locale, sélection des références, prompt image compact — tout ça est affiché dans le Prompt
+     Inspector AVANT toute confirmation. Phase B (payante) ne part qu'après un clic explicite sur
+     "Confirmer et générer l'image". Volontairement indépendant de state.imagePrompt (qui n'est
+     rempli que par l'ancien mode manuel, plus bas) — c'est ce découplage qui manquait : ce bloc
+     n'était visible qu'après avoir cliqué l'ancien bouton "Générer image + texte", ce qui donnait
+     l'impression d'un flux à une seule étape. */
+  const creativeEngineAvailable = !!(state.apiProviders.find(p=>p.kind==="openai-compatible" && (p.baseUrl||"").includes("api.openai.com")) || DEFAULT_OPENAI_PROVIDER);
+  if(creativeEngineAvailable){
+    const imgApiStatus = el("p",{style:"font-size:12px;color:var(--muted2);min-height:16px;margin:4px 0 8px;"},"");
+    const prepareBtn = el("button",{class:"btn-primary", style:"margin-bottom:10px;"}, [svgIcon(ICONS.sparkles,14), el("span",{},"Préparer la création (gratuit)")]);
+    const confirmBtn = el("button",{class:"btn-secondary", style:"margin:0 0 10px 8px;display:none;"}, [svgIcon(ICONS.wand,14), el("span",{},"Confirmer et générer l'image")]);
+    const imgCancelBtn = el("button",{class:"btn-secondary", style:"margin:0 0 10px 8px;display:none;"}, "Annuler le suivi");
+    const regenTextBtn = el("button",{class:"btn-secondary", style:"margin:0 0 10px 8px;display:none;"}, "Régénérer uniquement le texte");
+    const relaunchAnalysisBtn = el("button",{class:"btn-secondary", style:"margin:0 0 10px 8px;display:none;"}, "Relancer l'analyse de l'image");
+    const inspectorHost = el("div",{});
+    let activeCancelToken = null;
+
+    // Reconstruit l'Inspector et les boutons DEPUIS state.lastCreativeFlow (persistant) plutôt que
+    // depuis une variable locale — c'est ce qui les fait survivre à renderMain().
+    function renderCreativeInspector(){
+      const flow = state.lastCreativeFlow;
+      inspectorHost.innerHTML = "";
+      confirmBtn.style.display = "none"; regenTextBtn.style.display = "none"; relaunchAnalysisBtn.style.display = "none";
+      if(!flow) return;
+      if(flow.phase==="prepared") confirmBtn.style.display = "inline-block";
+      if(flow.phase==="completed"){ regenTextBtn.style.display = "inline-block"; relaunchAnalysisBtn.style.display = "inline-block"; }
+      const details = el("details",{open:true, style:"margin:10px 0;"});
+      details.appendChild(el("summary",{style:"cursor:pointer;font-size:13px;color:var(--muted);"}, "Prompt Inspector — moteur créatif"));
+      const body = el("div",{class:"card", style:"margin-top:8px;font-size:12px;"});
+      const row = (label,val)=> el("div",{style:"padding:4px 0;border-bottom:1px solid var(--border);"}, [el("span",{style:"color:var(--muted2);"}, label+" : "), el("span",{}, val||"—")]);
+      row.call && body.appendChild(row("Phase", flow.phase==="prepared" ? "A — préparée, en attente de confirmation (aucun crédit consommé)" : flow.phase==="image_failed" ? "B — échec avant obtention de l'image" : "B — terminée"));
+      body.appendChild(row("Archétype choisi", flow.brief && flow.brief.archetypeNarratif));
+      body.appendChild(row("Archétypes interdits (récents)", (flow.exclusions||[]).join(", ") || "aucun"));
+      body.appendChild(row("Raison de différenciation", flow.brief && flow.brief.raisonDifferenceAvecHistorique));
+      body.appendChild(row("Références sélectionnées", String((flow.referenceSelections||[]).length)));
+      if(flow.phase!=="prepared") body.appendChild(row("Référence réellement utilisée", flow.usedReference ? "Oui ✓" : (flow.referenceFallbackReason ? "Non — repli : "+flow.referenceFallbackReason : "Non demandée")));
+      body.appendChild(row("Modèle", "gpt-image-1"));
+      body.appendChild(row("Taille prévue", API_IMAGE_SIZE_BY_PLATFORM[flow.inputs.platform] || "1024x1024"));
+      if(flow.plannerError) body.appendChild(row("⚠ Creative Planner", flow.plannerError));
+      if(flow.referenceError) body.appendChild(row("⚠ Références", flow.referenceError));
+      if(flow.error) body.appendChild(row("⚠ Image", flow.error));
+      if(flow.analysisError) body.appendChild(row("⚠ Analyse d'image", flow.analysisError));
+      if(flow.textError) body.appendChild(row("⚠ Génération texte", flow.textError));
+      body.appendChild(el("p",{style:"font-weight:600;margin:8px 0 4px;"}, "Creative Brief (JSON)"));
+      body.appendChild(el("pre",{style:"white-space:pre-wrap;font-size:11px;"}, JSON.stringify(flow.brief, null, 2)));
+      body.appendChild(el("p",{style:"font-weight:600;margin:8px 0 4px;"}, "Prompt image compact (exactement celui qui sera/a été envoyé)"));
+      body.appendChild(el("pre",{style:"white-space:pre-wrap;font-size:11px;"}, flow.imagePrompt));
+      if(flow.content){
+        body.appendChild(el("p",{style:"font-weight:600;margin:8px 0 4px;"}, "Texte final"));
+        body.appendChild(el("pre",{style:"white-space:pre-wrap;font-size:11px;"}, JSON.stringify(flow.content, null, 2)));
+      }
+      details.appendChild(body);
+      inspectorHost.appendChild(details);
+    }
+
+    // --- Phase A : gratuite, aucun appel image ---
+    prepareBtn.addEventListener("click", async ()=>{
+      if(!state.topic.trim()){ topicWarn.textContent = "Décris d'abord le sujet du post avant de générer."; return; }
+      topicWarn.textContent = "";
+      prepareBtn.disabled = true;
+      imgApiStatus.textContent = "Préparation de la création (Creative Planner)...";
+      try{
+        const prepared = await prepareCreativeBrief({ mission: state.mission, platform, prestation: state.prestationName, topic: state.topic, aspectKey: PLATFORM_ASPECT[platform], size: API_IMAGE_SIZE_BY_PLATFORM[platform]||"1024x1024", isCampaign:false });
+        state.lastCreativeFlow = prepared;
+        imgApiStatus.textContent = prepared.plannerError
+          ? `Brief préparé (avec repli local — voir Inspector) ✓ Relis le prompt avant de confirmer.`
+          : "Brief préparé ✓ — relis le Creative Brief et le prompt ci-dessous avant de confirmer (aucun crédit consommé pour l'instant).";
+        renderCreativeInspector();
+      }catch(err){ imgApiStatus.textContent = `Échec de la préparation : ${err.message||err}`; }
+      prepareBtn.disabled = false;
+    });
+
+    // --- Phase B : payante, uniquement après ce clic explicite ---
+    confirmBtn.addEventListener("click", async ()=>{
+      if(!state.lastCreativeFlow || state.lastCreativeFlow.phase!=="prepared") return;
+      if(!confirm("Lancer la génération d'image via OpenAI ? Ceci consomme du crédit API.")) return;
+      confirmBtn.disabled = true; imgCancelBtn.style.display = "inline-block";
+      const t0 = Date.now();
+      const cancelToken = { cancelled:false }; activeCancelToken = cancelToken;
+      try{
+        const flow = await confirmAndGenerateImage(state.lastCreativeFlow, (label)=>{ imgApiStatus.textContent = label; }, cancelToken);
+        state.lastCreativeFlow = flow;
+        if(!flow.ok){
+          logToLab({ provider:"OpenAI", model:"gpt-image-1", type:"image", prompt: flow.imagePrompt, promptHash: hashPrompt(flow.imagePrompt||""), cost:null, durationMs: Date.now()-t0, status:"refused", reason: flow.error });
+          imgApiStatus.textContent = flow.error;
+          renderCreativeInspector();
+          confirmBtn.disabled = false; imgCancelBtn.style.display = "none"; activeCancelToken = null;
+          return;
+        }
+        let dataUrl = flow.dataUrl;
+        let logoApplied = false;
+        if(logoRequiredFor(platform)){
+          const composited = await compositeBrandSignature(dataUrl, platform);
+          dataUrl = composited.dataUrl; logoApplied = composited.applied;
+        }
+        const id = uid();
+        state.images.push({ id, name:`${platform}-${nowStr()}.png`, dataUrl, tags:[platform], favorite:false,
+          logoApplied, usedReference: flow.usedReference, referenceFallbackReason: flow.referenceFallbackReason,
+          creativeBrief: flow.brief, creativeContent: flow.content, altText: flow.content ? flow.content.altText : (flow.analysis && flow.analysis.altText) });
+        LS.set("vf-images", state.images);
+        updateCount();
+        state.selectedId = id; state.postImageId = id;
+        flow.imageId = id; // les boutons de relance retrouveront TOUJOURS l'image par cet id, jamais par state.selectedId
+        // Historique visuel structuré : uniquement maintenant, l'image existe réellement — et
+        // uniquement les IDs des références utilisées, jamais leurs dataUrl complètes.
+        recordStructuredImageEntry(
+          { mission: state.mission, platform, prestation: state.prestationName, topic: state.topic },
+          flow.brief, (flow.referenceSelections||[]).map(r=>r.id), flow.imagePrompt, id
+        );
+        logToLab({ provider:"OpenAI", model:"gpt-image-1", type:"image", prompt: flow.imagePrompt, promptHash: hashPrompt(flow.imagePrompt), cost:null, durationMs: Date.now()-t0, status:"accepted" });
+
+        // Raccordement réel du texte final au flux normal de publication : Instagram attend
+        // caption+hashtags dans state.textPasted, l'alt text est conservé séparément — c'est cette
+        // même zone que "Programmer la publication" utilise plus bas, inchangée.
+        if(flow.content){
+          const hashtagsText = (flow.content.hashtags||[]).map(h=> h.startsWith("#") ? h : "#"+h).slice(0,5).join(" ");
+          state.textPasted = [flow.content.caption||"", hashtagsText].filter(Boolean).join("\n\n");
+          state.pendingAltText = flow.content.altText || "";
+        }
+
+        let referenceLabel;
+        if(flow.usedReference) referenceLabel = "Référence visuelle utilisée ✓";
+        else if(flow.referenceFallbackReason) referenceLabel = "Référence non utilisée — génération standard de secours.";
+        else referenceLabel = "Génération standard — aucune référence visuelle fournie.";
+        const parts = [logoRequiredFor(platform) ? (logoApplied?"Image générée, logo appliqué ✓":"Image générée — aucun logo marqué comme actif de marque.") : "Image générée et ajoutée à ta bibliothèque ✓", referenceLabel];
+        if(flow.content) parts.push("Texte inséré dans la zone de publication ci-dessous ✓");
+        if(flow.analysisError) parts.push("⚠ "+flow.analysisError);
+        if(flow.textError) parts.push("⚠ "+flow.textError+" — utilise \"Régénérer uniquement le texte\".");
+        imgApiStatus.textContent = parts.join(" — ");
+        renderCreativeInspector();
+        renderMain();
+      }catch(err){
+        const cancelled = String(err.message||err)==="__CANCELLED__";
+        imgApiStatus.textContent = cancelled ? "Suivi annulé (la génération continue peut-être côté serveur)." : `Erreur inattendue : ${err.message||err}`;
+      }
+      confirmBtn.disabled = false; imgCancelBtn.style.display = "none"; activeCancelToken = null;
+    });
+    imgCancelBtn.addEventListener("click", ()=>{ if(activeCancelToken) activeCancelToken.cancelled = true; });
+
+    regenTextBtn.addEventListener("click", async ()=>{
+      const flow = state.lastCreativeFlow;
+      if(!flow || !flow.dataUrl) return;
+      regenTextBtn.disabled = true;
+      try{
+        const content = await generateContentFromBrief(flow.brief, flow.analysis, flow.inputs.platform, flow.inputs.mission);
+        flow.content = content; flow.textError = null;
+        const img = state.images.find(i=>i.id===flow.imageId);
+        if(img){ img.creativeContent = content; img.altText = content.altText; }
+        LS.set("vf-images", state.images);
+        const hashtagsText = (content.hashtags||[]).map(h=> h.startsWith("#") ? h : "#"+h).slice(0,5).join(" ");
+        state.textPasted = [content.caption||"", hashtagsText].filter(Boolean).join("\n\n");
+        state.pendingAltText = content.altText || "";
+        imgApiStatus.textContent = "Texte régénéré ✓ et inséré dans la zone de publication (image non retouchée, aucun nouvel appel image facturé)";
+        renderCreativeInspector();
+        renderMain();
+      }catch(err){ imgApiStatus.textContent = `Échec de la régénération du texte : ${err.message||err}`; }
+      regenTextBtn.disabled = false;
+    });
+    relaunchAnalysisBtn.addEventListener("click", async ()=>{
+      const flow = state.lastCreativeFlow;
+      if(!flow || !flow.dataUrl) return;
+      relaunchAnalysisBtn.disabled = true;
+      try{
+        const analysis = await analyzeGeneratedImage(flow.dataUrl, flow.brief);
+        flow.analysis = analysis; flow.analysisError = null;
+        imgApiStatus.textContent = "Analyse de l'image relancée ✓ (aucun nouvel appel image facturé)";
+        renderCreativeInspector();
+      }catch(err){ imgApiStatus.textContent = `Échec de l'analyse : ${err.message||err}`; }
+      relaunchAnalysisBtn.disabled = false;
+    });
+
+    frag.appendChild(prepareBtn);
+    frag.appendChild(confirmBtn);
+    frag.appendChild(imgCancelBtn);
+    frag.appendChild(regenTextBtn);
+    frag.appendChild(relaunchAnalysisBtn);
+    frag.appendChild(imgApiStatus);
+    frag.appendChild(inspectorHost);
+    renderCreativeInspector(); // reconstruit l'état après un éventuel renderMain() précédent
+  }
+
+  frag.appendChild(el("p",{class:"label", style:"margin-top:18px;"}, "Mode manuel avancé (copier-coller dans ChatGPT, sans le moteur créatif)"));
+
   const imageOnlyMode = state.creationMode === "image";
   frag.appendChild(el("button",{class:"btn-primary", style:"margin-bottom:14px;", onclick: ()=>{
     if(!state.topic.trim()){ topicWarn.textContent = "Décris d'abord le sujet du post avant de générer."; return; }
@@ -3543,180 +3728,7 @@ function buildPostTab(){
     frag.appendChild(el("h2",{class:"section"}, state.viewMode==="production" ? "Image à copier dans ChatGPT" : "Prompt image"));
     frag.appendChild(vfWrap(el("div",{class:"card", style:"margin-bottom:6px;"},[el("pre",{}, state.imagePrompt)])));
     frag.appendChild(copyBtnFor(()=>state.imagePrompt));
-    frag.appendChild(el("p",{class:"sublabel"},"Colle ce prompt dans ChatGPT Plus (génération d'image), puis importe le résultat dans ta bibliothèque — ou génère-la directement ci-dessous si OpenAI est configuré."));
-
-    const openaiProvider = state.apiProviders.find(p=>p.kind==="openai-compatible" && (p.baseUrl||"").includes("api.openai.com")) || DEFAULT_OPENAI_PROVIDER;
-    if(openaiProvider){
-      const imgApiStatus = el("p",{style:"font-size:12px;color:var(--muted2);min-height:16px;margin:4px 0 8px;"},"");
-      const prepareBtn = el("button",{class:"btn-secondary", style:"margin-bottom:10px;"}, [svgIcon(ICONS.sparkles,14), el("span",{},"Préparer la création (gratuit)")]);
-      const confirmBtn = el("button",{class:"btn-secondary", style:"margin:0 0 10px 8px;display:none;"}, [svgIcon(ICONS.wand,14), el("span",{},"Confirmer et générer l'image")]);
-      const imgCancelBtn = el("button",{class:"btn-secondary", style:"margin:0 0 10px 8px;display:none;"}, "Annuler le suivi");
-      const regenTextBtn = el("button",{class:"btn-secondary", style:"margin:0 0 10px 8px;display:none;"}, "Régénérer uniquement le texte");
-      const relaunchAnalysisBtn = el("button",{class:"btn-secondary", style:"margin:0 0 10px 8px;display:none;"}, "Relancer l'analyse de l'image");
-      const inspectorHost = el("div",{});
-      let activeCancelToken = null;
-
-      // Reconstruit l'Inspector et les boutons DEPUIS state.lastCreativeFlow (persistant) plutôt que
-      // depuis une variable locale — c'est ce qui les fait survivre à renderMain().
-      function renderCreativeInspector(){
-        const flow = state.lastCreativeFlow;
-        inspectorHost.innerHTML = "";
-        confirmBtn.style.display = "none"; regenTextBtn.style.display = "none"; relaunchAnalysisBtn.style.display = "none";
-        if(!flow) return;
-        if(flow.phase==="prepared") confirmBtn.style.display = "inline-block";
-        if(flow.phase==="completed"){ regenTextBtn.style.display = "inline-block"; relaunchAnalysisBtn.style.display = "inline-block"; }
-        const details = el("details",{open:true, style:"margin:10px 0;"});
-        details.appendChild(el("summary",{style:"cursor:pointer;font-size:13px;color:var(--muted);"}, "Prompt Inspector — moteur créatif"));
-        const body = el("div",{class:"card", style:"margin-top:8px;font-size:12px;"});
-        const row = (label,val)=> el("div",{style:"padding:4px 0;border-bottom:1px solid var(--border);"}, [el("span",{style:"color:var(--muted2);"}, label+" : "), el("span",{}, val||"—")]);
-        row.call && body.appendChild(row("Phase", flow.phase==="prepared" ? "A — préparée, en attente de confirmation (aucun crédit consommé)" : flow.phase==="image_failed" ? "B — échec avant obtention de l'image" : "B — terminée"));
-        body.appendChild(row("Archétype choisi", flow.brief && flow.brief.archetypeNarratif));
-        body.appendChild(row("Archétypes interdits (récents)", (flow.exclusions||[]).join(", ") || "aucun"));
-        body.appendChild(row("Raison de différenciation", flow.brief && flow.brief.raisonDifferenceAvecHistorique));
-        body.appendChild(row("Références sélectionnées", String((flow.referenceSelections||[]).length)));
-        if(flow.phase!=="prepared") body.appendChild(row("Référence réellement utilisée", flow.usedReference ? "Oui ✓" : (flow.referenceFallbackReason ? "Non — repli : "+flow.referenceFallbackReason : "Non demandée")));
-        body.appendChild(row("Modèle", "gpt-image-1"));
-        body.appendChild(row("Taille prévue", API_IMAGE_SIZE_BY_PLATFORM[flow.inputs.platform] || "1024x1024"));
-        if(flow.plannerError) body.appendChild(row("⚠ Creative Planner", flow.plannerError));
-        if(flow.referenceError) body.appendChild(row("⚠ Références", flow.referenceError));
-        if(flow.error) body.appendChild(row("⚠ Image", flow.error));
-        if(flow.analysisError) body.appendChild(row("⚠ Analyse d'image", flow.analysisError));
-        if(flow.textError) body.appendChild(row("⚠ Génération texte", flow.textError));
-        body.appendChild(el("p",{style:"font-weight:600;margin:8px 0 4px;"}, "Creative Brief (JSON)"));
-        body.appendChild(el("pre",{style:"white-space:pre-wrap;font-size:11px;"}, JSON.stringify(flow.brief, null, 2)));
-        body.appendChild(el("p",{style:"font-weight:600;margin:8px 0 4px;"}, "Prompt image compact (exactement celui qui sera/a été envoyé)"));
-        body.appendChild(el("pre",{style:"white-space:pre-wrap;font-size:11px;"}, flow.imagePrompt));
-        if(flow.content){
-          body.appendChild(el("p",{style:"font-weight:600;margin:8px 0 4px;"}, "Texte final"));
-          body.appendChild(el("pre",{style:"white-space:pre-wrap;font-size:11px;"}, JSON.stringify(flow.content, null, 2)));
-        }
-        details.appendChild(body);
-        inspectorHost.appendChild(details);
-      }
-
-      // --- Phase A : gratuite, aucun appel image ---
-      prepareBtn.addEventListener("click", async ()=>{
-        prepareBtn.disabled = true;
-        imgApiStatus.textContent = "Préparation de la création (Creative Planner)...";
-        try{
-          const prepared = await prepareCreativeBrief({ mission: state.mission, platform, prestation: state.prestationName, topic: state.topic, aspectKey: PLATFORM_ASPECT[platform], size: API_IMAGE_SIZE_BY_PLATFORM[platform]||"1024x1024", isCampaign:false });
-          state.lastCreativeFlow = prepared;
-          imgApiStatus.textContent = prepared.plannerError
-            ? `Brief préparé (avec repli local — voir Inspector) ✓ Relis le prompt avant de confirmer.`
-            : "Brief préparé ✓ — relis le Creative Brief et le prompt ci-dessous avant de confirmer (aucun crédit consommé pour l'instant).";
-          renderCreativeInspector();
-        }catch(err){ imgApiStatus.textContent = `Échec de la préparation : ${err.message||err}`; }
-        prepareBtn.disabled = false;
-      });
-
-      // --- Phase B : payante, uniquement après ce clic explicite ---
-      confirmBtn.addEventListener("click", async ()=>{
-        if(!state.lastCreativeFlow || state.lastCreativeFlow.phase!=="prepared") return;
-        if(!confirm("Lancer la génération d'image via OpenAI ? Ceci consomme du crédit API.")) return;
-        confirmBtn.disabled = true; imgCancelBtn.style.display = "inline-block";
-        const t0 = Date.now();
-        const cancelToken = { cancelled:false }; activeCancelToken = cancelToken;
-        try{
-          const flow = await confirmAndGenerateImage(state.lastCreativeFlow, (label)=>{ imgApiStatus.textContent = label; }, cancelToken);
-          state.lastCreativeFlow = flow;
-          if(!flow.ok){
-            logToLab({ provider:"OpenAI", model:"gpt-image-1", type:"image", prompt: flow.imagePrompt, promptHash: hashPrompt(flow.imagePrompt||""), cost:null, durationMs: Date.now()-t0, status:"refused", reason: flow.error });
-            imgApiStatus.textContent = flow.error;
-            renderCreativeInspector();
-            confirmBtn.disabled = false; imgCancelBtn.style.display = "none"; activeCancelToken = null;
-            return;
-          }
-          let dataUrl = flow.dataUrl;
-          let logoApplied = false;
-          if(logoRequiredFor(platform)){
-            const composited = await compositeBrandSignature(dataUrl, platform);
-            dataUrl = composited.dataUrl; logoApplied = composited.applied;
-          }
-          const id = uid();
-          state.images.push({ id, name:`${platform}-${nowStr()}.png`, dataUrl, tags:[platform], favorite:false,
-            logoApplied, usedReference: flow.usedReference, referenceFallbackReason: flow.referenceFallbackReason,
-            creativeBrief: flow.brief, creativeContent: flow.content, altText: flow.content ? flow.content.altText : (flow.analysis && flow.analysis.altText) });
-          LS.set("vf-images", state.images);
-          updateCount();
-          state.selectedId = id; state.postImageId = id;
-          flow.imageId = id; // les boutons de relance retrouveront TOUJOURS l'image par cet id, jamais par state.selectedId
-          // Historique visuel structuré : uniquement maintenant, l'image existe réellement — et
-          // uniquement les IDs des références utilisées, jamais leurs dataUrl complètes.
-          recordStructuredImageEntry(
-            { mission: state.mission, platform, prestation: state.prestationName, topic: state.topic },
-            flow.brief, (flow.referenceSelections||[]).map(r=>r.id), flow.imagePrompt, id
-          );
-          logToLab({ provider:"OpenAI", model:"gpt-image-1", type:"image", prompt: flow.imagePrompt, promptHash: hashPrompt(flow.imagePrompt), cost:null, durationMs: Date.now()-t0, status:"accepted" });
-
-          // Raccordement réel du texte final au flux normal de publication (Point 2) : Instagram
-          // attend caption+hashtags dans state.textPasted, l'alt text est conservé séparément —
-          // c'est cette même zone que "Programmer la publication" utilise plus bas, inchangée.
-          if(flow.content){
-            const hashtagsText = (flow.content.hashtags||[]).map(h=> h.startsWith("#") ? h : "#"+h).slice(0,5).join(" ");
-            state.textPasted = [flow.content.caption||"", hashtagsText].filter(Boolean).join("\n\n");
-            state.pendingAltText = flow.content.altText || "";
-          }
-
-          let referenceLabel;
-          if(flow.usedReference) referenceLabel = "Référence visuelle utilisée ✓";
-          else if(flow.referenceFallbackReason) referenceLabel = "Référence non utilisée — génération standard de secours.";
-          else referenceLabel = "Génération standard — aucune référence visuelle fournie.";
-          const parts = [logoRequiredFor(platform) ? (logoApplied?"Image générée, logo appliqué ✓":"Image générée — aucun logo marqué comme actif de marque.") : "Image générée et ajoutée à ta bibliothèque ✓", referenceLabel];
-          if(flow.content) parts.push("Texte inséré dans la zone de publication ci-dessous ✓");
-          if(flow.analysisError) parts.push("⚠ "+flow.analysisError);
-          if(flow.textError) parts.push("⚠ "+flow.textError+" — utilise \"Régénérer uniquement le texte\".");
-          imgApiStatus.textContent = parts.join(" — ");
-          renderCreativeInspector();
-          renderMain();
-        }catch(err){
-          const cancelled = String(err.message||err)==="__CANCELLED__";
-          imgApiStatus.textContent = cancelled ? "Suivi annulé (la génération continue peut-être côté serveur)." : `Erreur inattendue : ${err.message||err}`;
-        }
-        confirmBtn.disabled = false; imgCancelBtn.style.display = "none"; activeCancelToken = null;
-      });
-      imgCancelBtn.addEventListener("click", ()=>{ if(activeCancelToken) activeCancelToken.cancelled = true; });
-
-      regenTextBtn.addEventListener("click", async ()=>{
-        const flow = state.lastCreativeFlow;
-        if(!flow || !flow.dataUrl) return;
-        regenTextBtn.disabled = true;
-        try{
-          const content = await generateContentFromBrief(flow.brief, flow.analysis, flow.inputs.platform, flow.inputs.mission);
-          flow.content = content; flow.textError = null;
-          const img = state.images.find(i=>i.id===flow.imageId);
-          if(img){ img.creativeContent = content; img.altText = content.altText; }
-          LS.set("vf-images", state.images);
-          const hashtagsText = (content.hashtags||[]).map(h=> h.startsWith("#") ? h : "#"+h).slice(0,5).join(" ");
-          state.textPasted = [content.caption||"", hashtagsText].filter(Boolean).join("\n\n");
-          state.pendingAltText = content.altText || "";
-          imgApiStatus.textContent = "Texte régénéré ✓ et inséré dans la zone de publication (image non retouchée, aucun nouvel appel image facturé)";
-          renderCreativeInspector();
-          renderMain();
-        }catch(err){ imgApiStatus.textContent = `Échec de la régénération du texte : ${err.message||err}`; }
-        regenTextBtn.disabled = false;
-      });
-      relaunchAnalysisBtn.addEventListener("click", async ()=>{
-        const flow = state.lastCreativeFlow;
-        if(!flow || !flow.dataUrl) return;
-        relaunchAnalysisBtn.disabled = true;
-        try{
-          const analysis = await analyzeGeneratedImage(flow.dataUrl, flow.brief);
-          flow.analysis = analysis; flow.analysisError = null;
-          imgApiStatus.textContent = "Analyse de l'image relancée ✓ (aucun nouvel appel image facturé)";
-          renderCreativeInspector();
-        }catch(err){ imgApiStatus.textContent = `Échec de l'analyse : ${err.message||err}`; }
-        relaunchAnalysisBtn.disabled = false;
-      });
-
-      frag.appendChild(prepareBtn);
-      frag.appendChild(confirmBtn);
-      frag.appendChild(imgCancelBtn);
-      frag.appendChild(regenTextBtn);
-      frag.appendChild(relaunchAnalysisBtn);
-      frag.appendChild(imgApiStatus);
-      frag.appendChild(inspectorHost);
-      renderCreativeInspector(); // reconstruit l'état après un éventuel renderMain() précédent
-    }
+    frag.appendChild(el("p",{class:"sublabel"},"Colle ce prompt dans ChatGPT Plus (génération d'image), puis importe le résultat dans ta bibliothèque — ou utilise \"Préparer la création\" plus haut pour générer directement via l'API OpenAI."));
 
     const imgFileInput = el("input",{type:"file", accept:"image/*", style:"display:none"});
     const confirmMsg = el("p",{style:"font-size:12px;color:var(--green);margin-top:8px;min-height:14px;"},"");
