@@ -1698,7 +1698,11 @@ async function generateCreativeBrief(mission, prestation, platform, topic){
   if(!res.ok || data.error) throw new Error(data.error || `Erreur ${res.status}`);
   let rawBrief;
   try{ rawBrief = JSON.parse(data.text); }
-  catch(e){ throw new Error("Le Creative Planner n'a pas renvoyé un JSON exploitable."); }
+  catch(e){
+    console.error("[Creative Planner] JSON.parse a échoué — contenu brut reçu :", data.text);
+    console.error("[Creative Planner] Erreur JSON.parse réelle :", e.message);
+    throw new Error(`Creative Planner — erreur JSON.parse :\n${e.message}\n\nRéponse brute :\n${String(data.text||"").slice(0,1500)}`);
+  }
   const { brief, corrected } = validateAndFixBrief(rawBrief, allowed, exclusions);
   return { brief, corrected, allowed, exclusions };
 }
