@@ -16,7 +16,7 @@ exports.handler = async (event) => {
   } catch (e) {
     return { statusCode: 400, body: JSON.stringify({ error: "Corps de requête invalide" }) };
   }
-  const { kind, model, baseUrl, systemPrompt, userPrompt } = payload;
+  const { kind, model, baseUrl, systemPrompt, userPrompt, responseSchema, imageDataUrl } = payload;
 
   try {
     let text;
@@ -62,19 +62,56 @@ exports.handler = async (event) => {
       const key = process.env.OPENAI_API_KEY;
       if (!key) throw new Error("Variable d'environnement OPENAI_API_KEY manquante sur Netlify");
       const url = `${(baseUrl || "https://api.openai.com/v1").replace(/\/$/, "")}/chat/completions`;
+      // Message multimodal si une image est fournie (Image Result Analyzer) ; texte seul sinon —
+      // comportement historique inchangé pour tous les appels qui ne fournissent pas imageDataUrl.
+      const userContent = imageDataUrl
+        ? [
+            { type: "text", text: userPrompt },
+            { type: "image_url", image_url: { url: imageDataUrl } },
+          ]
+        : userPrompt;
+      const body = {
+        model: model || "gpt-4o-mini",
+        messages: [
+          { role: "system", content: systemPrompt },
+          { role: "user", content: userContent },
+        ],
+      };
+      // Structured Outputs : seulement si un schéma JSON strict est explicitement fourni — n'affecte
+      // aucun appel existant qui ne le transmet pas (Creative Planner, Image Result Analyzer, texte
+      // depuis le brief en fournissent un ; les anciens appels texte n'en fournissent pas).
+      const hasResponseSchema = !!(responseSchema && typeof responseSchema === "object");
+      if (hasResponseSchema) {
+        body.response_format = { type: "json_schema", json_schema: responseSchema };
+      }
+      // --- DIAGNOSTIC TEMPORAIRE (uniquement si responseSchema est fourni) ---
+      // Vérifie la requête RÉELLEMENT exécutée, pas seulement reconstruite depuis le code.
+      // Ne journalise jamais la clé API ni les prompts complets.
+      if (hasResponseSchema) {
+        console.log("[DIAG generate-text] kind reçu :", kind);
+        console.log("[DIAG generate-text] model reçu :", model);
+        console.log("[DIAG generate-text] baseUrl reçu :", baseUrl);
+        console.log("[DIAG generate-text] URL finale appelée :", url);
+        console.log("[DIAG generate-text] response_format présent :", !!body.response_format);
+        console.log("[DIAG generate-text] response_format.type :", body.response_format && body.response_format.type);
+        console.log("[DIAG generate-text] response_format.json_schema.name :", body.response_format && body.response_format.json_schema && body.response_format.json_schema.name);
+      }
       const res = await fetch(url, {
         method: "POST",
         headers: { "Content-Type": "application/json", Authorization: `Bearer ${key}` },
-        body: JSON.stringify({
-          model: model || "gpt-4o-mini",
-          messages: [
-            { role: "system", content: systemPrompt },
-            { role: "user", content: userPrompt },
-          ],
-        }),
+        body: JSON.stringify(body),
       });
+      if (hasResponseSchema) {
+        console.log("[DIAG generate-text] statut HTTP retourné par OpenAI :", res.status);
+      }
       if (!res.ok) throw new Error(`Le fournisseur a répondu ${res.status} : ${(await res.text()).slice(0, 200)}`);
       const data = await res.json();
+      if (hasResponseSchema) {
+        const choice = data.choices?.[0];
+        console.log("[DIAG generate-text] finish_reason :", choice?.finish_reason);
+        console.log("[DIAG generate-text] présence de message.refusal :", !!(choice?.message?.refusal));
+        console.log("[DIAG generate-text] 300 premiers caractères de message.content :", String(choice?.message?.content || "").slice(0, 300));
+      }
       text = data.choices?.[0]?.message?.content || "";
     }
 
