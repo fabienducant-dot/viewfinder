@@ -97,12 +97,19 @@ exports.handler = async () => {
           : null;
         // Instagram uniquement : sépare la structure interne "1)/2)/3)" pour ne jamais publier ces
         // numéros — Make ne reçoit que la légende + les hashtags dans "texte", l'alt text à part.
+        // Le moteur créatif fournit désormais directement post.altText (texte déjà propre, sans
+        // numérotation) : on le préfère quand il existe, sinon on retombe sur l'ancien parsing.
         let texteEnvoye = post.textFinal;
-        let altTextEnvoye;
+        let altTextEnvoye = (typeof post.altText === "string" && post.altText) ? post.altText : undefined;
         if(post.platform === "Instagram" && post.textFinal){
           const parsed = parseInstagramText(post.textFinal);
-          texteEnvoye = [parsed.caption, parsed.hashtags].filter(Boolean).join("\n\n");
-          altTextEnvoye = parsed.altText || undefined;
+          if(parsed.hashtags || parsed.altText){
+            // Format ancien (numéroté) détecté : on continue de le séparer comme avant.
+            texteEnvoye = [parsed.caption, parsed.hashtags].filter(Boolean).join("\n\n");
+            if(!altTextEnvoye) altTextEnvoye = parsed.altText || undefined;
+          }
+          // Sinon (texte déjà propre, issu du moteur créatif) : texteEnvoye reste post.textFinal tel
+          // quel, altTextEnvoye vient déjà de post.altText ci-dessus.
         }
         console.log(`[check-scheduled-posts] Post ${post.id} → appel du webhook Make : ${webhookUrl}`);
         const res = await fetch(webhookUrl, {
