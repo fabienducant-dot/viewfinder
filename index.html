@@ -1661,6 +1661,124 @@ const ARCHETYPE_CATALOG_FANTASTIQUE = [
     presenceSoin:"aucune", referenceFamily:"monumental" },
 ];
 
+/* ====== MASTER_UNIVERS_SDZ v0 — AJOUT CIBLÉ MODE PRODUCTION V1 (ne pas étendre hors périmètre) ======
+   Objectif unique : donner au Planner un vocabulaire symbolique SDZ concret pour remplir
+   symbolePrincipal / structureNarrative / plansVisuels, afin qu'il cesse de puiser dans sa culture
+   générale (Taj Mahal, temple, Bouddha...) quand une prestation évoque une origine géographique
+   ou culturelle réelle (ex. Abhyanga → Inde).
+   Portée strictement limitée : chaque module ne sert QUE les archétypes listés dans archetypeIds,
+   qui appartiennent tous à ARCHETYPE_CATALOG_FANTASTIQUE. Aucun module ici ne s'applique donc en
+   luxe_silencieux — par construction, pas par condition explicite (voir buildUniversSDZBlock).
+   Pas de bibliothèque MASTER_UNIVERS_SDZ complète : seulement les 15 modules utiles aux archétypes
+   déjà en production, chacun rattaché à au moins un archétype existant. Le reste est hors périmètre
+   de cette livraison, à traiter après la V1.
+   categorie : architecture | symbole | matiere | geometrie | transformation | phenomene
+   roleNarratif : decor_principal | symbole_principal | matiere | geometrie | transformation | phenomene_ambiance
+   prioriteArtistique : 1 (pilier) à 3 (complémentaire) — détermine l'ordre d'apparition dans le bloc envoyé au Planner */
+const MASTER_UNIVERS_SDZ_V0 = [
+  // -- architecture (4) --
+  { id:"univers_seuil_monumental", categorie:"architecture", roleNarratif:"decor_principal", prioriteArtistique:1,
+    archetypeIds:["passage_symbolique","renaissance_monumentale"],
+    label:"Seuil monumental sans origine culturelle identifiable",
+    content:"Un seuil massif taillé dans une pierre noire indéterminée, sans style architectural rattachable à une civilisation, une religion ou un pays réels — ni colonnes classiques, ni arcs orientaux, ni motifs gravés reconnaissables.",
+    interdits:["tout monument réel ou identifiable (Taj Mahal, temple, pyramide, cathédrale...)","tout symbole religieux existant","toute inscription lisible"] },
+  { id:"univers_portail_transformation", categorie:"architecture", roleNarratif:"decor_principal", prioriteArtistique:1,
+    archetypeIds:["passage_symbolique"],
+    label:"Portail de transformation",
+    content:"Une masse rocheuse fracturée qui s'ouvre en un passage, comme si la roche elle-même se scindait pour livrer un chemin — jamais une porte construite ni un portail architectural stylisé.",
+    interdits:["porte ou portail construit par la main de l'homme","style architectural réel identifiable","ornementation religieuse"] },
+  { id:"univers_sanctuaire_vertical", categorie:"architecture", roleNarratif:"decor_principal", prioriteArtistique:2,
+    archetypeIds:["renaissance_monumentale","gardien_sdz"],
+    label:"Sanctuaire vertical",
+    content:"Une colonne ou une tour isolée, brute, sans ornementation religieuse, qui s'élève seule dans un espace vaste — présence verticale et silencieuse, jamais un édifice de culte reconnaissable.",
+    interdits:["édifice religieux réel ou reconnaissable","statue ou idole existante","dôme ou minaret"] },
+  { id:"univers_structure_fracturee", categorie:"architecture", roleNarratif:"decor_principal", prioriteArtistique:2,
+    archetypeIds:["liberation_matiere"],
+    label:"Structure fracturée-recomposée",
+    content:"Une ruine ou une structure de pierre qui se fracture et se reforme dans le même geste visuel — la matière architecturale elle-même incarne la libération, jamais un décor de fond passif.",
+    interdits:["ruine d'un monument réel identifiable","style architectural rattaché à une culture existante"] },
+
+  // -- symbole (3) --
+  { id:"univers_le_veilleur", categorie:"symbole", roleNarratif:"symbole_principal", prioriteArtistique:1,
+    archetypeIds:["gardien_sdz"],
+    label:"Le Veilleur",
+    content:"Une présence silencieuse et gardienne dans la scène — jamais un personnage religieux, historique ou mythologique identifiable (ni divinité, ni saint, ni figure culturelle réelle) : sa seule identité est celle de gardien de la marque SDZ.",
+    interdits:["divinité ou figure religieuse réelle","personnage historique identifiable","costume ou attribut culturel réel"] },
+  { id:"univers_ligne_doree", categorie:"symbole", roleNarratif:"symbole_principal", prioriteArtistique:1,
+    archetypeIds:["renaissance_monumentale","passage_symbolique","dualite_interieure","liberation_matiere","gardien_sdz"],
+    label:"La Ligne Dorée",
+    content:"Une trajectoire lumineuse continue, fine et dorée, qui traverse la composition et relie visuellement le sujet au symbole monumental — jamais un halo religieux (auréole, mandorle) ni un ornement décoratif isolé.",
+    interdits:["auréole ou mandorle religieuse","ornement doré décoratif sans fonction de trajectoire"] },
+  { id:"univers_le_voile", categorie:"symbole", roleNarratif:"symbole_principal", prioriteArtistique:2,
+    archetypeIds:["dualite_interieure"],
+    label:"Le Voile",
+    content:"Une surface fine (tissu, brume ou reflet) qui se soulève ou se dissout partiellement, révélant une vérité derrière une façade — jamais un voile à connotation religieuse ou culturelle reconnaissable.",
+    interdits:["voile à connotation religieuse ou culturelle réelle","masque ethnique ou traditionnel identifiable"] },
+
+  // -- matiere (3) --
+  { id:"univers_pierre_noire_or", categorie:"matiere", roleNarratif:"matiere", prioriteArtistique:2,
+    archetypeIds:["renaissance_monumentale"],
+    label:"Pierre noire veinée d'or",
+    content:"Une pierre sombre traversée de veines dorées irrégulières, comme si l'or naissait de l'intérieur de la matière — jamais un marbre ou un matériau associé à un style architectural réel connu.",
+    interdits:["marbre de style architectural identifiable","matériau associé à une culture réelle précise"] },
+  { id:"univers_or_liquide", categorie:"matiere", roleNarratif:"matiere", prioriteArtistique:2,
+    archetypeIds:["liberation_matiere"],
+    label:"Or liquide en fusion ou en suspension",
+    content:"De l'or en fusion ou en suspension dans l'air, comme libéré de la matière qui le contenait — mouvement fluide et lumineux, jamais un bijou ou un objet doré figuratif.",
+    interdits:["bijou ou objet doré figuratif reconnaissable","effet de type paillettes décoratives"] },
+  { id:"univers_bois_calcine", categorie:"matiere", roleNarratif:"matiere", prioriteArtistique:3,
+    archetypeIds:["renaissance_monumentale"],
+    label:"Bois calciné en régénération",
+    content:"Du bois noirci ou calciné dont émerge une repousse ou une lumière intérieure, incarnant la renaissance dans la matière même — jamais un arbre sacré ou un symbole botanique culturel identifiable.",
+    interdits:["arbre sacré ou symbole botanique culturel réel (arbre de vie, bodhi...)"] },
+
+  // -- geometrie (2) --
+  { id:"univers_arche_brisee", categorie:"geometrie", roleNarratif:"geometrie", prioriteArtistique:2,
+    archetypeIds:["passage_symbolique"],
+    label:"Arche brisée",
+    content:"Une arche incomplète ou fracturée, jamais refermée sur elle-même — sa géométrie signale un passage en cours, jamais un arc de triomphe ou une arche religieuse complète.",
+    interdits:["arc de triomphe ou monument réel","arche religieuse complète et ornée"] },
+  { id:"univers_spirale_ascendante", categorie:"geometrie", roleNarratif:"geometrie", prioriteArtistique:3,
+    archetypeIds:["dualite_interieure"],
+    label:"Spirale ascendante",
+    content:"Une trajectoire en spirale qui structure la composition et suggère un mouvement intérieur vers le haut — motif géométrique abstrait, jamais un symbole ésotérique ou religieux reconnaissable (mandala, etc.).",
+    interdits:["mandala ou symbole ésotérique réel","motif religieux reconnaissable"] },
+
+  // -- transformation (2) --
+  { id:"univers_dissolution_recomposition", categorie:"transformation", roleNarratif:"transformation", prioriteArtistique:1,
+    archetypeIds:["liberation_matiere","dualite_interieure"],
+    label:"Dissolution-recomposition simultanée",
+    content:"Le sujet ou la matière environnante apparaît en train de se dissoudre et de se recomposer dans le même instant visuel — les deux états coexistent dans une seule image, jamais suggérés par un avant/après séquentiel.",
+    interdits:["montage avant/après explicite","effet visuel générique de particules sans lien avec le sujet"] },
+  { id:"univers_seuil_de_passage", categorie:"transformation", roleNarratif:"transformation", prioriteArtistique:1,
+    archetypeIds:["passage_symbolique"],
+    label:"Seuil de passage",
+    content:"Une même composition rend visible un état avant et un état après de part et d'autre d'un seuil unique — jamais deux scènes séparées, toujours une seule image cohérente.",
+    interdits:["deux images ou deux scènes distinctes juxtaposées","texte ou légende explicative dans l'image"] },
+
+  // -- phenomene (1) --
+  { id:"univers_particules_dorees", categorie:"phenomene", roleNarratif:"phenomene_ambiance", prioriteArtistique:2,
+    archetypeIds:["renaissance_monumentale","passage_symbolique","dualite_interieure","liberation_matiere","gardien_sdz"],
+    label:"Particules dorées en suspension",
+    content:"De fines particules dorées en suspension dans l'air, portées par la lumière plutôt que par le vent — jamais de la fumée d'encens, des pétales ou des lucioles, qui évoquent un imaginaire culturel ou naturel existant.",
+    interdits:["fumée d'encens","pétales de fleurs","lucioles ou insectes lumineux"] },
+];
+
+/* Sélectionne, parmi MASTER_UNIVERS_SDZ_V0, uniquement les modules compatibles avec les archétypes
+   effectivement autorisés pour cette génération (paramètre `allowed`, jamais lu depuis state — même
+   principe que buildCompactMasterImageSocle(registres)). Tri par prioriteArtistique croissante
+   (1 = pilier) pour que les symboles les plus importants arrivent en tête du bloc.
+   Ne s'applique par construction qu'en affiche_fantastique : aucun id de ARCHETYPE_CATALOG (luxe
+   silencieux) ne correspond à un archetypeIds ci-dessus, donc `modules` reste vide dans ce cas. */
+function buildUniversSDZBlock(allowed){
+  const allowedIds = (allowed||[]).map(a=>a.id);
+  const modules = MASTER_UNIVERS_SDZ_V0
+    .filter(m => m.archetypeIds.some(id => allowedIds.includes(id)))
+    .sort((x,y)=> x.prioriteArtistique - y.prioriteArtistique);
+  if(!modules.length) return "";
+  return modules.map(m=>`- [${m.categorie}/${m.roleNarratif}] ${m.label} : ${m.content} Interdit : ${m.interdits.join(", ")}.`).join("\n");
+}
+
 /* ---------- 2. CALCUL DÉTERMINISTE DES OPTIONS AUTORISÉES (avant tout appel au Planner) ---------- */
 /* state.imageHistory : historique structuré dédié à l'image (distinct de state.history, qui reste
    celui du texte). Un tableau d'entrées { platform, archetypeId, decor, cadrage, action, presenceSoin,
@@ -1828,6 +1946,8 @@ function buildPrestationFicheBlock(prestation){
 
 function buildCreativePlannerUserPrompt(allowed, exclusions, mission, prestation, platform, topic, typeCreationImpose, registres){
   const socle = buildCompactMasterImageSocle(registres);
+  // Ajout MASTER_UNIVERS_SDZ v0 : vocabulaire symbolique SDZ pour les archétypes autorisés (vide en luxe_silencieux, voir buildUniversSDZBlock).
+  const universBlock = buildUniversSDZBlock(allowed);
   const prestationBlock = buildPrestationFicheBlock(prestation);
   const info = getSelectedPrestationInfo(prestation);
   const prestationDocumentee = !!(info && !info.generic && info.block);
@@ -1858,6 +1978,9 @@ ${consignePrestation}
 
 Archétypes narratifs autorisés (choisis-en un seul, exactement tel quel dans "archetypeNarratif") :
 ${allowed.map(a=>`- ${a.id} (${a.label}) : ${a.scenesCompatibles.join(" / ")} — cadrages possibles : ${a.cadrages.join(", ")} — lumières possibles : ${a.lumieres.join(", ")} — interdits : ${a.interdits.join(", ")} — scène de soin : ${a.presenceSoin}`).join("\n")}
+${universBlock ? `
+Vocabulaire symbolique SDZ imposé pour "symbolePrincipal", "structureNarrative" et "plansVisuels" — n'utilise RIEN d'autre pour ces champs, quelle que soit l'origine géographique ou culturelle évoquée par la prestation ou le sujet (aucun monument réel, aucune figure religieuse, aucune référence culturelle ou géographique existante — ex. Ayurveda ne doit jamais donner Taj Mahal, temple ou Bouddha) :
+${universBlock}` : ""}
 
 Éléments à ne surtout pas répéter (déjà utilisés très récemment sur cette plateforme) :
 ${exclusions.length ? exclusions.map(e=>`- ${e}`).join("\n") : "(aucun historique récent)"}
