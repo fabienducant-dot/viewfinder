@@ -1673,30 +1673,34 @@ const ARCHETYPE_CATALOG_FANTASTIQUE = [
    déjà en production, chacun rattaché à au moins un archétype existant. Le reste est hors périmètre
    de cette livraison, à traiter après la V1.
    categorie : architecture | symbole | matiere | geometrie | transformation | phenomene
-   roleNarratif : decor_principal | symbole_principal | matiere | geometrie | transformation | phenomene_ambiance
-   prioriteArtistique : 1 (pilier) à 3 (complémentaire) — détermine l'ordre d'apparition dans le bloc envoyé au Planner */
+   roleNarratif : manifestation_transformation | symbole_principal | matiere | geometrie | transformation | phenomene_ambiance
+   prioriteArtistique : 1 (pilier) à 3 (complémentaire) — détermine l'ordre d'apparition dans le bloc envoyé au Planner
+   IMPORTANT : les modules "architecture" (roleNarratif=manifestation_transformation) ne sont PAS un décor de fond —
+   chacun doit apparaître comme la conséquence visuelle directe de la transformation vécue par le sujet du fait de
+   la prestation (voir instruction explicite ajoutée dans buildCreativePlannerUserPrompt). */
 const MASTER_UNIVERS_SDZ_V0 = [
-  // -- architecture (4) --
-  { id:"univers_seuil_monumental", categorie:"architecture", roleNarratif:"decor_principal", prioriteArtistique:1,
+  // -- architecture (4) — v1.0 : jamais un décor préexistant, toujours une manifestation qui naît,
+  // évolue et disparaîtrait sans la transformation vécue par le sujet pendant la prestation --
+  { id:"univers_seuil_monumental", categorie:"architecture", roleNarratif:"manifestation_transformation", prioriteArtistique:1,
     archetypeIds:["passage_symbolique","renaissance_monumentale"],
     label:"Seuil monumental sans origine culturelle identifiable",
-    content:"Un seuil massif taillé dans une pierre noire indéterminée, sans style architectural rattachable à une civilisation, une religion ou un pays réels — ni colonnes classiques, ni arcs orientaux, ni motifs gravés reconnaissables.",
-    interdits:["tout monument réel ou identifiable (Taj Mahal, temple, pyramide, cathédrale...)","tout symbole religieux existant","toute inscription lisible"] },
-  { id:"univers_portail_transformation", categorie:"architecture", roleNarratif:"decor_principal", prioriteArtistique:1,
+    content:"Ce seuil massif taillé dans une pierre noire indéterminée n'existe pas avant que la transformation ne commence : il se révèle progressivement, pierre par pierre, à mesure que le sujet vit le changement produit par la prestation, et continue de se creuser ou de se refermer selon l'état exact de cette transformation. Sans elle, il n'aurait aucune raison d'apparaître et disparaîtrait entièrement. Aucun style architectural rattachable à une civilisation, une religion ou un pays réels — ni colonnes classiques, ni arcs orientaux, ni motifs gravés reconnaissables.",
+    interdits:["décor statique","fond indépendant","architecture passive","monument","bâtiment réel","inspiration culturelle identifiable","tout symbole religieux existant","toute inscription lisible"] },
+  { id:"univers_portail_transformation", categorie:"architecture", roleNarratif:"manifestation_transformation", prioriteArtistique:1,
     archetypeIds:["passage_symbolique"],
     label:"Portail de transformation",
-    content:"Une masse rocheuse fracturée qui s'ouvre en un passage, comme si la roche elle-même se scindait pour livrer un chemin — jamais une porte construite ni un portail architectural stylisé.",
-    interdits:["porte ou portail construit par la main de l'homme","style architectural réel identifiable","ornementation religieuse"] },
-  { id:"univers_sanctuaire_vertical", categorie:"architecture", roleNarratif:"decor_principal", prioriteArtistique:2,
+    content:"Ce portail n'existe pas au début de la scène : la roche se fracture et s'ouvre en temps réel, exactement au rythme où le sujet traverse ou vit sa transformation pendant la prestation — il s'agrandit, se referme ou se stabilise selon l'avancée exacte de ce changement, et n'aurait plus lieu d'être sans lui. Jamais une porte construite ni un portail architectural stylisé, jamais présent avant l'instant de transformation.",
+    interdits:["décor statique","fond indépendant","architecture passive","monument","bâtiment réel","inspiration culturelle identifiable","porte ou portail construit par la main de l'homme"] },
+  { id:"univers_sanctuaire_vertical", categorie:"architecture", roleNarratif:"manifestation_transformation", prioriteArtistique:2,
     archetypeIds:["renaissance_monumentale","gardien_sdz"],
     label:"Sanctuaire vertical",
-    content:"Une colonne ou une tour isolée, brute, sans ornementation religieuse, qui s'élève seule dans un espace vaste — présence verticale et silencieuse, jamais un édifice de culte reconnaissable.",
-    interdits:["édifice religieux réel ou reconnaissable","statue ou idole existante","dôme ou minaret"] },
-  { id:"univers_structure_fracturee", categorie:"architecture", roleNarratif:"decor_principal", prioriteArtistique:2,
+    content:"Cette colonne ou cette tour isolée ne préexiste pas à la scène : elle s'élève progressivement à mesure que l'élévation intérieure produite par la prestation se produit chez le sujet, et redescendrait ou s'effacerait si cette transformation s'arrêtait. Sa hauteur exacte est la mesure visible du changement en cours, jamais une présence fixée d'avance. Aucune ornementation religieuse, jamais un édifice de culte reconnaissable.",
+    interdits:["décor statique","fond indépendant","architecture passive","monument","bâtiment réel","inspiration culturelle identifiable","statue ou idole existante","dôme ou minaret"] },
+  { id:"univers_structure_fracturee", categorie:"architecture", roleNarratif:"manifestation_transformation", prioriteArtistique:2,
     archetypeIds:["liberation_matiere"],
     label:"Structure fracturée-recomposée",
-    content:"Une ruine ou une structure de pierre qui se fracture et se reforme dans le même geste visuel — la matière architecturale elle-même incarne la libération, jamais un décor de fond passif.",
-    interdits:["ruine d'un monument réel identifiable","style architectural rattaché à une culture existante"] },
+    content:"Cette structure de pierre n'est pas un décor déjà là : elle se fracture et se recompose au fil exact de la libération vécue par le sujet pendant la prestation, chaque fissure ou recomposition correspondant à une étape précise de ce relâchement — sans cette transformation, la structure resterait intacte et invisible en tant qu'élément narratif. La matière architecturale est la transformation elle-même, jamais un arrière-plan observé de l'extérieur.",
+    interdits:["décor statique","fond indépendant","architecture passive","monument","bâtiment réel","inspiration culturelle identifiable","ruine d'un monument réel identifiable"] },
 
   // -- symbole (3) --
   { id:"univers_le_veilleur", categorie:"symbole", roleNarratif:"symbole_principal", prioriteArtistique:1,
@@ -1979,6 +1983,14 @@ ${consignePrestation}
 Archétypes narratifs autorisés (choisis-en un seul, exactement tel quel dans "archetypeNarratif") :
 ${allowed.map(a=>`- ${a.id} (${a.label}) : ${a.scenesCompatibles.join(" / ")} — cadrages possibles : ${a.cadrages.join(", ")} — lumières possibles : ${a.lumieres.join(", ")} — interdits : ${a.interdits.join(", ")} — scène de soin : ${a.presenceSoin}`).join("\n")}
 ${universBlock ? `
+RÈGLE OFFICIELLE MASTER_UNIVERS_SDZ (à respecter impérativement) :
+- Un seul élément de la liste ci-dessous est autorisé, choisi parmi ceux proposés.
+- Cet élément ne peut jamais préexister à la scène : il apparaît uniquement parce que la prestation agit sur le sujet.
+- Il évolue pendant la scène (il naît, se transforme ou progresse), il n'est jamais figé du début à la fin.
+- Il constitue la manifestation visuelle de la transformation intérieure vécue grâce à cette prestation — jamais un décor, jamais un contexte, jamais une décoration.
+- Il est relié explicitement à la caractéristique principale de la prestation ("caracteristiqueSourcePrestation").
+- Dans "structureNarrative" (champ "transformation"), explique en une phrase cette causalité exacte : ce que fait la prestation → comment l'élément choisi apparaît ou évolue en conséquence.
+
 Vocabulaire symbolique SDZ imposé pour "symbolePrincipal", "structureNarrative" et "plansVisuels" — n'utilise RIEN d'autre pour ces champs, quelle que soit l'origine géographique ou culturelle évoquée par la prestation ou le sujet (aucun monument réel, aucune figure religieuse, aucune référence culturelle ou géographique existante — ex. Ayurveda ne doit jamais donner Taj Mahal, temple ou Bouddha) :
 ${universBlock}` : ""}
 
@@ -3892,6 +3904,38 @@ function buildPostTab(){
     const inspectorHost = el("div",{});
     let activeCancelToken = null;
 
+    // Helper clipboard réutilisé par les 4 boutons de l'inspecteur (Tout copier / Copier le Prompt /
+    // Copier le JSON) — factorisation pure de l'UI, aucun impact sur le pipeline ou l'état métier.
+    // navigator.clipboard.writeText avec repli textarea+execCommand pour contextes non sécurisés.
+    async function copyInspectorText(text, btn, defaultLabel){
+      const restoreLabel = ()=>{ setTimeout(()=>{ btn.textContent = defaultLabel; }, 1500); };
+      try{
+        if(navigator.clipboard && navigator.clipboard.writeText){
+          await navigator.clipboard.writeText(text);
+        } else {
+          throw new Error("clipboard API indisponible");
+        }
+        btn.textContent = "✓ Copié"; restoreLabel();
+      }catch(err){
+        try{
+          const ta = document.createElement("textarea");
+          ta.value = text; ta.style.position = "fixed"; ta.style.opacity = "0";
+          document.body.appendChild(ta); ta.focus(); ta.select();
+          document.execCommand("copy");
+          document.body.removeChild(ta);
+          btn.textContent = "✓ Copié"; restoreLabel();
+        }catch(err2){
+          btn.textContent = "⚠ Échec — copie manuelle requise";
+          setTimeout(()=>{ btn.textContent = defaultLabel; }, 2500);
+        }
+      }
+    }
+    // Formate DD/MM/YYYY HH:MM sans dépendance externe.
+    function formatInspectorDate(d){
+      const p2 = n => String(n).padStart(2,"0");
+      return `${p2(d.getDate())}/${p2(d.getMonth()+1)}/${d.getFullYear()} ${p2(d.getHours())}:${p2(d.getMinutes())}`;
+    }
+
     // Reconstruit l'Inspector et les boutons DEPUIS state.lastCreativeFlow (persistant) plutôt que
     // depuis une variable locale — c'est ce qui les fait survivre à renderMain().
     function renderCreativeInspector(){
@@ -3903,6 +3947,71 @@ function buildPostTab(){
       if(flow.phase==="completed"){ regenTextBtn.style.display = "inline-block"; relaunchAnalysisBtn.style.display = "inline-block"; }
       const details = el("details",{open:true, style:"margin:10px 0;"});
       details.appendChild(el("summary",{style:"cursor:pointer;font-size:13px;color:var(--muted);"}, "Prompt Inspector — moteur créatif"));
+
+      // ---- Textes bruts nécessaires aux boutons de copie (calculés une seule fois) ----
+      const promptText = flow.imagePrompt || "";
+      const jsonText = JSON.stringify(flow.brief, null, 2);
+      const combinedText = `========================\nPROMPT OPENAI\n========================\n\n${promptText}\n\n========================\nSTRUCTURED OUTPUT\n========================\n\n${jsonText}`;
+
+      // ---- Bandeau récapitulatif (lecture seule de flow.inputs/flow.brief/state.modules — aucune invention) ----
+      const safe = v => (v===undefined || v===null || v==="") ? "—" : v;
+      const prestationLabel = safe(flow.inputs && flow.inputs.prestation);
+      const missionLabel = safe(flow.inputs && flow.inputs.mission);
+      const platformLabel = safe(flow.inputs && flow.inputs.platform);
+      const registresArr = (flow.inputs && Array.isArray(flow.inputs.registres)) ? flow.inputs.registres : [];
+      const registresLabel = registresArr.length ? registresArr.join(", ") : "—";
+      const typeCreationVal = flow.brief && flow.brief.typeCreation;
+      const styleLabel = typeCreationVal==="affiche_fantastique" ? "Affiche fantastique" : typeCreationVal==="luxe_silencieux" ? "Luxe silencieux" : "—";
+      const universCount = buildUniversSDZBlock(flow.allowed||[]).split("\n").filter(Boolean).length;
+      // Reproduction EN LECTURE SEULE de la sélection réelle de buildCompactMasterImageSocle(registres)
+      // (permanents + noirOrHaute.slice(0,3) + registreHaute.slice(0,2) par registre actif) — uniquement
+      // pour affichage de statistiques ; buildCompactMasterImageSocle elle-même n'est ni appelée en
+      // double ni modifiée. Ces compteurs représentent donc exactement ce qui a été injecté dans le
+      // socle envoyé à OpenAI pour cette génération, jamais la taille totale de la bibliothèque.
+      const allImageModules = state.modules.filter(m=> m.enabled && m.category==="MASTER_IMAGE");
+      const permanentsInjected = allImageModules.filter(m=> m.criteres && m.criteres.portee==="permanent");
+      const constitutionInjectedCount = permanentsInjected.filter(m=> moduleRegistre(m)==="constitution_generale").length;
+      const noirOrPermanentInjectedCount = permanentsInjected.filter(m=> moduleRegistre(m)==="noir_or").length;
+      const noirOrHauteInjectedCount = allImageModules.filter(m=> m.criteres && m.criteres.portee==="contextuel" && m.criteres.priorite==="haute" && moduleRegistre(m)==="noir_or").slice(0,3).length;
+      const noirOrInjectedCount = noirOrPermanentInjectedCount + noirOrHauteInjectedCount;
+      const registreInjectedCounts = {};
+      KNOWN_REGISTRES.forEach(r=>{
+        if(registresArr.includes(r)){
+          registreInjectedCounts[r] = allImageModules.filter(m=> m.criteres && m.criteres.priorite==="haute" && moduleRegistre(m)===r).slice(0,2).length;
+        }
+      });
+      const totalImageModulesInjected = constitutionInjectedCount + noirOrInjectedCount + Object.values(registreInjectedCounts).reduce((a,b)=>a+b,0);
+      const summaryBox = el("div",{class:"card", style:"margin-top:8px;font-size:12px;"});
+      const srow = (label,val)=> el("div",{style:"padding:2px 0;"}, [el("span",{style:"color:var(--muted2);"}, label+" : "), el("span",{}, String(val))]);
+      summaryBox.appendChild(srow("Prestation", prestationLabel));
+      summaryBox.appendChild(srow("Mission", missionLabel));
+      summaryBox.appendChild(srow("Plateforme", platformLabel));
+      summaryBox.appendChild(srow("Registre(s)", registresLabel));
+      summaryBox.appendChild(srow("Style", styleLabel));
+      summaryBox.appendChild(srow("Modules Constitution injectés", constitutionInjectedCount));
+      summaryBox.appendChild(srow("Modules Noir & Or injectés", noirOrInjectedCount));
+      summaryBox.appendChild(srow("Modules Univers SDZ injectés", universCount));
+      KNOWN_REGISTRES.forEach(r=>{
+        if(registresArr.includes(r)) summaryBox.appendChild(srow(`Modules ${REGISTRE_LABELS[r]} injectés`, registreInjectedCounts[r]));
+      });
+      summaryBox.appendChild(srow("Total modules image injectés", totalImageModulesInjected));
+      summaryBox.appendChild(srow("Date", formatInspectorDate(new Date())));
+      details.appendChild(summaryBox);
+
+      // ---- Toolbar : 4 boutons de confort (Tout copier conservé + 3 nouveaux) ----
+      const toolbar = el("div",{style:"display:flex;gap:6px;flex-wrap:wrap;margin:8px 0;"});
+      const mkBtn = (label)=> el("button",{type:"button", class:"btn-secondary", style:"padding:4px 10px;font-size:12px;cursor:pointer;"}, label);
+      const copyAllBtn = mkBtn("📋 Tout copier");
+      copyAllBtn.addEventListener("click", ()=> copyInspectorText(combinedText, copyAllBtn, "📋 Tout copier"));
+      const copyPromptBtn = mkBtn("📄 Copier le Prompt");
+      copyPromptBtn.addEventListener("click", ()=> copyInspectorText(promptText, copyPromptBtn, "📄 Copier le Prompt"));
+      const copyJsonBtn = mkBtn("📦 Copier le JSON");
+      copyJsonBtn.addEventListener("click", ()=> copyInspectorText(jsonText, copyJsonBtn, "📦 Copier le JSON"));
+      const clearBtn = mkBtn("🧹 Effacer");
+      clearBtn.addEventListener("click", ()=>{ state.lastCreativeFlow = null; renderCreativeInspector(); });
+      toolbar.appendChild(copyAllBtn); toolbar.appendChild(copyPromptBtn); toolbar.appendChild(copyJsonBtn); toolbar.appendChild(clearBtn);
+      details.appendChild(toolbar);
+
       const body = el("div",{class:"card", style:"margin-top:8px;font-size:12px;"});
       const row = (label,val)=> el("div",{style:"padding:4px 0;border-bottom:1px solid var(--border);"}, [el("span",{style:"color:var(--muted2);"}, label+" : "), el("span",{}, val||"—")]);
       row.call && body.appendChild(row("Phase", flow.phase==="prepared" ? "A — préparée, en attente de confirmation (aucun crédit consommé)" : flow.phase==="image_failed" ? "B — échec avant obtention de l'image" : "B — terminée"));
@@ -3921,9 +4030,9 @@ function buildPostTab(){
       if(flow.analysisError) body.appendChild(row("⚠ Analyse d'image", flow.analysisError));
       if(flow.textError) body.appendChild(row("⚠ Génération texte", flow.textError));
       body.appendChild(el("p",{style:"font-weight:600;margin:8px 0 4px;"}, "Creative Brief (JSON)"));
-      body.appendChild(el("pre",{style:"white-space:pre-wrap;font-size:11px;"}, JSON.stringify(flow.brief, null, 2)));
+      body.appendChild(el("pre",{style:"white-space:pre-wrap;font-size:11px;"}, jsonText));
       body.appendChild(el("p",{style:"font-weight:600;margin:8px 0 4px;"}, "Prompt image compact (exactement celui qui sera/a été envoyé)"));
-      body.appendChild(el("pre",{style:"white-space:pre-wrap;font-size:11px;"}, flow.imagePrompt));
+      body.appendChild(el("pre",{style:"white-space:pre-wrap;font-size:11px;"}, promptText));
       if(flow.content){
         body.appendChild(el("p",{style:"font-weight:600;margin:8px 0 4px;"}, "Texte final"));
         body.appendChild(el("pre",{style:"white-space:pre-wrap;font-size:11px;"}, JSON.stringify(flow.content, null, 2)));
