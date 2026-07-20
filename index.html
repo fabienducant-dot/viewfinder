@@ -2103,30 +2103,121 @@ async function generateCreativeBrief(mission, prestation, platform, topic, typeC
    de 2500 caractères mais en une charte condensée — même rôle qu'une mémoire implicite. */
 const CHARTE_SDZ_SYNTHESE = "Charte SDZ : palette exclusivement noir et or (or noble, métallique, satiné — jamais jaune vif, cuivre ou orange) ; clair-obscur dramatique avec une seule source de lumière chaude ; rendu premium d'affiche de cinéma ; aucune imagerie de spa générique, aucun beige, brun ou bois clair dominant ; aucune référence culturelle ou religieuse réelle (ni temple, ni Bouddha, ni monument existant) ; visages jamais frontaux ni exposés ; émotion forte portée par la lumière et la composition, pas par la surcharge.";
 
-function buildCompactImagePromptFromBrief(brief, platform, aspectKey, isCampaign, registres){
-  const wantsRealLogo = logoRequiredFor(platform);
-  const usingLogoReference = wantsRealLogo && !!state.logoPublicUrl && !!state.images.find(i=>i.assetType==="logo");
-  /* Prompt narratif : plus d'étiquettes de sections — un récit continu de directeur artistique.
-     Tri validé des exports : 10 blocs utiles, le reste (plansVisuels, structureNarrative,
-     oppositionVisuelle, symboleSDZ, zoneLogo, zoneTexte, texteImage...) reste du raisonnement
-     interne du Planner, jamais exporté. Un seul instant temporel est raconté (pointDeTransformation),
-     jamais une séquence d'états. */
-  const s = v => { const t = String(v||"").trim(); return t ? (/[.!?…]$/.test(t) ? t : t+".") : ""; };
-  const low = v => { const t = s(v); return t ? t.charAt(0).toLowerCase()+t.slice(1) : ""; }; // insertion en milieu de phrase
-  const up = v => { const t = s(v); return t ? t.charAt(0).toUpperCase()+t.slice(1) : ""; };  // début de phrase
+/* ============================================================
+   RÉDACTEUR DA — couche de traduction linguistique, jamais de décision.
+   Le Planner pense (modules, archétypes, brief) ; le Rédacteur écrit.
+   Interrupteur unique : USE_DA_WRITER. À false, le pipeline actuel est
+   strictement inchangé (buildCompactImagePromptFromBrief).
+============================================================ */
+const USE_DA_WRITER = true;
+const DA_WRITER_MODEL = "gpt-5-mini"; // reformulation pure : mini + reasoning_effort minimal suffit
+const DA_WRITER_MAX_WORDS = 320;      // rejet au-delà (cible demandée : 180-250 mots)
+
+/* Extrait UNIQUEMENT les champs exportables du brief (tri validé). Les champs de raisonnement
+   (plansVisuels, structureNarrative, oppositionVisuelle, archetypeNarratif, messageCentral,
+   referenceFamily, raisonDifference, zoneLogo, zoneTexte, texteImage...) et les sentinelles
+   ne sont jamais transmis : le Rédacteur ne peut pas fuiter ce qu'il ne voit pas. */
+function extractExportableBriefFields(brief){
+  const carac = String(brief.caracteristiquePrestationVisible||"").trim();
+  const caracUtile = carac && !/^aucune prestation précise\.?$/i.test(carac);
+  return {
+    typeCreation: brief.typeCreation,
+    ideeVisuelle: brief.ideeVisuelle,
+    sujetPrincipal: brief.sujetPrincipal,
+    action: brief.action,
+    decor: brief.decor,
+    cadrage: brief.cadrage,
+    pointDeVue: brief.pointDeVue,
+    lumiere: brief.lumiere,
+    niveauLuminosite: brief.niveauLuminosite,
+    elementOr: brief.elementOr,
+    emotion: brief.emotion,
+    pointDeTransformation: brief.pointDeTransformation,
+    symbolePrincipal: brief.symbolePrincipal,
+    ...(caracUtile ? { caracteristiquePrestationVisible: carac } : {}),
+  };
+}
+
+/* Contrôle de fidélité déterministe : pour chaque élément critique, au moins un mot significatif
+   (≥5 caractères, normalisé) doit survivre dans le texte du Rédacteur. Retourne la liste des
+   éléments manquants (vide = texte fidèle). Réutilise la normalisation éprouvée des prestations. */
+function narrativeMissingElements(text, exportable){
+  const normText = normalizeForContainmentCheck(text);
+  const critical = {
+    "sujet": exportable.sujetPrincipal,
+    "symbole": exportable.symbolePrincipal,
+    "émotion": exportable.emotion,
+    "instant de transformation": exportable.pointDeTransformation,
+    ...(exportable.caracteristiquePrestationVisible ? { "caractéristique de la prestation": exportable.caracteristiquePrestationVisible } : {}),
+  };
+  const missing = [];
+  Object.entries(critical).forEach(([label, value])=>{
+    const words = normalizeForContainmentCheck(String(value||"")).split(/\s+/).filter(w=>w.length>=5);
+    if(!words.length) return; // rien de vérifiable — ne pas bloquer
+    if(!words.some(w=> normText.includes(w))) missing.push(label);
+  });
+  return missing;
+}
+
+/* Un appel texte, une relance corrective maximum, puis échec — le repli est géré par l'appelant.
+   Retourne { text } ou lève une erreur avec la raison exacte (traçée dans le flow). */
+async function rewriteBriefAsNarrative(brief){
+  const exportable = extractExportableBriefFields(brief);
+  const systemPrompt = `Tu es le rédacteur d'un directeur artistique. Ta seule mission : transformer un brief structuré en une note de direction artistique fluide, en français, destinée à un générateur d'images.
+
+RÈGLES ABSOLUES — tu reformules, tu n'inventes JAMAIS :
+- Interdiction d'inventer un symbole, une émotion, un décor, un cadrage, une lumière, un personnage, ou d'enrichir librement la scène. Chaque idée de ton texte doit provenir du brief fourni.
+- Décris le sujet humain UNE seule fois, complètement, puis désigne-le par un pronom.
+- Décris chaque symbole UNE seule fois. Aucun doublon, aucune répétition de concept.
+- Raconte UN seul instant : la scène est figée à l'instant de transformation indiqué — jamais une séquence d'états (pas de "d'abord... puis...").
+- Une seule lumière dominante, une seule ambiance, une seule idée centrale.
+- Le symbole n'est jamais un décor : il est la conséquence visible du geste de la prestation, relié au sujet par un unique axe de lumière dorée.
+- Ignore toute valeur technique ou interne qui semblerait être une donnée de contrôle.
+- Longueur : 180 à 250 mots. Un texte continu en 2 ou 3 paragraphes, sans titres, sans listes, sans étiquettes.
+- N'écris RIEN d'autre que la note elle-même : pas de préambule, pas de commentaire.`;
+  const userPrompt = `Brief structuré à transformer en note de direction artistique :\n${JSON.stringify(exportable, null, 2)}`;
+
+  const callOnce = async (extraInstruction)=>{
+    const res = await fetch("/.netlify/functions/generate-text", {
+      method:"POST", headers:{ "Content-Type":"application/json" },
+      body: JSON.stringify({
+        kind: "openai-compatible", model: DA_WRITER_MODEL, baseUrl: "https://api.openai.com/v1",
+        systemPrompt, userPrompt: extraInstruction ? `${userPrompt}\n\n${extraInstruction}` : userPrompt,
+        reasoning_effort: "minimal",
+      }),
+    });
+    const contentType = res.headers.get("content-type")||"";
+    if(!contentType.includes("application/json")) throw new Error(`Rédacteur DA : réponse non-JSON (statut ${res.status}).`);
+    const data = await res.json();
+    if(!res.ok || data.error) throw new Error(data.error || `Rédacteur DA : erreur ${res.status}`);
+    return String(data.text||"").trim();
+  };
+
+  let text = await callOnce();
+  let missing = narrativeMissingElements(text, exportable);
+  const tooLong = text.split(/\s+/).length > DA_WRITER_MAX_WORDS;
+  if(missing.length || tooLong){
+    const correction = `CORRECTION OBLIGATOIRE : ta précédente version ${tooLong?`dépassait ${DA_WRITER_MAX_WORDS} mots`:""}${tooLong&&missing.length?" et ":""}${missing.length?`omettait ces éléments du brief : ${missing.join(", ")}`:""}. Réécris la note en respectant strictement toutes les règles, en 180 à 250 mots, sans rien inventer.`;
+    text = await callOnce(correction);
+    missing = narrativeMissingElements(text, exportable);
+    if(missing.length) throw new Error(`Éléments du brief absents après relance : ${missing.join(", ")}`);
+    if(text.split(/\s+/).length > DA_WRITER_MAX_WORDS) throw new Error(`Texte trop long après relance (> ${DA_WRITER_MAX_WORDS} mots)`);
+  }
+  return { text };
+}
+
+
+/* Blocs déterministes partagés par les DEUX chemins d'assemblage (builder actuel et Rédacteur DA).
+   Le Rédacteur ne les voit jamais et ne peut donc jamais les réécrire. */
+function buildPromptHeader(brief, platform, aspectKey, isCampaign){
   const typeRendu = brief.typeCreation === "affiche_fantastique"
     ? "Affiche cinématographique fantastique, photomontage hyperréaliste, ampleur monumentale et narration symbolique."
     : "Photographie éditoriale premium, cinématographique, réaliste, sobre et intime.";
-  const lumiDesc = brief.niveauLuminosite==="sombre_dominant" ? "Le noir domine, mais le sujet reste pleinement lisible."
-    : brief.niveauLuminosite==="lumineux_eclatant" ? "L'image est lumineuse et éclatante, tout en restant noir et or."
-    : "Les zones sombres dominent, traversées d'une lumière chaude bien présente.";
-  /* Sentinelle interne : "aucune prestation précise" est une valeur de contrôle métier
-     (validateAndFixBrief), jamais une description de scène — ne JAMAIS l'injecter. */
-  const carac = String(brief.caracteristiquePrestationVisible||"").trim();
-  const caracUtile = carac && !/^aucune prestation précise\.?$/i.test(carac);
-  const symbolePhrase = caracUtile
-    ? `Au cœur de la composition, ${s(brief.symbolePrincipal).replace(/\.$/,"")} — non pas un décor, mais la conséquence visible du geste : ${low(carac)} Un unique axe de lumière dorée relie ce symbole au sujet.`
-    : `Au cœur de la composition, ${s(brief.symbolePrincipal).replace(/\.$/,"")}, relié au sujet par un unique axe de lumière dorée — jamais un simple décor.`;
+  return `${typeRendu} Format ${platform} ${aspectKey} (${ASPECTS[aspectKey].w}x${ASPECTS[aspectKey].h}).${isCampaign?" L'image appartient à une campagne multi-formats : la scène doit rester reconnaissable comme membre de la même série.":""}`;
+}
+function buildFixedGuardrailBlocks(brief, platform){
+  const wantsRealLogo = logoRequiredFor(platform);
+  const usingLogoReference = wantsRealLogo && !!state.logoPublicUrl && !!state.images.find(i=>i.assetType==="logo");
   const soinPhrase = brief.presenceSoin==="aucune" ? "Aucune scène de soin n'est visible."
     : brief.presenceSoin==="suggeree" ? "La sensation du soin est suggérée, jamais son déroulé technique."
     : "Une scène de soin peut être visible si elle reste éditoriale et premium, jamais clinique.";
@@ -2135,8 +2226,28 @@ function buildCompactImagePromptFromBrief(brief, platform, aspectKey, isCampaign
     : wantsRealLogo ? "Aucun logo dessiné : une zone sobre en bas de l'image reste dégagée pour son ajout ultérieur. Interdiction stricte de générer un faux logo, une tête de zèbre stylisée en médaillon, un monogramme ou un emblème."
     : "Aucun logo, médaillon ou monogramme inventé.";
   const eviter = [String(brief.negativePrompt||"").trim(), (brief.compositionInterdite||[]).join(", ")].filter(Boolean).join(" ; ");
+  return `${CHARTE_SDZ_SYNTHESE} ${soinPhrase} Aucun texte n'est incrusté dans l'image ; le tiers inférieur reste visuellement calme, prêt à recevoir un texte ajouté ensuite. ${logoPhrase}${eviter ? ` À éviter absolument : ${eviter}.` : ""}
 
-  return cleanPrompt(`${typeRendu} Format ${platform} ${aspectKey} (${ASPECTS[aspectKey].w}x${ASPECTS[aspectKey].h}).${isCampaign?" L'image appartient à une campagne multi-formats : la scène doit rester reconnaissable comme membre de la même série.":""}
+${SAFETY_GUARDRAIL}`;
+}
+
+function buildCompactImagePromptFromBrief(brief, platform, aspectKey, isCampaign, registres){
+  /* Prompt narratif déterministe : tri validé des exports (10 blocs), un seul instant temporel,
+     sujet décrit une fois, sentinelle prestation jamais injectée. En-tête et garde-fous délégués
+     aux helpers partagés avec le chemin Rédacteur DA. */
+  const s = v => { const t = String(v||"").trim(); return t ? (/[.!?…]$/.test(t) ? t : t+".") : ""; };
+  const low = v => { const t = s(v); return t ? t.charAt(0).toLowerCase()+t.slice(1) : ""; };
+  const up = v => { const t = s(v); return t ? t.charAt(0).toUpperCase()+t.slice(1) : ""; };
+  const lumiDesc = brief.niveauLuminosite==="sombre_dominant" ? "Le noir domine, mais le sujet reste pleinement lisible."
+    : brief.niveauLuminosite==="lumineux_eclatant" ? "L'image est lumineuse et éclatante, tout en restant noir et or."
+    : "Les zones sombres dominent, traversées d'une lumière chaude bien présente.";
+  const carac = String(brief.caracteristiquePrestationVisible||"").trim();
+  const caracUtile = carac && !/^aucune prestation précise\.?$/i.test(carac);
+  const symbolePhrase = caracUtile
+    ? `Au cœur de la composition, ${s(brief.symbolePrincipal).replace(/\.$/,"")} — non pas un décor, mais la conséquence visible du geste : ${low(carac)} Un unique axe de lumière dorée relie ce symbole au sujet.`
+    : `Au cœur de la composition, ${s(brief.symbolePrincipal).replace(/\.$/,"")}, relié au sujet par un unique axe de lumière dorée — jamais un simple décor.`;
+
+  return cleanPrompt(`${buildPromptHeader(brief, platform, aspectKey, isCampaign)}
 
 ${up(brief.ideeVisuelle)} ${up(brief.sujetPrincipal).replace(/\.$/,"")} — ${s(brief.action)} ${s(brief.decor)} Cadrage : ${s(brief.cadrage).replace(/\.$/,"")}, ${s(brief.pointDeVue)}
 
@@ -2144,9 +2255,7 @@ La scène est saisie à un seul instant, sans avant ni après : ${low(brief.poin
 
 ${up(brief.lumiere)} ${lumiDesc} ${s(brief.elementOr)} L'émotion qui doit traverser l'image : ${low(brief.emotion)}
 
-${CHARTE_SDZ_SYNTHESE} ${soinPhrase} Aucun texte n'est incrusté dans l'image ; le tiers inférieur reste visuellement calme, prêt à recevoir un texte ajouté ensuite. ${logoPhrase}${eviter ? ` À éviter absolument : ${eviter}.` : ""}
-
-${SAFETY_GUARDRAIL}`);
+${buildFixedGuardrailBlocks(brief, platform)}`);
 }
 
 /* ---------- 5. MÉTADONNÉES ET SÉLECTION DES RÉFÉRENCES ---------- */
@@ -2410,11 +2519,32 @@ async function prepareCreativeBrief(inputs){
   try{ referenceSelections = selectReferencesForBrief(brief, platform, 2) || []; }
   catch(err){ referenceError = `Sélection de référence impossible, génération sans référence : ${String(err.message||err)}`; referenceSelections = []; }
 
-  const imagePrompt = buildCompactImagePromptFromBrief(brief, platform, aspectKey, !!isCampaign, registres);
+  /* Rédacteur DA (USE_DA_WRITER) : le brief validé est réécrit en note narrative, encadrée par les
+     mêmes en-tête et garde-fous déterministes que le chemin classique. Tout échec (réseau, éléments
+     manquants après relance, texte trop long) déclenche le repli automatique sur le builder actuel —
+     jamais de génération bloquée par le Rédacteur, jamais de boucle. */
+  let imagePrompt, daWriterUsed = false, daWriterFallbackReason = null;
+  if(USE_DA_WRITER && !blockingError){
+    try{
+      const narrative = await rewriteBriefAsNarrative(brief);
+      imagePrompt = cleanPrompt(`${buildPromptHeader(brief, platform, aspectKey, !!isCampaign)}
+
+${narrative.text}
+
+${buildFixedGuardrailBlocks(brief, platform)}`);
+      daWriterUsed = true;
+    }catch(err){
+      daWriterFallbackReason = String(err.message||err);
+      imagePrompt = buildCompactImagePromptFromBrief(brief, platform, aspectKey, !!isCampaign, registres);
+    }
+  } else {
+    imagePrompt = buildCompactImagePromptFromBrief(brief, platform, aspectKey, !!isCampaign, registres);
+  }
 
   return {
     phase: "prepared", inputs, allowed, exclusions, brief, briefCorrected, plannerError,
     usedLocalBriefFallback, referenceSelections, referenceError, imagePrompt, steps, blockingError,
+    daWriterUsed, daWriterFallbackReason,
   };
 }
 
@@ -4039,6 +4169,7 @@ function buildPostTab(){
       body.appendChild(row("Références sélectionnées", String((flow.referenceSelections||[]).length)));
       if(flow.phase!=="prepared") body.appendChild(row("Référence réellement utilisée", flow.usedReference ? "Oui ✓" : (flow.referenceFallbackReason ? "Non — repli : "+flow.referenceFallbackReason : "Non demandée")));
       body.appendChild(row("Modèle", "gpt-image-1"));
+      body.appendChild(row("Rédacteur DA", flow.daWriterUsed ? "Utilisé ✓ (prompt narratif)" : (flow.daWriterFallbackReason ? "Repli sur l'assemblage classique — "+flow.daWriterFallbackReason : "Désactivé")));
       body.appendChild(row("Taille prévue", API_IMAGE_SIZE_BY_PLATFORM[flow.inputs.platform] || "1024x1024"));
       if(flow.blockingError) body.appendChild(row("⛔ Bloquant — aucune image possible", flow.blockingError));
       if(flow.plannerError) body.appendChild(row("⚠ Creative Planner", flow.plannerError));
