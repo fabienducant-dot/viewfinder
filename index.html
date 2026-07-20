@@ -547,7 +547,7 @@ const state = {
   scheduled: LS.get("vf-scheduled", []),
   makeWebhook: LS.get("vf-make-webhook", ""),
   scheduleDate: "",
-  postImageId: null,
+  postImageId: LS.get("vf-post-image-id", null), // persisté : l'image retenue survit au rechargement (garde dans normalizeState si l'image a disparu)
   history: LS.get("vf-history", []),
   imageHistory: LS.get("vf-image-history", []),
   lastCreativeFlow: null, // transitoire, volontairement non persisté (peut contenir une image en base64) — voir point 6
@@ -690,6 +690,13 @@ function normalizeCampaignHistoryEntry(h){
 }
 /* Point d'entrée unique : à appeler après tout chargement externe (localStorage au démarrage,
    restauration Netlify Blobs, import JSON, restauration de sauvegarde) et avant chaque rendu/génération. */
+/* Unique point d'écriture de l'image retenue pour le post : état + persistance toujours synchrones.
+   Toute évolution future (nettoyage, restauration) passe par ici — jamais d'écriture directe. */
+function setPostImageId(id){
+  state.postImageId = id || null;
+  LS.set("vf-post-image-id", state.postImageId);
+}
+
 function normalizeState(){
   state.modules = Array.isArray(state.modules) ? state.modules.map(normalizeModule).filter(Boolean) : [];
   state.styles = Array.isArray(state.styles) ? state.styles.map(normalizeStyle).filter(Boolean) : [];
@@ -720,7 +727,7 @@ function normalizeState(){
   state.pendingAltText = typeof state.pendingAltText==="string" ? state.pendingAltText : "";
   // l'id sélectionné doit toujours pointer vers un élément qui existe réellement, sinon on le réinitialise
   if(state.selectedId && !state.images.some(i=>i.id===state.selectedId)) state.selectedId = state.images[0] ? state.images[0].id : null;
-  if(state.postImageId && !state.images.some(i=>i.id===state.postImageId)) state.postImageId = null;
+  if(state.postImageId && !state.images.some(i=>i.id===state.postImageId)) setPostImageId(null);
   if(state.styleId && !state.styles.some(s=>s.id===state.styleId)) state.styleId = state.styles[0] ? state.styles[0].id : "";
 }
 normalizeState();
@@ -3255,6 +3262,7 @@ function buildLibraryTab(){
         state.images = state.images.filter(i=>i.id!==img.id);
         LS.set("vf-images", state.images);
         if(state.selectedId===img.id) state.selectedId = null;
+        if(state.postImageId===img.id) setPostImageId(null); // plus jamais d'id orphelin en attente du prochain reload
         updateCount(); renderLibraryGrid();
       }}, svgIcon(ICONS.trash, 14));
       const tagsRow = el("div",{class:"tags"}, (img.tags||[]).map(t=>`#${t}`).join(" ") || "");
@@ -4241,7 +4249,7 @@ function buildPostTab(){
           creativeBrief: flow.brief, creativeContent: flow.content, altText: flow.content ? flow.content.altText : (flow.analysis && flow.analysis.altText) });
         LS.set("vf-images", state.images);
         updateCount();
-        state.selectedId = id; state.postImageId = id;
+        state.selectedId = id; setPostImageId(id);
         flow.imageId = id; // les boutons de relance retrouveront TOUJOURS l'image par cet id, jamais par state.selectedId
         // Historique visuel structuré : uniquement maintenant, l'image existe réellement — et
         // uniquement les IDs des références utilisées, jamais leurs dataUrl complètes.
@@ -4331,7 +4339,7 @@ function buildPostTab(){
     state.textPrompt = (platform==="Story" || imageOnlyMode) ? null : buildTextPromptFull(platform, state.topic, state.mission);
     state.textPasted = ""; state.feedbackComment = "";
     state.textPromptOptimized = null; state.imagePromptOptimized = null;
-    state.postImageId = null;
+    setPostImageId(null);
     renderMain();
   }}, [svgIcon(ICONS.wand,16), el("span",{}, platform==="Story" ? "Générer l'image (accroche + logo intégrés)" : imageOnlyMode ? "Générer l'image" : "Générer image + texte")]));
 
@@ -4475,7 +4483,7 @@ function buildPostTab(){
       LS.set("vf-images", state.images);
       updateCount();
       state.selectedId = id;
-      state.postImageId = id;
+      setPostImageId(id);
       confirmMsg.textContent = logoRequiredFor(platform)
         ? (logoApplied ? "Image importée, logo réel appliqué ✓" : "Image importée — aucun logo marqué comme actif de marque dans la Bibliothèque, rien n'a été ajouté.")
         : "Image ajoutée à ta bibliothèque ✓";
@@ -4486,50 +4494,6 @@ function buildPostTab(){
     frag.appendChild(el("button",{class:"btn-secondary", onclick:()=>imgFileInput.click()}, [svgIcon(ICONS.upload,14), el("span",{},"Importer l'image générée")]));
     frag.appendChild(confirmMsg);
 
-    const previewImg = state.images.find(i=>i.id===state.postImageId);
-    if(previewImg){
-      frag.appendChild(el("p",{class:"label", style:"margin-top:14px;"},"Aperçu de l'image retenue pour ce post"));
-      frag.appendChild(vfWrap(el("div",{style:"max-width:280px;margin:0 auto 10px;border-radius:12px;overflow:hidden;"},[
-        el("img",{src:previewImg.dataUrl, style:"width:100%;display:block;"}),
-      ])));
-
-      const logoAsset = state.images.find(i=>i.assetType==="logo");
-      if(logoAsset){
-        const logoMsg = el("p",{style:"font-size:12px;color:var(--green);min-height:16px;margin:0 0 10px;text-align:center;"},"");
-        frag.appendChild(el("button",{class:"btn-secondary", style:"margin-bottom:10px;", onclick: async ()=>{
-          logoMsg.style.color = "var(--muted2)"; logoMsg.textContent = "Ajout du logo en cours...";
-          try{
-            const baseImg = await loadImage(previewImg.dataUrl);
-            const logoImg = await loadImage(logoAsset.dataUrl);
-            const canvas = document.createElement("canvas");
-            canvas.width = baseImg.width; canvas.height = baseImg.height;
-            const ctx = canvas.getContext("2d");
-            ctx.drawImage(baseImg, 0, 0);
-            const logoW = canvas.width * (state.logoOverlay.size/100);
-            const logoH = logoW * (logoImg.height/logoImg.width);
-            const lx = (state.logoOverlay.x/100)*canvas.width - logoW/2;
-            const ly = (state.logoOverlay.y/100)*canvas.height - logoH/2;
-            ctx.drawImage(logoImg, lx, ly, logoW, logoH);
-            const newDataUrl = canvas.toDataURL("image/png");
-            const id = uid();
-            state.images.push({ id, name:`${previewImg.name.replace(/\.png$/,"")}-logo.png`, dataUrl:newDataUrl, tags:[platform,"logo-ajouté"], favorite:false });
-            LS.set("vf-images", state.images);
-            updateCount();
-            state.postImageId = id;
-            logoMsg.style.color = "var(--green)"; logoMsg.textContent = "Logo ajouté ✓ — nouvelle image créée dans la bibliothèque.";
-            renderMain();
-          }catch(err){
-            logoMsg.style.color = "var(--coral)"; logoMsg.textContent = `Échec (${err.message||err}).`;
-          }
-        }}, [svgIcon(ICONS.sparkles,14), el("span",{},"Ajouter mon logo sur cette image")]));
-        frag.appendChild(logoMsg);
-        frag.appendChild(el("p",{style:"font-size:11px;color:var(--muted2);margin:-4px 0 10px;text-align:center;"},
-          "Utilise la position/taille réglées dans l'onglet Éditeur. Crée une nouvelle image, l'originale reste intacte."));
-      } else {
-        frag.appendChild(el("p",{style:"font-size:12px;color:var(--muted2);margin:0 0 10px;"},
-          "Aucun logo enregistré comme actif de marque — marque une image \"Logo\" dans l'onglet Bibliothèque pour pouvoir l'ajouter automatiquement ici."));
-      }
-    }
 
     if(state.textPrompt){
       frag.appendChild(el("h2",{class:"section"}, state.viewMode==="production" ? "Texte à copier dans ChatGPT" : "Prompt texte"));
@@ -4568,99 +4532,171 @@ function buildPostTab(){
       frag.appendChild(el("p",{class:"sublabel", style:"margin-top:10px;"}, "Aucun texte séparé pour ce format : l'accroche fait partie intégrante de l'image générée ci-dessus."));
     }
 
-    frag.appendChild(buildFeedbackBlock({
-      platform, topic: state.topic, imagePrompt: state.imagePrompt, textPrompt: state.textPrompt,
-      getTextResult: ()=>state.textPasted,
-      hasImage: !!previewImg, logoApplied: !!(previewImg && previewImg.logoApplied),
-      prestationName: (state.prestationName && state.prestationName!=="Tous sujets") ? state.prestationName : null, missionKey: state.mission,
-      schedulable: platform !== "Article Blog Wix" && platform !== "Story",
-    }));
+  }
 
-    const isSchedulable = platform !== "Article Blog Wix" && platform !== "Story";
-    const requiresTextForSchedule = !!state.textPrompt;
-    const contentReady = previewImg && (!requiresTextForSchedule || state.textPasted.trim());
-    if(contentReady){
-      if(isSchedulable){
-        frag.appendChild(el("h2",{class:"section"},"Programmer la publication"));
-        frag.appendChild(el("p",{class:"sublabel"},"Texte et image validés ? Choisis une date et une heure — Make ne sera déclenché qu'à ce moment précis, jamais avant."));
-        const dateInput = el("input",{type:"datetime-local", value: state.scheduleDate || "", style:"width:100%;background:var(--card);border:1px solid var(--border);border-radius:10px;padding:9px 12px;font-size:14px;margin-bottom:10px;"});
-        dateInput.addEventListener("input", e=>{ state.scheduleDate = e.target.value; });
-        frag.appendChild(dateInput);
-        const schedMsg = el("p",{style:"font-size:12px;color:var(--green);min-height:16px;"},"");
-        frag.appendChild(el("button",{class:"btn-primary", style:"margin-bottom:10px;", onclick: async ()=>{
-         try{
-          if(!state.scheduleDate){ schedMsg.style.color="var(--coral)"; schedMsg.textContent="Choisis une date et une heure d'abord."; return; }
-          if(!previewImg || !previewImg.dataUrl){ schedMsg.style.color="var(--coral)"; schedMsg.textContent="Erreur : aucune image valide sélectionnée pour ce post."; return; }
-          const scheduledAt = new Date(state.scheduleDate).getTime();
-          if(isNaN(scheduledAt)){ schedMsg.style.color="var(--coral)"; schedMsg.textContent="Date invalide, réessaie."; return; }
-          const newPost = {
-            id: uid(), platform, mission: state.mission, topic: state.topic,
-            textFinal: state.textPasted, altText: state.pendingAltText || null, imageDataUrl: previewImg.dataUrl, schedulable: true,
-            scheduledAt, status: "programmé", createdAt: Date.now(), sentAt: null, error: null,
-          };
-          state.scheduled.push(newPost);
-          const savedLocally = LS.set("vf-scheduled", state.scheduled);
-          if(!savedLocally){
-            state.scheduled.pop(); // annule l'ajout en mémoire : rien n'a réellement été enregistré
-            schedMsg.style.color = "var(--coral)";
-            schedMsg.textContent = "Échec : stockage du téléphone plein (trop de photos enregistrées). Supprime d'anciens posts envoyés ou des images de la bibliothèque, puis réessaie.";
-            renderMain();
-            return;
-          }
-          state.scheduleDate = "";
-          schedMsg.style.color = "var(--muted2)";
-          schedMsg.textContent = "Post programmé — synchronisation avec le serveur...";
-          const ok = await pushToServerSilent();
-          if(ok){
-            schedMsg.style.color = "var(--green)";
-            schedMsg.textContent = "Post programmé ✓ — envoyé au serveur, visible dans l'onglet Calendrier.";
-          } else {
-            schedMsg.style.color = "var(--coral)";
-            schedMsg.textContent = "Post programmé localement, mais la synchro serveur a échoué — va dans Réglages → \"Sauvegarder sur serveur\" avant de fermer l'appli.";
-          }
-         }catch(e){
-            schedMsg.style.color = "var(--coral)";
-            schedMsg.textContent = "Erreur inattendue : " + String(e && e.message || e);
-         }
-        }}, [svgIcon(ICONS.sparkles,16), el("span",{},"Programmer ce post")]));
-        frag.appendChild(el("button",{class:"btn-ghost", style:"margin-bottom:10px;", onclick:()=>{
-          state.scheduled.push({
-            id: uid(), platform, mission: state.mission, topic: state.topic,
-            textFinal: state.textPasted, altText: state.pendingAltText || null, imageDataUrl: previewImg.dataUrl, schedulable: true,
-            scheduledAt: null, status: "brouillon", createdAt: Date.now(), sentAt: null, error: null,
-          });
-          LS.set("vf-scheduled", state.scheduled);
-          schedMsg.style.color = "var(--green)";
-          schedMsg.textContent = "Enregistré comme brouillon ✓ — tu pourras lui donner une date plus tard.";
-        }}, "Enregistrer comme brouillon (sans date pour l'instant)"));
-        frag.appendChild(schedMsg);
-      } else {
-        frag.appendChild(el("h2",{class:"section"},"Publication manuelle"));
-        const manualHint = platform==="Story"
-          ? "Story non automatisable via Make — télécharge l'image et publie-la toi-même en story sur Instagram et/ou Facebook."
-          : `${platform} n'est pas automatisable via Make — copie le texte (s'il y en a) et télécharge l'image, puis publie-les toi-même.`;
-        frag.appendChild(el("p",{class:"sublabel"}, manualHint));
-        const manualMsg = el("p",{style:"font-size:12px;color:var(--green);min-height:16px;"},"");
-        if(requiresTextForSchedule) frag.appendChild(copyBtnFor(()=>state.textPasted));
-        frag.appendChild(el("button",{class:"btn-secondary", style:"margin:6px 0;", onclick:()=>{
-          const link = document.createElement("a");
-          link.download = `${platform.toLowerCase().replace(/\s+/g,"-")}-${uid()}.jpg`;
-          link.href = previewImg.dataUrl;
-          link.click();
-        }}, [svgIcon(ICONS.download,14), el("span",{},"Télécharger l'image")]));
-        frag.appendChild(el("button",{class:"btn-ghost", style:"margin:6px 0;display:block;", onclick:()=>{
-          state.scheduled.push({
-            id: uid(), platform, mission: state.mission, topic: state.topic,
-            textFinal: state.textPasted, altText: state.pendingAltText || null, imageDataUrl: previewImg.dataUrl, schedulable: false,
-            scheduledAt: null, status: "validé", createdAt: Date.now(), sentAt: null, error: null,
-          });
-          LS.set("vf-scheduled", state.scheduled);
-          manualMsg.textContent = "Archivé dans le Calendrier ✓ (statut Validé, pour garder une trace).";
+
+  /* ============================================================
+     APERÇU + VALIDATION + PUBLICATION — composant UNIQUE, partagé par les deux modes.
+     Affiché dès qu'une image est retenue pour le post (state.postImageId, alimenté par
+     la génération API du moteur créatif ET par l'import manuel) ou qu'un prompt manuel
+     existe (comportement historique du mode manuel conservé). Les deux modes ne diffèrent
+     que par la provenance de l'image ; tout l'aval est identique. Ce bloc vivait
+     auparavant DANS if(state.imagePrompt) — dépendance historique au mode manuel qui
+     rendait l'aperçu inatteignable après une génération API pure.
+  ============================================================ */
+  const previewImgForPost = state.images.find(i=>i.id===state.postImageId);
+  if(previewImgForPost || state.imagePrompt){
+  if(previewImgForPost){
+    frag.appendChild(el("p",{class:"label", style:"margin-top:14px;"},"Aperçu de l'image retenue pour ce post"));
+    frag.appendChild(vfWrap(el("div",{style:"max-width:280px;margin:0 auto 10px;border-radius:12px;overflow:hidden;"},[
+      el("img",{src:previewImgForPost.dataUrl, style:"width:100%;display:block;"}),
+    ])));
+
+    const logoAsset = state.images.find(i=>i.assetType==="logo");
+    if(logoAsset){
+      const logoMsg = el("p",{style:"font-size:12px;color:var(--green);min-height:16px;margin:0 0 10px;text-align:center;"},"");
+      frag.appendChild(el("button",{class:"btn-secondary", style:"margin-bottom:10px;", onclick: async ()=>{
+        logoMsg.style.color = "var(--muted2)"; logoMsg.textContent = "Ajout du logo en cours...";
+        try{
+          const baseImg = await loadImage(previewImgForPost.dataUrl);
+          const logoImg = await loadImage(logoAsset.dataUrl);
+          const canvas = document.createElement("canvas");
+          canvas.width = baseImg.width; canvas.height = baseImg.height;
+          const ctx = canvas.getContext("2d");
+          ctx.drawImage(baseImg, 0, 0);
+          const logoW = canvas.width * (state.logoOverlay.size/100);
+          const logoH = logoW * (logoImg.height/logoImg.width);
+          const lx = (state.logoOverlay.x/100)*canvas.width - logoW/2;
+          const ly = (state.logoOverlay.y/100)*canvas.height - logoH/2;
+          ctx.drawImage(logoImg, lx, ly, logoW, logoH);
+          const newDataUrl = canvas.toDataURL("image/png");
+          const id = uid();
+          state.images.push({ id, name:`${previewImgForPost.name.replace(/\.png$/,"")}-logo.png`, dataUrl:newDataUrl, tags:[platform,"logo-ajouté"], favorite:false });
+          LS.set("vf-images", state.images);
+          updateCount();
+          setPostImageId(id);
+          logoMsg.style.color = "var(--green)"; logoMsg.textContent = "Logo ajouté ✓ — nouvelle image créée dans la bibliothèque.";
           renderMain();
-        }}, "Garder une trace dans le Calendrier"));
-        frag.appendChild(manualMsg);
-      }
+        }catch(err){
+          logoMsg.style.color = "var(--coral)"; logoMsg.textContent = `Échec (${err.message||err}).`;
+        }
+      }}, [svgIcon(ICONS.sparkles,14), el("span",{},"Ajouter mon logo sur cette image")]));
+      frag.appendChild(logoMsg);
+      frag.appendChild(el("p",{style:"font-size:11px;color:var(--muted2);margin:-4px 0 10px;text-align:center;"},
+        "Utilise la position/taille réglées dans l'onglet Éditeur. Crée une nouvelle image, l'originale reste intacte."));
+    } else {
+      frag.appendChild(el("p",{style:"font-size:12px;color:var(--muted2);margin:0 0 10px;"},
+        "Aucun logo enregistré comme actif de marque — marque une image \"Logo\" dans l'onglet Bibliothèque pour pouvoir l'ajouter automatiquement ici."));
     }
+  }
+
+  const dlBtnHost = el("div",{style:"text-align:center;margin:-2px 0 10px;"});
+  if(previewImgForPost){
+    dlBtnHost.appendChild(el("button",{class:"btn-ghost", onclick:()=>{
+      const link = document.createElement("a");
+      link.href = previewImgForPost.dataUrl; link.download = previewImgForPost.name || "image.png";
+      link.click();
+    }}, [svgIcon(ICONS.download,13), el("span",{},"Télécharger l'image")]));
+  }
+  frag.appendChild(dlBtnHost);
+  /* Prompt réellement associé à l'image analysée, résolu de façon déterministe et durable :
+     une image générée par l'API possède TOUJOURS son entrée dans state.imageHistory (promptImage,
+     imageId — persisté), une image importée manuellement n'en a jamais -> state.imagePrompt.
+     Jamais un ancien prompt manuel attaché à une image API, même après rechargement. */
+  const feedbackImagePrompt = (previewImgForPost && (state.imageHistory||[]).find(e=> e.imageId===previewImgForPost.id)?.promptImage) || state.imagePrompt;
+  frag.appendChild(buildFeedbackBlock({
+    platform, topic: state.topic, imagePrompt: feedbackImagePrompt, textPrompt: state.textPrompt,
+    getTextResult: ()=>state.textPasted,
+    hasImage: !!previewImgForPost, logoApplied: !!(previewImgForPost && previewImgForPost.logoApplied),
+    prestationName: (state.prestationName && state.prestationName!=="Tous sujets") ? state.prestationName : null, missionKey: state.mission,
+    schedulable: platform !== "Article Blog Wix" && platform !== "Story",
+  }));
+
+  const isSchedulable = platform !== "Article Blog Wix" && platform !== "Story";
+  const requiresTextForSchedule = !!state.textPrompt;
+  const contentReady = previewImgForPost && (!requiresTextForSchedule || state.textPasted.trim());
+  if(contentReady){
+    if(isSchedulable){
+      frag.appendChild(el("h2",{class:"section"},"Programmer la publication"));
+      frag.appendChild(el("p",{class:"sublabel"},"Texte et image validés ? Choisis une date et une heure — Make ne sera déclenché qu'à ce moment précis, jamais avant."));
+      const dateInput = el("input",{type:"datetime-local", value: state.scheduleDate || "", style:"width:100%;background:var(--card);border:1px solid var(--border);border-radius:10px;padding:9px 12px;font-size:14px;margin-bottom:10px;"});
+      dateInput.addEventListener("input", e=>{ state.scheduleDate = e.target.value; });
+      frag.appendChild(dateInput);
+      const schedMsg = el("p",{style:"font-size:12px;color:var(--green);min-height:16px;"},"");
+      frag.appendChild(el("button",{class:"btn-primary", style:"margin-bottom:10px;", onclick: async ()=>{
+       try{
+        if(!state.scheduleDate){ schedMsg.style.color="var(--coral)"; schedMsg.textContent="Choisis une date et une heure d'abord."; return; }
+        if(!previewImgForPost || !previewImgForPost.dataUrl){ schedMsg.style.color="var(--coral)"; schedMsg.textContent="Erreur : aucune image valide sélectionnée pour ce post."; return; }
+        const scheduledAt = new Date(state.scheduleDate).getTime();
+        if(isNaN(scheduledAt)){ schedMsg.style.color="var(--coral)"; schedMsg.textContent="Date invalide, réessaie."; return; }
+        const newPost = {
+          id: uid(), platform, mission: state.mission, topic: state.topic,
+          textFinal: state.textPasted, altText: state.pendingAltText || null, imageDataUrl: previewImgForPost.dataUrl, schedulable: true,
+          scheduledAt, status: "programmé", createdAt: Date.now(), sentAt: null, error: null,
+        };
+        state.scheduled.push(newPost);
+        const savedLocally = LS.set("vf-scheduled", state.scheduled);
+        if(!savedLocally){
+          state.scheduled.pop(); // annule l'ajout en mémoire : rien n'a réellement été enregistré
+          schedMsg.style.color = "var(--coral)";
+          schedMsg.textContent = "Échec : stockage du téléphone plein (trop de photos enregistrées). Supprime d'anciens posts envoyés ou des images de la bibliothèque, puis réessaie.";
+          renderMain();
+          return;
+        }
+        state.scheduleDate = "";
+        schedMsg.style.color = "var(--muted2)";
+        schedMsg.textContent = "Post programmé — synchronisation avec le serveur...";
+        const ok = await pushToServerSilent();
+        if(ok){
+          schedMsg.style.color = "var(--green)";
+          schedMsg.textContent = "Post programmé ✓ — envoyé au serveur, visible dans l'onglet Calendrier.";
+        } else {
+          schedMsg.style.color = "var(--coral)";
+          schedMsg.textContent = "Post programmé localement, mais la synchro serveur a échoué — va dans Réglages → \"Sauvegarder sur serveur\" avant de fermer l'appli.";
+        }
+       }catch(e){
+          schedMsg.style.color = "var(--coral)";
+          schedMsg.textContent = "Erreur inattendue : " + String(e && e.message || e);
+       }
+      }}, [svgIcon(ICONS.sparkles,16), el("span",{},"Programmer ce post")]));
+      frag.appendChild(el("button",{class:"btn-ghost", style:"margin-bottom:10px;", onclick:()=>{
+        state.scheduled.push({
+          id: uid(), platform, mission: state.mission, topic: state.topic,
+          textFinal: state.textPasted, altText: state.pendingAltText || null, imageDataUrl: previewImgForPost.dataUrl, schedulable: true,
+          scheduledAt: null, status: "brouillon", createdAt: Date.now(), sentAt: null, error: null,
+        });
+        LS.set("vf-scheduled", state.scheduled);
+        schedMsg.style.color = "var(--green)";
+        schedMsg.textContent = "Enregistré comme brouillon ✓ — tu pourras lui donner une date plus tard.";
+      }}, "Enregistrer comme brouillon (sans date pour l'instant)"));
+      frag.appendChild(schedMsg);
+    } else {
+      frag.appendChild(el("h2",{class:"section"},"Publication manuelle"));
+      const manualHint = platform==="Story"
+        ? "Story non automatisable via Make — télécharge l'image et publie-la toi-même en story sur Instagram et/ou Facebook."
+        : `${platform} n'est pas automatisable via Make — copie le texte (s'il y en a) et télécharge l'image, puis publie-les toi-même.`;
+      frag.appendChild(el("p",{class:"sublabel"}, manualHint));
+      const manualMsg = el("p",{style:"font-size:12px;color:var(--green);min-height:16px;"},"");
+      if(requiresTextForSchedule) frag.appendChild(copyBtnFor(()=>state.textPasted));
+      frag.appendChild(el("button",{class:"btn-secondary", style:"margin:6px 0;", onclick:()=>{
+        const link = document.createElement("a");
+        link.download = `${platform.toLowerCase().replace(/\s+/g,"-")}-${uid()}.jpg`;
+        link.href = previewImgForPost.dataUrl;
+        link.click();
+      }}, [svgIcon(ICONS.download,14), el("span",{},"Télécharger l'image")]));
+      frag.appendChild(el("button",{class:"btn-ghost", style:"margin:6px 0;display:block;", onclick:()=>{
+        state.scheduled.push({
+          id: uid(), platform, mission: state.mission, topic: state.topic,
+          textFinal: state.textPasted, altText: state.pendingAltText || null, imageDataUrl: previewImgForPost.dataUrl, schedulable: false,
+          scheduledAt: null, status: "validé", createdAt: Date.now(), sentAt: null, error: null,
+        });
+        LS.set("vf-scheduled", state.scheduled);
+        manualMsg.textContent = "Archivé dans le Calendrier ✓ (statut Validé, pour garder une trace).";
+        renderMain();
+      }}, "Garder une trace dans le Calendrier"));
+      frag.appendChild(manualMsg);
+    }
+  }
   }
 
   return frag;
