@@ -16,7 +16,7 @@ exports.handler = async (event) => {
   } catch (e) {
     return { statusCode: 400, body: JSON.stringify({ error: "Corps de requête invalide" }) };
   }
-  const { kind, model, baseUrl, systemPrompt, userPrompt, responseSchema, imageDataUrl } = payload;
+  const { kind, model, baseUrl, systemPrompt, userPrompt, responseSchema, imageDataUrl, reasoning_effort } = payload;
 
   try {
     let text;
@@ -80,6 +80,9 @@ exports.handler = async (event) => {
       // Structured Outputs : seulement si un schéma JSON strict est explicitement fourni — n'affecte
       // aucun appel existant qui ne le transmet pas (Creative Planner, Image Result Analyzer, texte
       // depuis le brief en fournissent un ; les anciens appels texte n'en fournissent pas).
+      // reasoning_effort (ex. "minimal" pour le Rédacteur DA) : transmis uniquement s'il est fourni —
+      // aucun appel existant n'en envoie, comportement historique strictement inchangé.
+      if (typeof reasoning_effort === "string" && reasoning_effort) body.reasoning_effort = reasoning_effort;
       const hasResponseSchema = !!(responseSchema && typeof responseSchema === "object");
       if (hasResponseSchema) {
         body.response_format = { type: "json_schema", json_schema: responseSchema };
