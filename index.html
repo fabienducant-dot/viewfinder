@@ -972,11 +972,14 @@ function logoRequiredFor(platform){
 let _brandRefUrlCache = null; // ne recalcule/re-télécharge jamais deux fois dans la même session
 function getBrandReferenceImages(){
   if(_brandRefUrlCache) return _brandRefUrlCache;
-  // Le logo n'est volontairement plus transmis ici comme référence stylistique (décision explicite :
-  // envoyer le logo à l'édition d'image risque de pousser le modèle à inventer de faux médaillons ou
-  // emblèmes proches du logo). Le vrai logo reste appliqué séparément par Canvas (voir drawCanvas()),
-  // mécanisme totalement indépendant de cette fonction, non modifié.
-  const urls = [];
+  /* PROTOTYPE LOGO-RÉFÉRENCE (réactivation) : cette fonction avait été volontairement neutralisée
+     (risque de faux médaillons dérivés du logo). Un test externe concluant (logo officiel en
+     référence + prompt court) constitue une contre-preuve : on réactive pour mesurer.
+     Le logo n'est transmis que s'il est marqué actif dans la Bibliothèque ET déjà synchronisé
+     vers son URL publique stable (syncOfficialLogoToServer). Critère d'évaluation du test :
+     surveiller la réapparition de faux médaillons/variantes du logo dans les images. */
+  const logoAsset = state.images.find(i=>i.assetType==="logo");
+  const urls = (logoAsset && state.logoPublicUrl) ? [state.logoPublicUrl] : [];
   _brandRefUrlCache = urls;
   return urls;
 }
@@ -2093,47 +2096,44 @@ async function generateCreativeBrief(mission, prestation, platform, topic, typeC
 }
 
 /* ---------- 4. PROMPT IMAGE COMPACT (12 sections dans l'ordre demandé) ---------- */
+/* Synthèse fixe de la charte SDZ, distillée UNE FOIS depuis les modules permanents
+   (Constitution + Noir & Or + Direction Artistique). Les modules complets restent la mémoire
+   artistique du Creative Planner (buildCreativePlannerUserPrompt, inchangé) : c'est là qu'ils
+   façonnent le brief. Ici, dans le prompt image final, ils n'apparaissent plus en concaténation
+   de 2500 caractères mais en une charte condensée — même rôle qu'une mémoire implicite. */
+const CHARTE_SDZ_SYNTHESE = "Charte SDZ : palette exclusivement noir et or (or noble, métallique, satiné — jamais jaune vif, cuivre ou orange) ; clair-obscur dramatique avec une seule source de lumière chaude ; rendu premium d'affiche de cinéma ; aucune imagerie de spa générique, aucun beige, brun ou bois clair dominant ; aucune référence culturelle ou religieuse réelle (ni temple, ni Bouddha, ni monument existant) ; visages jamais frontaux ni exposés ; émotion forte portée par la lumière et la composition, pas par la surcharge.";
+
 function buildCompactImagePromptFromBrief(brief, platform, aspectKey, isCampaign, registres){
   const wantsRealLogo = logoRequiredFor(platform);
-  const usingLogoReference = wantsRealLogo && !!state.logoPublicUrl;
+  const usingLogoReference = wantsRealLogo && !!state.logoPublicUrl && !!state.images.find(i=>i.assetType==="logo");
+  /* PROTOTYPE LOGO-RÉFÉRENCE : quand le logo officiel part en référence, la consigne demande son
+     intégration NATURELLE dans la scène (élément monumental, ~1/4), sans jamais le redessiner —
+     comportement du test externe concluant. Sinon, comportement antérieur inchangé. */
   const logoRule = usingLogoReference
-    ? "Le fichier logo fourni est une référence d'identité officielle, à ne jamais redessiner : le vrai logo sera appliqué ensuite par le logiciel."
-    : wantsRealLogo ? "Ne dessine aucun logo — une zone sobre en bas de l'image doit rester dégagée pour son ajout ultérieur." : "Pas de logo sur cette image.";
-  const socle = buildCompactMasterImageSocle(registres);
+    ? "Le logo fourni en référence est le logo officiel de la marque : utilise-le tel quel, sans jamais le redessiner, le déformer ni en inventer des variantes, médaillons ou emblèmes dérivés. Intègre-le naturellement dans la scène comme un élément monumental (gravure dans la pierre, emblème lumineux, sceau architectural), occupant environ un quart de la composition."
+    : wantsRealLogo ? "Ne dessine aucun logo — une zone sobre en bas de l'image doit rester dégagée pour son ajout ultérieur. Interdiction stricte de générer un faux logo, une tête de zèbre stylisée en médaillon, un monogramme ou un emblème imitant un logo." : "Pas de logo sur cette image. Interdiction de générer un logo, médaillon ou monogramme inventé.";
   const typeRendu = brief.typeCreation === "affiche_fantastique"
-    ? "affiche cinématographique fantastique SDZ, photomontage hyperréaliste à plusieurs plans, narration symbolique et ampleur monumentale"
-    : "photographie éditoriale premium cinématographique, réaliste, sobre et intime";
+    ? "Affiche cinématographique fantastique, photomontage hyperréaliste à plusieurs plans, narration symbolique et ampleur monumentale."
+    : "Photographie éditoriale premium cinématographique, réaliste, sobre et intime.";
   const sn = brief.structureNarrative || {};
   const pv = brief.plansVisuels || {};
-  return cleanPrompt(`1. TYPE DE RENDU : ${typeRendu}
-2. SCÈNE CONCRÈTE : ${brief.ideeVisuelle}
-3. SUJET ET ACTION : ${brief.sujetPrincipal} — ${brief.action}
-4. DÉCOR ET PROFONDEUR : ${brief.decor}
-5. CADRAGE : ${brief.cadrage}, point de vue : ${brief.pointDeVue}
-6. LUMIÈRE ET EXPOSITION : ${brief.lumiere} — niveau de luminosité : ${brief.niveauLuminosite==="sombre_dominant"?"noir dominant mais sujet pleinement lisible, jamais sous-exposé":brief.niveauLuminosite==="lumineux_eclatant"?"grande source naturelle, image lumineuse et éclatante tout en restant noir & or":"équilibre entre zones sombres dominantes et lumière naturelle bien présente"}
-7. MATIÈRE NOIR & OR : ${brief.elementOr} — or noble, métallique, profond et satiné, jamais jaune vif ni cuivre ni orange artificiel ; peut être naturellement réchauffé par une lumière solaire.
-Principes complémentaires issus des packs SDZ : ${socle}
-8. ÉMOTION : ${brief.emotion}
-9. ADAPTATION PLATEFORME : ${platform} — format ${aspectKey} (${ASPECTS[aspectKey].w}x${ASPECTS[aspectKey].h})${isCampaign?" — fait partie d'une campagne multi-formats, décor et scène doivent rester reconnaissables comme faisant partie de la même série.":""}
-10. EXCLUSIONS RÉCENTES : ${(brief.compositionInterdite||[]).join(" / ") || "aucune"}
-11. SÉCURITÉ : ${SAFETY_GUARDRAIL}
-12. ABSENCE DE FAUX LOGO : ${logoRule} Interdiction stricte de générer un faux logo SDZ, une tête de zèbre stylisée en médaillon, un monogramme, un emblème ou un symbole imitant le logo officiel. Un véritable animal zèbre réaliste peut être présent uniquement lorsqu'il est explicitement choisi comme sujet ou symbole narratif du brief ; il ne doit jamais prendre la forme d'un logo ou d'un insigne. Aucune mention de marque générée, aucun nom de lieu inventé, aucune URL ou mot-dièse imité.
+  const lumi = brief.niveauLuminosite==="sombre_dominant" ? "noir dominant mais sujet pleinement lisible"
+    : brief.niveauLuminosite==="lumineux_eclatant" ? "image lumineuse et éclatante tout en restant noir & or"
+    : "équilibre entre zones sombres dominantes et lumière chaude bien présente";
+  return cleanPrompt(`${typeRendu} Format ${platform} ${aspectKey} (${ASPECTS[aspectKey].w}x${ASPECTS[aspectKey].h}).${isCampaign?" Cette image fait partie d'une campagne multi-formats : la scène doit rester reconnaissable comme membre de la même série.":""}
 
-PRESENCE DE SOIN : ${brief.presenceSoin==="aucune"?"aucune scène de soin, l'image n'en montre pas le déroulé.":brief.presenceSoin==="suggeree"?"la sensation du soin est suggérée, jamais son déroulé technique montré explicitement.":"une scène de soin peut être visible si elle reste éditoriale, narrative et premium — jamais générique ni clinique."}
-SYMBOLE SDZ : ${brief.symboleSDZ}
-CARACTÉRISTIQUE DE LA PRESTATION VISIBLE : ${brief.caracteristiquePrestationVisible}
-STRUCTURE NARRATIVE : ${sn.etatInitial} → ${sn.tension} → ${sn.transformation} → ${sn.etatFinal}
-PREMIER PLAN : ${pv.premierPlan}
-PLAN PRINCIPAL : ${pv.planPrincipal}
-PLAN SECONDAIRE : ${pv.planSecondaire}
-ARRIÈRE-PLAN : ${pv.arrierePlan}
-SYMBOLE PRINCIPAL : ${brief.symbolePrincipal}
-OPPOSITION VISUELLE : ${brief.oppositionVisuelle}
-POINT DE TRANSFORMATION : ${brief.pointDeTransformation}
-ZONE DE TEXTE : ${brief.zoneTexte}
-ZONE RÉSERVÉE AU VRAI LOGO : ${brief.zoneLogo}
-${brief.texteImage ? `TEXTE INCRUSTÉ : ${brief.texteImage}` : "Pas de texte incrusté sur l'image."}
-NE JAMAIS INCLURE : ${brief.negativePrompt}`);
+SCÈNE — ${brief.ideeVisuelle} ${brief.sujetPrincipal} — ${brief.action}. ${brief.decor} Cadrage : ${brief.cadrage}, ${brief.pointDeVue}. Plans : ${pv.premierPlan} / ${pv.planPrincipal} / ${pv.planSecondaire} / ${pv.arrierePlan}.
+
+TRANSFORMATION VISIBLE — ${sn.etatInitial} → ${sn.transformation} → ${sn.etatFinal}. Symbole central : ${brief.symbolePrincipal} — relié au sujet par un unique axe de lumière dorée, conséquence directe de : ${brief.caracteristiquePrestationVisible}. ${brief.pointDeTransformation} ${brief.oppositionVisuelle}
+
+LUMIÈRE ET MATIÈRE — ${brief.lumiere} (${lumi}). ${brief.elementOr} Émotion : ${brief.emotion}.
+
+${CHARTE_SDZ_SYNTHESE} ${brief.presenceSoin==="aucune"?"Aucune scène de soin visible.":brief.presenceSoin==="suggeree"?"La sensation du soin est suggérée, jamais son déroulé technique.":"Une scène de soin peut être visible si elle reste éditoriale et premium, jamais clinique."}
+
+LOGO — ${logoRule}
+${brief.texteImage ? `TEXTE INCRUSTÉ — "${brief.texteImage}" uniquement, dans la zone : ${brief.zoneTexte}.` : "Aucun texte incrusté."}
+À ÉVITER — ${brief.negativePrompt}${(brief.compositionInterdite||[]).length ? " ; compositions récentes à ne pas répéter : "+(brief.compositionInterdite||[]).join(" / ") : ""}
+SÉCURITÉ — ${SAFETY_GUARDRAIL}`);
 }
 
 /* ---------- 5. MÉTADONNÉES ET SÉLECTION DES RÉFÉRENCES ---------- */
@@ -2414,10 +2414,10 @@ async function confirmAndGenerateImage(prepared, onStatus, cancelToken){
 
   onStatus && onStatus("Génération de l'image...");
   const smartReferenceDataUrls = (referenceSelections||[]).map(r=>r.dataUrl).filter(Boolean);
-  let dataUrl, usedReference = false, referenceFallbackReason = null;
+  let dataUrl, usedReference = false, referenceFallbackReason = null, logoSentAsReference = false;
   try{
     const genResult = await callProviderImage(prepared.imagePrompt, size, undefined, onStatus, cancelToken, { smartReferenceDataUrls });
-    dataUrl = genResult.dataUrl; usedReference = genResult.usedReference; referenceFallbackReason = genResult.referenceFallbackReason;
+    dataUrl = genResult.dataUrl; usedReference = genResult.usedReference; referenceFallbackReason = genResult.referenceFallbackReason; logoSentAsReference = !!genResult.logoSentAsReference;
   }catch(err){
     // Échec image : aucun historique visuel créé, aucune analyse ni texte lancés (jamais de relance
     // automatique d'un appel image payant).
@@ -2442,7 +2442,7 @@ async function confirmAndGenerateImage(prepared, onStatus, cancelToken){
     textError = `Échec de la génération de texte : ${String(err.message||err)} — image conservée, relance du texte seul possible.`;
   }
 
-  return { ...prepared, phase:"completed", ok:true, dataUrl, usedReference, referenceFallbackReason,
+  return { ...prepared, phase:"completed", ok:true, dataUrl, usedReference, referenceFallbackReason, logoSentAsReference,
     analysis, analysisError, content, textError };
 }
 
@@ -2710,7 +2710,9 @@ async function pollImageJob(jobId, onStatus, cancelToken){
       if(onStatus) onStatus("Finalisation…");
       if(!statusData.result || !statusData.result.resultUrl) throw new Error("Aucune image reçue du fournisseur.");
       const dataUrl = await fetchImageAsDataUrl(statusData.result.resultUrl);
-      return { dataUrl, usedReference: !!statusData.result.usedReference, referenceFallbackReason: statusData.result.referenceFallbackReason || null };
+      // logoSentAsReference : getBrandReferenceImages() ne contient que le logo officiel — sa présence
+      // signifie donc exactement "le logo faisait partie des références envoyées à OpenAI".
+      return { dataUrl, usedReference: !!statusData.result.usedReference, referenceFallbackReason: statusData.result.referenceFallbackReason || null, logoSentAsReference: referenceImageUrls.length > 0 };
     }
     if(onStatus) onStatus(statusData.status==="processing" ? "Génération OpenAI en cours…" : "Préparation de l'image…");
   }
@@ -2956,6 +2958,7 @@ const TABS = [
   {id:"post", label:"Créer un post"},
   {id:"calendar", label:"Calendrier"},
   {id:"audit", label:"Audit IA"},
+  {id:"genaudit", label:"Audit générations"},
   {id:"lab", label:"Laboratoire IA"},
   {id:"api", label:"Paramètres API"},
   {id:"history", label:"Base de prompts"},
@@ -3122,6 +3125,7 @@ function buildLibraryTab(){
       assetSelect.addEventListener("change", e=>{
         img.assetType = e.target.value || null;
         LS.set("vf-images", state.images);
+        resetBrandReferenceCache(); // le logo actif a pu changer : ne jamais envoyer une référence périmée
         renderLibraryGrid();
       });
       const wrap = el("div",{}, [vfWrap(thumb), assetSelect]);
@@ -4078,7 +4082,12 @@ function buildPostTab(){
         }
         let dataUrl = flow.dataUrl;
         let logoApplied = false;
-        if(logoRequiredFor(platform)){
+        /* PROTOTYPE LOGO-RÉFÉRENCE : si le logo officiel est parti en référence ET a réellement été
+           utilisé par OpenAI (pas de fallback), l'incrustation Canvas est temporairement sautée pour
+           observer ce que le modèle produit seul — c'est l'objet exact du test. En cas de fallback
+           (référence non utilisée), le Canvas s'applique comme avant : jamais d'image sans identité. */
+        const logoInScene = !!(flow.logoSentAsReference && flow.usedReference);
+        if(logoRequiredFor(platform) && !logoInScene){
           const composited = await compositeBrandSignature(dataUrl, platform);
           dataUrl = composited.dataUrl; logoApplied = composited.applied;
         }
@@ -5007,6 +5016,205 @@ function buildApiTab(){
 /* ============================================================
    ONGLET LABORATOIRE IA
 ============================================================ */
+/* ============================================================
+   ONGLET AUDIT DES GÉNÉRATIONS — statistiques en lecture seule sur vf-images,
+   vf-scheduled et vf-lab. Logique reprise à l'identique de l'outil d'audit
+   externe validé (audit_generations.html) : mêmes règles de périmètre, de
+   classification et de dénominateur. Aucune écriture, aucun appel réseau,
+   aucun impact sur la production.
+============================================================ */
+function genAuditParseDateFromName(name){
+  const m = String(name||"").match(/(\d{2})\/(\d{2})\/(\d{4})/);
+  return m ? `${m[3]}-${m[2]}-${m[1]}` : null; // ISO pour tri chronologique
+}
+function genAuditPlatformFromEntry(img){
+  if(Array.isArray(img.tags) && img.tags.length && PLATFORMS.includes(img.tags[0])) return img.tags[0];
+  const m = String(img.name||"").match(/^(Instagram|Facebook|Google Business|Article Blog Wix|Story)-/);
+  return m ? m[1] : "(inconnue)";
+}
+/* Trois classes exclusives, alignées sur la sémantique exacte du serveur
+   (process-image-job-background.js) :
+   usedReference===true                       -> référence utilisée
+   usedReference===false + fallbackReason     -> FALLBACK (référence attendue, non utilisée)
+   tout le reste (false sans raison, undefined) -> sans référence demandée / donnée absente */
+function genAuditClassify(entry){
+  const used = entry.usedReference===true;
+  const fallback = entry.usedReference===false && typeof entry.referenceFallbackReason==="string" && !!entry.referenceFallbackReason;
+  return { used, fallback, noRef: !used && !fallback, reason: fallback ? entry.referenceFallbackReason : null };
+}
+function genAuditCollectRows(){
+  /* Périmètre : uniquement les entrées issues d'une génération. Uploads manuels et
+     références de bibliothèque (assetType "reference") exclus — ils n'ont jamais appelé OpenAI. */
+  const genImages = state.images.filter(img =>
+    img.assetType!=="reference" &&
+    (img.usedReference!==undefined || img.creativeBrief || /^(Instagram|Facebook|Google Business|Article Blog Wix|Story)-\d{2}\/\d{2}\/\d{4}/.test(img.name||""))
+  );
+  const genScheduled = (state.scheduled||[]).filter(it => it && (it.usedReference!==undefined || it.imageDataUrl));
+  const rows = [];
+  genImages.forEach(img=>{
+    const c = genAuditClassify(img);
+    rows.push({ source:"Post individuel", id:img.id, name:img.name||"", platform:genAuditPlatformFromEntry(img),
+      date:genAuditParseDateFromName(img.name), used:c.used, fallback:c.fallback, noRef:c.noRef, reason:c.reason,
+      hasUsedRefField: img.usedReference!==undefined });
+  });
+  genScheduled.forEach(it=>{
+    const c = genAuditClassify(it);
+    rows.push({ source:"Campagne", id:it.id, name:(it.campaignLabel||"")+" / "+(it.platform||""), platform: it.platform||"(inconnue)",
+      date:null, used:c.used, fallback:c.fallback, noRef:c.noRef, reason:c.reason,
+      hasUsedRefField: it.usedReference!==undefined });
+  });
+  return { rows, totalImagesInLibrary: state.images.length, genImagesCount: genImages.length, genScheduledCount: genScheduled.length };
+}
+function buildGenerationAuditTab(){
+  const frag = el("div",{});
+  frag.appendChild(el("p",{class:"sublabel"},"Statistiques en lecture seule sur toutes les générations enregistrées (posts et campagnes) : usage réel des références visuelles, replis silencieux, causes, qualité des données et performance. Rien n'est modifié."));
+
+  const { rows, totalImagesInLibrary, genImagesCount, genScheduledCount } = genAuditCollectRows();
+  const pctTxt = (n,d)=> d ? (100*n/d).toFixed(1)+" %" : "—";
+  const trow = (cells, opts)=> el("div",{style:"display:flex;gap:8px;padding:4px 0;border-bottom:1px solid var(--border);font-size:13px;"+((opts&&opts.style)||"")},
+    cells.map((c,i)=> el("span",{style:(i===0?"flex:1;":"min-width:70px;text-align:right;font-variant-numeric:tabular-nums;")+((opts&&opts.cellStyles&&opts.cellStyles[i])||"")}, String(c))));
+
+  if(!rows.length){
+    frag.appendChild(el("p",{class:"hint"},"Aucune génération enregistrée pour l'instant. Génère un post ou une campagne, puis reviens ici."));
+    return frag;
+  }
+
+  // ---- Générations ----
+  const nPosts = rows.filter(r=>r.source==="Post individuel").length;
+  const nCamp = rows.filter(r=>r.source==="Campagne").length;
+  frag.appendChild(el("p",{class:"label"},"Générations"));
+  const genCard = el("div",{class:"card", style:"margin-bottom:14px;"});
+  genCard.appendChild(trow(["Total analysé", rows.length]));
+  genCard.appendChild(trow(["Posts individuels", nPosts]));
+  genCard.appendChild(trow(["Items de campagne", nCamp]));
+  genCard.appendChild(el("p",{style:"font-size:11px;color:var(--muted2);margin-top:6px;"}, `${totalImagesInLibrary} image(s) en bibliothèque au total — ${totalImagesInLibrary-genImagesCount} exclue(s) du périmètre (uploads manuels et références de marque, qui n'ont jamais appelé OpenAI).`));
+  frag.appendChild(genCard);
+
+  // ---- Références ----
+  const nUsed = rows.filter(r=>r.used).length;
+  const nFallback = rows.filter(r=>r.fallback).length;
+  const nNoRef = rows.filter(r=>r.noRef).length;
+  const refAttempted = nUsed + nFallback;
+  frag.appendChild(el("p",{class:"label"},"Références visuelles"));
+  const refCard = el("div",{class:"card", style:"margin-bottom:14px;"});
+  refCard.appendChild(trow(["Références demandées (tentées)", refAttempted]));
+  refCard.appendChild(trow(["Références réellement utilisées ✓", nUsed], {cellStyles:{1:"color:var(--green);"}}));
+  refCard.appendChild(trow(["Fallbacks (référence attendue, non utilisée)", nFallback], {cellStyles:{1: nFallback?"color:var(--coral);font-weight:600;":""}}));
+  refCard.appendChild(trow(["Sans référence demandée / donnée absente", nNoRef]));
+  refCard.appendChild(el("p",{style:"font-size:14px;margin-top:8px;font-weight:600;"},[
+    el("span",{},"Taux réel de fallback (parmi les références tentées) : "),
+    el("span",{style:`color:${nFallback?"var(--coral)":"var(--green)"};`}, `${pctTxt(nFallback, refAttempted)} (${nFallback}/${refAttempted})`),
+  ]));
+  frag.appendChild(refCard);
+
+  // ---- Analyse : par plateforme ----
+  frag.appendChild(el("p",{class:"label"},"Taux par plateforme"));
+  const platCard = el("div",{class:"card", style:"margin-bottom:14px;"});
+  platCard.appendChild(trow(["Plateforme","Générées","Réf. ✓","Fallback","Taux"],{style:"font-weight:600;color:var(--gold-soft);"}));
+  [...new Set(rows.map(r=>r.platform))].sort().forEach(p=>{
+    const sub = rows.filter(r=>r.platform===p);
+    const u = sub.filter(r=>r.used).length, f = sub.filter(r=>r.fallback).length;
+    platCard.appendChild(trow([p, sub.length, u, f, pctTxt(f,u+f)], {cellStyles:{3: f?"color:var(--coral);":""}}));
+  });
+  frag.appendChild(platCard);
+
+  // ---- Analyse : par période ----
+  frag.appendChild(el("p",{class:"label"},"Taux par période (jour)"));
+  const perCard = el("div",{class:"card", style:"margin-bottom:14px;"});
+  const dated = rows.filter(r=>r.date);
+  const days = [...new Set(dated.map(r=>r.date))].sort();
+  if(!days.length){
+    perCard.appendChild(el("p",{class:"hint"},"Aucune date extractible — les items de campagne n'ont pas de date exploitable et aucun nom d'image ne contient de date."));
+  } else {
+    perCard.appendChild(trow(["Jour","Générées","Réf. ✓","Fallback","Taux"],{style:"font-weight:600;color:var(--gold-soft);"}));
+    days.forEach(d=>{
+      const sub = dated.filter(r=>r.date===d);
+      const u = sub.filter(r=>r.used).length, f = sub.filter(r=>r.fallback).length;
+      perCard.appendChild(trow([d, sub.length, u, f, pctTxt(f,u+f)], {cellStyles:{3: f?"color:var(--coral);":""}}));
+    });
+    if(rows.length !== dated.length) perCard.appendChild(el("p",{style:"font-size:11px;color:var(--muted2);margin-top:6px;"}, `${rows.length-dated.length} génération(s) sans date extractible exclue(s) de ce tableau (campagnes notamment).`));
+  }
+  frag.appendChild(perCard);
+
+  // ---- Analyse : causes ----
+  frag.appendChild(el("p",{class:"label"},"Principales causes de fallback"));
+  const causeCard = el("div",{class:"card", style:"margin-bottom:14px;"});
+  const causes = {};
+  rows.filter(r=>r.fallback).forEach(r=>{
+    const m = String(r.reason).match(/répondu (\d{3})/);
+    const key = m ? `Erreur OpenAI ${m[1]}` : String(r.reason).slice(0,90);
+    causes[key] = (causes[key]||0)+1;
+  });
+  const causeEntries = Object.entries(causes).sort((a,b)=>b[1]-a[1]);
+  if(!causeEntries.length) causeCard.appendChild(el("p",{style:"font-size:13px;color:var(--green);"},"Aucun fallback enregistré — aucune cause à analyser."));
+  else causeEntries.forEach(([k,v])=> causeCard.appendChild(trow([k, v])));
+  frag.appendChild(causeCard);
+
+  // ---- Analyse : liste des générations concernées ----
+  frag.appendChild(el("p",{class:"label"},"Générations où une référence attendue n'a pas été utilisée"));
+  const fbRows = rows.filter(r=>r.fallback);
+  if(!fbRows.length){
+    frag.appendChild(el("div",{class:"card", style:"margin-bottom:14px;"},[el("p",{style:"font-size:13px;color:var(--green);"},"Aucune.")]));
+  } else {
+    fbRows.forEach(r=>{
+      frag.appendChild(el("div",{class:"module-card"},[
+        el("div",{class:"module-head"},[el("div",{class:"module-title"}, `${r.source} — ${r.name}`), el("span",{style:"font-size:12px;color:var(--muted2);"}, r.date||"date inconnue")]),
+        el("div",{class:"module-content", style:"color:var(--coral);"}, String(r.reason)),
+      ]));
+    });
+  }
+
+  // ---- Qualité des données ----
+  frag.appendChild(el("p",{class:"label", style:"margin-top:18px;"},"Qualité des données"));
+  const qCard = el("div",{class:"card", style:"margin-bottom:14px;"});
+  const withField = rows.filter(r=>r.hasUsedRefField).length;
+  const withoutField = rows.length - withField;
+  qCard.appendChild(trow(["Générations analysées", rows.length]));
+  qCard.appendChild(trow([`Champ usedReference disponible`, `${withField} (${pctTxt(withField, rows.length)})`]));
+  qCard.appendChild(trow([`Champ usedReference absent (générations antérieures à son introduction — indistinguables rétroactivement)`, `${withoutField} (${pctTxt(withoutField, rows.length)})`], {cellStyles:{1: withoutField?"color:var(--amber);":""}}));
+  qCard.appendChild(el("p",{style:"font-size:13px;margin-top:8px;"}, `Conclusion : le taux de fallback repose sur ${pctTxt(withField, rows.length)} des générations réellement exploitables. Les ${withoutField} génération(s) sans champ sont comptées en "sans référence / donnée absente", jamais dans le taux.`));
+  frag.appendChild(qCard);
+
+  // ---- Performance (vf-lab, statistique globale — non joignable image par image) ----
+  frag.appendChild(el("p",{class:"label"},"Performance (durées de génération)"));
+  const perfCard = el("div",{class:"card", style:"margin-bottom:14px;"});
+  const imgLab = state.lab.filter(l=> l.type==="image" && typeof l.durationMs==="number");
+  if(!imgLab.length){
+    perfCard.appendChild(el("p",{class:"hint"},"Aucun appel image journalisé dans le Laboratoire IA."));
+  } else {
+    const ds = imgLab.map(l=>l.durationMs).sort((a,b)=>a-b);
+    const med = ds[Math.floor(ds.length/2)], avg = ds.reduce((a,b)=>a+b,0)/ds.length;
+    perfCard.appendChild(trow(["Appels image journalisés", imgLab.length]));
+    perfCard.appendChild(trow(["Temps moyen", (avg/1000).toFixed(1)+" s"]));
+    perfCard.appendChild(trow(["Médiane", (med/1000).toFixed(1)+" s"]));
+    perfCard.appendChild(trow(["Minimum", (ds[0]/1000).toFixed(1)+" s"]));
+    perfCard.appendChild(trow(["Maximum", (ds[ds.length-1]/1000).toFixed(1)+" s"]));
+    perfCard.appendChild(el("p",{style:"font-size:11px;color:var(--muted2);margin-top:6px;"},"Durées mesurées côté client (création du job + attente complète), non joignables aux images individuelles — vf-images ne stocke pas le hash de prompt nécessaire à la jointure. Note : le champ \"model\" du Laboratoire vaut \"gpt-image-1-mini\" pour les campagnes alors que le serveur applique toujours gpt-image-1 (étiquetage erroné, confirmé par l'audit du code serveur) — il est ignoré ici."));
+  }
+  frag.appendChild(perfCard);
+
+  // ---- Export ----
+  frag.appendChild(el("button",{class:"btn-secondary", onclick:()=>{
+    const report = {
+      genere_le: new Date().toISOString(),
+      perimetre: { total: rows.length, posts: nPosts, campagnes: nCamp, exclusions_bibliotheque: totalImagesInLibrary-genImagesCount },
+      references: { tentees: refAttempted, utilisees: nUsed, fallbacks: nFallback, sans_reference: nNoRef,
+        taux_fallback_sur_tentees: refAttempted ? +(100*nFallback/refAttempted).toFixed(1) : null },
+      qualite_donnees: { avec_champ_usedReference: withField, sans_champ: withoutField },
+      causes: causes,
+      detail: rows.map(r=>({ source:r.source, id:r.id, name:r.name, platform:r.platform, date:r.date,
+        usedReference:r.used, fallback:r.fallback, reason:r.reason })),
+    };
+    const blob = new Blob([JSON.stringify(report, null, 2)], { type:"application/json" });
+    const a = document.createElement("a");
+    a.href = URL.createObjectURL(blob);
+    a.download = `audit-generations-${new Date().toISOString().slice(0,10)}.json`;
+    a.click();
+  }}, [svgIcon(ICONS.download,14), el("span",{},"Exporter le rapport (JSON)")]));
+
+  return frag;
+}
+
 function buildLabTab(){
   const frag = el("div",{});
   frag.appendChild(el("p",{class:"sublabel"},"Historique de toutes les générations via API directe : modèle, coût, temps, résultat accepté ou refusé. Alimente l'apprentissage au fil du temps."));
@@ -5856,7 +6064,7 @@ function renderMain(){
   main.innerHTML = "";
   const builders = {
     accueil: buildAccueilTab, library: buildLibraryTab, editor: buildEditorTab, knowledge: buildKnowledgeTab,
-    da: buildDaTab, styles: buildStylesTab, post: buildPostTab, calendar: buildCalendarTab, audit: buildAuditTab, lab: buildLabTab, api: buildApiTab,
+    da: buildDaTab, styles: buildStylesTab, post: buildPostTab, calendar: buildCalendarTab, audit: buildAuditTab, genaudit: buildGenerationAuditTab, lab: buildLabTab, api: buildApiTab,
     history: buildHistoryTab, settings: buildSettingsTab,
   };
   try{
