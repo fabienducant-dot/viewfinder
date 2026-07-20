@@ -4401,15 +4401,56 @@ function buildPostTab(){
       ]));
     }
 
+    /* Workflow UNIQUE de génération texte via API — appelé par le bouton "Générer via l'API"
+       ET par "Régénérer quand même" du panneau de doublon. Une seule implémentation, aucune
+       divergence possible. skipDuplicateCheck est un paramètre d'appel : consommé par nature,
+       aucun drapeau d'état persistant à réinitialiser. */
+    async function runTextApiGeneration(statusEl, opts){
+      const skipDuplicateCheck = !!(opts && opts.skipDuplicateCheck);
+      const availableProviders = state.apiProviders.length ? state.apiProviders : [DEFAULT_OPENAI_PROVIDER];
+      const provider = availableProviders.find(p=>p.id===(state.selectedProviderId||availableProviders[0].id)) || availableProviders[0];
+      if(!skipDuplicateCheck){
+        const cached = findCachedResult(provider.label, state.textPrompt);
+        if(cached && !confirm(`Un résultat identique existe déjà (${cached.date}). Régénérer quand même et consommer du budget ?`)) {
+          state.textPasted = cached.result || "";
+          renderMain();
+          return;
+        }
+      }
+      const cost = estimateCost(provider, state.textPrompt);
+      const costLabel = cost!=null ? `~$${cost.toFixed(4)}` : "coût non estimé (tarifs non renseignés)";
+      if(!confirm(`Lancer la génération via ${provider.label} ? Coût estimé : ${costLabel}.`)) return;
+      statusEl.textContent = "Génération en cours...";
+      const t0 = Date.now();
+      try{
+        const result = await callProviderText(provider, "Tu es le rédacteur officiel de cette marque, respecte strictement les informations et contraintes fournies.", state.textPrompt);
+        state.textPasted = result;
+        // Régénération volontaire réussie : on retient le hash du prompt concerné pour ne pas
+        // réafficher immédiatement l'avertissement de doublon que l'utilisateur vient de confirmer.
+        // Dès que le prompt change (hash différent), la carte réapparaît normalement. Transient,
+        // jamais persisté.
+        if(skipDuplicateCheck) state.dupCardSuppressedForHash = hashPrompt(state.textPrompt);
+        logToLab({ provider: provider.label, model: provider.model, type:"texte", prompt: state.textPrompt, promptHash: hashPrompt(state.textPrompt), result, cost, durationMs: Date.now()-t0, status:"accepted" });
+        statusEl.textContent = "Résultat reçu et inséré ci-dessous ✓";
+        renderMain();
+      }catch(err){
+        logToLab({ provider: provider.label, model: provider.model, type:"texte", prompt: state.textPrompt, promptHash: hashPrompt(state.textPrompt), cost, durationMs: Date.now()-t0, status:"refused", reason: String(err.message||err) });
+        statusEl.textContent = `Échec de l'appel (${err.message||err}) — utilise le mode manuel ci-dessous à la place.`;
+      }
+    }
+
     if(provider && state.textPrompt){
-      const cached = findCachedResult(provider.label, state.textPrompt);
+      const dupSuppressed = state.dupCardSuppressedForHash && state.dupCardSuppressedForHash === hashPrompt(state.textPrompt);
+      const cached = dupSuppressed ? null : findCachedResult(provider.label, state.textPrompt);
       if(cached){
+        const dupStatus = el("p",{style:"font-size:12px;color:var(--muted2);min-height:16px;margin:8px 0 0;"},"");
         frag.appendChild(el("div",{class:"card", style:"margin-bottom:16px;border-color:var(--gold-soft);"},[
           el("p",{style:"font-size:13px;margin-bottom:8px;"}, `Un résultat identique existe déjà (généré le ${cached.date} via ${cached.provider}) — évite un appel payant inutile.`),
           el("div",{style:"display:flex;gap:8px;"},[
             el("button",{class:"btn-ghost", onclick:()=>{ state.textPasted = cached.result||""; renderMain(); }}, "Réutiliser"),
-            el("button",{class:"btn-ghost", onclick:()=>{ /* laisse générer via le bouton API plus bas */ }}, "Régénérer quand même"),
+            el("button",{class:"btn-ghost", onclick:()=>{ runTextApiGeneration(dupStatus, { skipDuplicateCheck:true }); }}, "Régénérer quand même"),
           ]),
+          dupStatus,
         ]));
       }
     }
@@ -4504,30 +4545,7 @@ function buildPostTab(){
 
         const apiStatus = el("p",{style:"font-size:12px;color:var(--muted2);min-height:16px;margin:4px 0 8px;"},"");
         const apiBtn = el("button",{class:"btn-secondary", style:"margin-bottom:10px;"}, [svgIcon(ICONS.sparkles,14), el("span",{},"Générer via l'API (remplace le copier/coller)")]);
-        apiBtn.addEventListener("click", async ()=>{
-          const provider = availableProviders.find(p=>p.id===(state.selectedProviderId||availableProviders[0].id)) || availableProviders[0];
-          const cached = findCachedResult(provider.label, state.textPrompt);
-          if(cached && !confirm(`Un résultat identique existe déjà (${cached.date}). Régénérer quand même et consommer du budget ?`)) {
-            state.textPasted = cached.result || "";
-            renderMain();
-            return;
-          }
-          const cost = estimateCost(provider, state.textPrompt);
-          const costLabel = cost!=null ? `~$${cost.toFixed(4)}` : "coût non estimé (tarifs non renseignés)";
-          if(!confirm(`Lancer la génération via ${provider.label} ? Coût estimé : ${costLabel}.`)) return;
-          apiStatus.textContent = "Génération en cours...";
-          const t0 = Date.now();
-          try{
-            const result = await callProviderText(provider, "Tu es le rédacteur officiel de cette marque, respecte strictement les informations et contraintes fournies.", state.textPrompt);
-            state.textPasted = result;
-            logToLab({ provider: provider.label, model: provider.model, type:"texte", prompt: state.textPrompt, promptHash: hashPrompt(state.textPrompt), result, cost, durationMs: Date.now()-t0, status:"accepted" });
-            apiStatus.textContent = "Résultat reçu et inséré ci-dessous ✓";
-            renderMain();
-          }catch(err){
-            logToLab({ provider: provider.label, model: provider.model, type:"texte", prompt: state.textPrompt, promptHash: hashPrompt(state.textPrompt), cost, durationMs: Date.now()-t0, status:"refused", reason: String(err.message||err) });
-            apiStatus.textContent = `Échec de l'appel (${err.message||err}) — utilise le mode manuel ci-dessous à la place.`;
-          }
-        });
+        apiBtn.addEventListener("click", ()=> runTextApiGeneration(apiStatus));
         frag.appendChild(apiBtn);
         frag.appendChild(apiStatus);
       }
