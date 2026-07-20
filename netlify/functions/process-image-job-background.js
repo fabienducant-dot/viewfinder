@@ -64,6 +64,10 @@ async function generateWithReferenceImages({ key, prompt, size, model, reference
   form.append("prompt", prompt);
   form.append("size", size || "1024x1024");
   form.append("n", "1");
+  // input_fidelity "high" : paramètre documenté par OpenAI pour préserver les détails distinctifs
+  // des images de référence (logos, visages) avec gpt-image-1 sur /v1/images/edits — indispensable
+  // au prototype logo-référence : sans lui, le logo officiel risque d'être approximé.
+  form.append("input_fidelity", "high");
   const urls = (referenceImageUrls || []).slice(0, 3);
   const dataUrls = (referenceImageData || []).slice(0, 3 - urls.length);
   for(const url of urls){
