@@ -2123,6 +2123,88 @@ async function generateCreativeBrief(mission, prestation, platform, topic, typeC
 const CHARTE_SDZ_SYNTHESE = "Charte SDZ : palette exclusivement noir et or (or noble, métallique, satiné — jamais jaune vif, cuivre ou orange) ; clair-obscur dramatique avec une seule source de lumière chaude ; rendu premium d'affiche de cinéma ; aucune imagerie de spa générique, aucun beige, brun ou bois clair dominant ; aucune référence culturelle ou religieuse réelle (ni temple, ni Bouddha, ni monument existant) ; visages jamais frontaux ni exposés ; émotion forte portée par la lumière et la composition, pas par la surcharge.";
 
 /* ============================================================
+   T1 — ORCHESTRATEUR + PROMPT VALIDATOR (architecture figée, mode rapport)
+   Règles appliquées : hiérarchie des décisions (2.5 — fusionne/refuse, ne réécrit
+   jamais une décision métier), transformations immuables (2.6 — entrée intouchée,
+   sortie NOUVELLE et gelée), indépendance des couches (l'orchestrateur ignore GPT,
+   le validator ne connaît que le prompt assemblé et le paquet).
+   En T1, ces couches OBSERVENT et RAPPORTENT : le prompt envoyé n'est pas modifié.
+============================================================ */
+
+/* ORCHESTRATEUR — reçoit brief validé + registres + plateforme, retourne un paquet
+   de données fusionnées/dédoublonnées, gelé. Ne rédige jamais, ne modifie jamais l'amont. */
+function buildOrchestratorPacket(brief, registres, platform, aspectKey){
+  const decisions = Object.freeze({
+    sujet: brief.sujetPrincipal || "",
+    action: brief.action || "",
+    emotion: brief.emotion || "",
+    symbole: brief.symbolePrincipal || "",
+    instantChoisi: brief.pointDeTransformation || "",
+    lienCausal: brief.caracteristiquePrestationVisible || "",
+    registres: Object.freeze([...(registres||[])]),
+    typeCreation: brief.typeCreation || "",
+  });
+  // Fusion des interdits : negativePrompt + compositions interdites, dédoublonnés (normalisés)
+  const rawInterdits = [
+    ...String(brief.negativePrompt||"").split(/[;,]/),
+    ...((brief.compositionInterdite||[])),
+  ].map(s=>s.trim()).filter(Boolean);
+  const seen = new Set(); const interdits = []; const doublonsInterdits = [];
+  rawInterdits.forEach(x=>{
+    const k = normalizeForContainmentCheck(x);
+    if(seen.has(k)) doublonsInterdits.push(x); else { seen.add(k); interdits.push(x); }
+  });
+  const contraintesTechniques = Object.freeze({
+    platform, aspect: aspectKey || "1:1",
+    tailleApi: API_IMAGE_SIZE_BY_PLATFORM[platform] || "1024x1024",
+    logoRequis: logoRequiredFor(platform),
+  });
+  return Object.freeze({
+    decisions,
+    interdits: Object.freeze(interdits),
+    contraintesTechniques,
+    rapportFusion: Object.freeze({ interditsAvant: rawInterdits.length, interditsApres: interdits.length, doublonsSupprimes: Object.freeze(doublonsInterdits) }),
+  });
+}
+
+/* PROMPT VALIDATOR — analyse le prompt assemblé contre le paquet. Peut (à terme) refuser ;
+   en T1 il produit un RAPPORT gelé, affiché dans l'Inspector. Il ne corrige jamais rien. */
+function validateAssembledPrompt(prompt, packet, brief){
+  const normPrompt = normalizeForContainmentCheck(prompt||"");
+  const report = { doublons: [], contradictions: [], decisionsAbsentes: [], preparationT3: [], longueur: (prompt||"").length };
+
+  // 1) Doublons charte/narratif : notions de la charte déjà portées par le corps du prompt
+  //    (détection par paires de mots-clés — informatif, jamais correctif)
+  const notionsCharte = [
+    ["noir", "or"], ["clair-obscur", "lumière"], ["affiche", "cinéma"], ["visage", "frontal"],
+  ];
+  const corps = normalizeForContainmentCheck(String(prompt||"").split("Charte SDZ")[0]);
+  notionsCharte.forEach(pair=>{
+    if(pair.every(w=> corps.includes(normalizeForContainmentCheck(w)))) report.doublons.push(`Notion de charte déjà exprimée dans le narratif : ${pair.join(" + ")}`);
+  });
+
+  // 2) Contradictions structurelles connues
+  if(/aucun texte n'est incrusté/i.test(prompt||"") && /texte incrusté\s*[:—]/i.test(prompt||""))
+    report.contradictions.push("Interdiction de texte ET consigne de texte incrusté présentes simultanément.");
+  if(/sans jamais le redessiner/i.test(prompt||"") && /zone sobre en bas/i.test(prompt||""))
+    report.contradictions.push("Logo en référence ET zone réservée simultanément — stratégies logo mélangées.");
+
+  // 3) Hiérarchie des décisions : chaque décision métier doit survivre dans le prompt
+  Object.entries({ sujet: packet.decisions.sujet, symbole: packet.decisions.symbole, "instant choisi": packet.decisions.instantChoisi, émotion: packet.decisions.emotion }).forEach(([label, val])=>{
+    const words = normalizeForContainmentCheck(String(val||"")).split(/\s+/).filter(w=>w.length>=5);
+    if(words.length && !words.some(w=> normPrompt.includes(w))) report.decisionsAbsentes.push(label);
+  });
+
+  // 4) Préparation T3 (anti-prose) : mesure des champs de décision — deviendra bloquant au schéma atomique
+  Object.entries(packet.decisions).forEach(([k,v])=>{
+    if(typeof v==="string" && v.split(/\s+/).filter(Boolean).length > 15) report.preparationT3.push(`${k} : ${v.split(/\s+/).length} mots (cible T3 : ≤ 15, atomique)`);
+  });
+
+  return Object.freeze({ ...report, doublons: Object.freeze(report.doublons), contradictions: Object.freeze(report.contradictions), decisionsAbsentes: Object.freeze(report.decisionsAbsentes), preparationT3: Object.freeze(report.preparationT3) });
+}
+
+
+/* ============================================================
    RÉDACTEUR DA — couche de traduction linguistique, jamais de décision.
    Le Planner pense (modules, archétypes, brief) ; le Rédacteur écrit.
    Interrupteur unique : USE_DA_WRITER. À false, le pipeline actuel est
@@ -2250,29 +2332,26 @@ function buildFixedGuardrailBlocks(brief, platform){
 ${SAFETY_GUARDRAIL}`;
 }
 
-function buildCompactImagePromptFromBrief(brief, platform, aspectKey, isCampaign, registres){
-  /* Prompt narratif déterministe : tri validé des exports (10 blocs), un seul instant temporel,
-     sujet décrit une fois, sentinelle prestation jamais injectée. En-tête et garde-fous délégués
-     aux helpers partagés avec le chemin Rédacteur DA. */
+function serializeBriefToPromptFallback(brief, platform, aspectKey, isCampaign){
+  /* Sérialiseur NEUTRE (repli du constructeur unique) : phrases factuelles minimales, zéro
+     connecteur créatif, zéro reformulation — les décisions passent telles quelles. La sentinelle
+     prestation n'est jamais sérialisée. */
   const s = v => { const t = String(v||"").trim(); return t ? (/[.!?…]$/.test(t) ? t : t+".") : ""; };
-  const low = v => { const t = s(v); return t ? t.charAt(0).toLowerCase()+t.slice(1) : ""; };
-  const up = v => { const t = s(v); return t ? t.charAt(0).toUpperCase()+t.slice(1) : ""; };
-  const lumiDesc = brief.niveauLuminosite==="sombre_dominant" ? "Le noir domine, mais le sujet reste pleinement lisible."
-    : brief.niveauLuminosite==="lumineux_eclatant" ? "L'image est lumineuse et éclatante, tout en restant noir et or."
-    : "Les zones sombres dominent, traversées d'une lumière chaude bien présente.";
   const carac = String(brief.caracteristiquePrestationVisible||"").trim();
   const caracUtile = carac && !/^aucune prestation précise\.?$/i.test(carac);
-  const symbolePhrase = caracUtile
-    ? `Au cœur de la composition, ${s(brief.symbolePrincipal).replace(/\.$/,"")} — non pas un décor, mais la conséquence visible du geste : ${low(carac)} Un unique axe de lumière dorée relie ce symbole au sujet.`
-    : `Au cœur de la composition, ${s(brief.symbolePrincipal).replace(/\.$/,"")}, relié au sujet par un unique axe de lumière dorée — jamais un simple décor.`;
-
+  const lignes = [
+    ["Sujet", brief.sujetPrincipal], ["Action", brief.action], ["Décor", brief.decor],
+    ["Cadrage", [brief.cadrage, brief.pointDeVue].filter(Boolean).join(", ")],
+    ["Instant unique de la scène", brief.pointDeTransformation],
+    ["Symbole central relié au sujet par un unique axe de lumière dorée", brief.symbolePrincipal],
+    ...(caracUtile ? [["Cause visible du symbole", carac]] : []),
+    ["Lumière", [brief.lumiere, brief.elementOr].filter(Boolean).join(" ")],
+    ["Émotion", brief.emotion],
+  ].filter(([,v])=> String(v||"").trim());
+  const corps = lignes.map(([k,v])=> `${k} : ${s(v)}`).join(" ");
   return cleanPrompt(`${buildPromptHeader(brief, platform, aspectKey, isCampaign)}
 
-${up(brief.ideeVisuelle)} ${up(brief.sujetPrincipal).replace(/\.$/,"")} — ${s(brief.action)} ${s(brief.decor)} Cadrage : ${s(brief.cadrage).replace(/\.$/,"")}, ${s(brief.pointDeVue)}
-
-La scène est saisie à un seul instant, sans avant ni après : ${low(brief.pointDeTransformation)} ${symbolePhrase}
-
-${up(brief.lumiere)} ${lumiDesc} ${s(brief.elementOr)} L'émotion qui doit traverser l'image : ${low(brief.emotion)}
+${corps}
 
 ${buildFixedGuardrailBlocks(brief, platform)}`);
 }
@@ -2497,6 +2576,35 @@ function localFallbackBrief(mission, prestation, platform, topic, allowed, typeC
    Diversité déterministe -> Creative Planner -> validation locale -> sélection des références ->
    prompt image compact. Rien ici ne consomme de crédit image. Le résultat est ce qui doit être
    affiché dans le Prompt Inspector AVANT toute confirmation. */
+/* ============================================================
+   T2 — CONSTRUCTEUR DU PROMPT (unique).
+   SEUL composant autorisé à produire le texte envoyé à OpenAI.
+   Deux modes internes, une seule sortie :
+   - Rédacteur DA (chemin nominal) : décisions -> langage naturel ;
+   - sérialiseur neutre (repli/désactivation) : décisions -> phrases factuelles minimales,
+     AUCUNE créativité (le repli n'est pas un second rédacteur).
+   En-tête et garde-fous : helpers déterministes partagés, hors de portée du Rédacteur.
+============================================================ */
+async function buildFinalImagePrompt(brief, platform, aspectKey, isCampaign, opts){
+  const blockingError = !!(opts && opts.blockingError);
+  if(USE_DA_WRITER && !blockingError){
+    try{
+      const narrative = await rewriteBriefAsNarrative(brief);
+      return {
+        prompt: cleanPrompt(`${buildPromptHeader(brief, platform, aspectKey, isCampaign)}
+
+${narrative.text}
+
+${buildFixedGuardrailBlocks(brief, platform)}`),
+        daWriterUsed: true, daWriterFallbackReason: null,
+      };
+    }catch(err){
+      return { prompt: serializeBriefToPromptFallback(brief, platform, aspectKey, isCampaign), daWriterUsed: false, daWriterFallbackReason: String(err.message||err) };
+    }
+  }
+  return { prompt: serializeBriefToPromptFallback(brief, platform, aspectKey, isCampaign), daWriterUsed: false, daWriterFallbackReason: null };
+}
+
 async function prepareCreativeBrief(inputs){
   const { mission, platform, prestation, topic, aspectKey, isCampaign, registres } = inputs;
   const steps = {};
@@ -2538,32 +2646,27 @@ async function prepareCreativeBrief(inputs){
   try{ referenceSelections = selectReferencesForBrief(brief, platform, 2) || []; }
   catch(err){ referenceError = `Sélection de référence impossible, génération sans référence : ${String(err.message||err)}`; referenceSelections = []; }
 
-  /* Rédacteur DA (USE_DA_WRITER) : le brief validé est réécrit en note narrative, encadrée par les
-     mêmes en-tête et garde-fous déterministes que le chemin classique. Tout échec (réseau, éléments
-     manquants après relance, texte trop long) déclenche le repli automatique sur le builder actuel —
-     jamais de génération bloquée par le Rédacteur, jamais de boucle. */
-  let imagePrompt, daWriterUsed = false, daWriterFallbackReason = null;
-  if(USE_DA_WRITER && !blockingError){
-    try{
-      const narrative = await rewriteBriefAsNarrative(brief);
-      imagePrompt = cleanPrompt(`${buildPromptHeader(brief, platform, aspectKey, !!isCampaign)}
+  /* T2 — CONSTRUCTEUR UNIQUE : toute production du prompt image passe par buildFinalImagePrompt.
+     prepareCreativeBrief ne construit plus rien lui-même. */
+  const built = await buildFinalImagePrompt(brief, platform, aspectKey, !!isCampaign, { blockingError });
+  const imagePrompt = built.prompt;
+  const daWriterUsed = built.daWriterUsed;
+  const daWriterFallbackReason = built.daWriterFallbackReason;
 
-${narrative.text}
-
-${buildFixedGuardrailBlocks(brief, platform)}`);
-      daWriterUsed = true;
-    }catch(err){
-      daWriterFallbackReason = String(err.message||err);
-      imagePrompt = buildCompactImagePromptFromBrief(brief, platform, aspectKey, !!isCampaign, registres);
-    }
-  } else {
-    imagePrompt = buildCompactImagePromptFromBrief(brief, platform, aspectKey, !!isCampaign, registres);
-  }
+  /* T1 (architecture figée) — Orchestrateur + Validator en mode RAPPORT : ils observent le brief
+     validé et le prompt assemblé, produisent des objets gelés pour l'Inspector. Le prompt envoyé
+     n'est PAS modifié en T1 ; le passage en mode bloquant est la bascule prévue en fin de tranche. */
+  let paquetOrchestrateur = null, validatorReport = null;
+  try{
+    paquetOrchestrateur = buildOrchestratorPacket(brief, registres, platform, aspectKey);
+    validatorReport = validateAssembledPrompt(imagePrompt, paquetOrchestrateur, brief);
+  }catch(e){ validatorReport = Object.freeze({ erreurInterne: String(e.message||e) }); }
 
   return {
     phase: "prepared", inputs, allowed, exclusions, brief, briefCorrected, plannerError,
     usedLocalBriefFallback, referenceSelections, referenceError, imagePrompt, steps, blockingError,
     daWriterUsed, daWriterFallbackReason,
+    paquetOrchestrateur, validatorReport,
   };
 }
 
@@ -2608,13 +2711,8 @@ async function confirmAndGenerateImage(prepared, onStatus, cancelToken){
     analysis, analysisError, content, textError };
 }
 
-/* Repli technique interne UNIQUEMENT — l'ancien chemin complet (module concaténés + sujet brut),
-   conservé pour compatibilité mais qui ne doit plus être le chemin principal d'aucun bouton. */
-async function runLegacyImageGeneration(platform, topic, aspectKey, missionKey, size, onStatus, cancelToken){
-  const prompt = buildImagePromptFull(platform, topic, aspectKey, missionKey, false);
-  const result = await callProviderImage(prompt, size, undefined, onStatus, cancelToken);
-  return { imagePrompt: prompt, ...result };
-}
+/* T2 : runLegacyImageGeneration supprimée — code mort (zéro appelant) qui produisait un prompt
+   hors du constructeur unique. buildImagePromptFull ne subsiste que pour référence jusqu'à T4. */
 
 function buildImagePromptFull(platform, topic, aspectKey, missionKey, isCampaign){
   const mods = imageModulesFor(platform);
@@ -3024,21 +3122,30 @@ function computeQualityScore({ platform, textPrompt, textMods, imageMods, totalT
   return { global, dims, weakPoints };
 }
 
-function generateCampaignPosts(topic, missionKey){
+async function generateCampaignPosts(topic, missionKey, onProgress){
+  /* T2 — pipeline UNIQUE : chaque item de campagne est préparé par prepareCreativeBrief
+     (Planner + validation + constructeur unique), séquentiellement. Plus aucun prompt
+     de campagne construit par le legacy. */
   const campaignId = uid();
-  return CAMPAIGN_ITEMS.map(item=>{
+  const posts = [];
+  for(let i=0; i<CAMPAIGN_ITEMS.length; i++){
+    const item = CAMPAIGN_ITEMS[i];
     const aspect = item.aspectOverride || PLATFORM_ASPECT[item.platform];
     const isStory = item.platform === "Story";
-    return {
+    if(onProgress) onProgress(`${i+1}/${CAMPAIGN_ITEMS.length} — ${item.label}`);
+    const prepared = await prepareCreativeBrief({ mission: missionKey, platform: item.platform, prestation: state.prestationName, topic, aspectKey: aspect, size: API_IMAGE_SIZE_BY_PLATFORM[item.platform]||"1024x1024", isCampaign:true, registres: Array.isArray(state.registres) ? [...state.registres] : [] });
+    posts.push({
       id: uid(), campaignId, campaignTopic: topic, campaignLabel: item.label,
       platform: item.platform, mission: missionKey, topic,
-      imagePrompt: buildImagePromptFull(item.platform, topic, aspect, missionKey, true),
+      imagePrompt: prepared.imagePrompt,
+      creativeBrief: prepared.brief || null,
       textPrompt: isStory ? null : buildTextPromptFull(item.platform, topic, missionKey),
       textFinal: isStory ? null : "", imageDataUrl: null,
       schedulable: item.platform !== "Article Blog Wix" && item.platform !== "Story",
       scheduledAt: null, status: "brouillon", createdAt: Date.now(), sentAt: null, error: null,
-    };
-  });
+    });
+  }
+  return posts;
 }
 
 /* ============================================================
@@ -4047,14 +4154,20 @@ function buildPostTab(){
   frag.appendChild(topicWarn);
 
   if(isCampaign){
-    frag.appendChild(el("button",{class:"btn-primary", style:"margin-bottom:14px;", onclick: ()=>{
+    frag.appendChild(el("button",{class:"btn-primary", style:"margin-bottom:14px;", onclick: async (e)=>{
       if(!state.topic.trim()){ topicWarn.textContent = "Décris d'abord le sujet du post avant de générer."; return; }
       topicWarn.textContent = "";
-      const newPosts = generateCampaignPosts(state.topic, state.mission);
-      state.scheduled.push(...newPosts);
-      LS.set("vf-scheduled", state.scheduled);
-      state.tab = "calendar";
-      renderNav(); renderMain();
+      const btn = e.currentTarget; const oldLabel = btn.textContent; btn.disabled = true;
+      try{
+        const newPosts = await generateCampaignPosts(state.topic, state.mission, (p)=>{ btn.textContent = "Préparation " + p; });
+        state.scheduled.push(...newPosts);
+        LS.set("vf-scheduled", state.scheduled);
+        state.tab = "calendar";
+        renderNav(); renderMain();
+      }catch(err){
+        topicWarn.textContent = "Création de campagne interrompue : " + (err.message||err);
+        btn.disabled = false; btn.textContent = oldLabel;
+      }
     }}, [svgIcon(ICONS.sparkles,16), el("span",{},"Générer la campagne complète (5 formats)")]));
     frag.appendChild(el("p",{class:"hint"}, "Chaque déclinaison (Instagram, Facebook, Google Business, Story, Article Blog Wix) est créée en brouillon, regroupée sous une même campagne dans l'onglet Calendrier — c'est là que tu génères texte et image, valides, puis programmes (ou copies/télécharges, pour la Story et l'article de blog) chaque contenu."));
     return frag;
@@ -4198,6 +4311,26 @@ function buildPostTab(){
       if(flow.phase!=="prepared") body.appendChild(row("Référence réellement utilisée", flow.usedReference ? "Oui ✓" : (flow.referenceFallbackReason ? "Non — repli : "+flow.referenceFallbackReason : "Non demandée")));
       body.appendChild(row("Modèle", "gpt-image-1"));
       body.appendChild(row("Rédacteur DA", flow.daWriterUsed ? "Utilisé ✓ (prompt narratif)" : (flow.daWriterFallbackReason ? "Repli sur l'assemblage classique — "+flow.daWriterFallbackReason : "Désactivé")));
+      if(flow.validatorReport){
+        const vr = flow.validatorReport;
+        const parts = [];
+        parts.push(`longueur ${vr.longueur||0}c`);
+        parts.push((vr.contradictions&&vr.contradictions.length ? `⚠ ${vr.contradictions.length} contradiction(s)` : "0 contradiction"));
+        parts.push((vr.doublons&&vr.doublons.length ? `${vr.doublons.length} doublon(s) charte/narratif` : "0 doublon"));
+        parts.push((vr.decisionsAbsentes&&vr.decisionsAbsentes.length ? `⚠ décisions absentes : ${vr.decisionsAbsentes.join(", ")}` : "toutes décisions présentes"));
+        if(vr.preparationT3&&vr.preparationT3.length) parts.push(`${vr.preparationT3.length} champ(s) hors cible atomique (info T3)`);
+        if(vr.erreurInterne) parts.push("erreur interne : "+vr.erreurInterne);
+        body.appendChild(row("Validator (T1, rapport)", parts.join(" · ")));
+        const detail = [];
+        (vr.contradictions||[]).forEach(c=> detail.push("CONTRADICTION — "+c));
+        (vr.doublons||[]).forEach(d=> detail.push("DOUBLON — "+d));
+        (vr.preparationT3||[]).forEach(p=> detail.push("T3 — "+p));
+        if(detail.length) body.appendChild(row("Validator (détail)", detail.join(" | ")));
+      }
+      if(flow.paquetOrchestrateur && flow.paquetOrchestrateur.rapportFusion){
+        const rf = flow.paquetOrchestrateur.rapportFusion;
+        body.appendChild(row("Orchestrateur (T1)", `interdits ${rf.interditsAvant}→${rf.interditsApres}${rf.doublonsSupprimes.length?` (doublons retirés : ${rf.doublonsSupprimes.join(", ")})`:""}`));
+      }
       body.appendChild(row("Taille prévue", API_IMAGE_SIZE_BY_PLATFORM[flow.inputs.platform] || "1024x1024"));
       if(flow.blockingError) body.appendChild(row("⛔ Bloquant — aucune image possible", flow.blockingError));
       if(flow.plannerError) body.appendChild(row("⚠ Creative Planner", flow.plannerError));
@@ -4355,15 +4488,26 @@ function buildPostTab(){
   frag.appendChild(el("p",{class:"label", style:"margin-top:18px;"}, "Mode manuel avancé (copier-coller dans ChatGPT, sans le moteur créatif)"));
 
   const imageOnlyMode = state.creationMode === "image";
-  frag.appendChild(el("button",{class:"btn-primary", style:"margin-bottom:14px;", onclick: ()=>{
+  frag.appendChild(el("button",{class:"btn-primary", style:"margin-bottom:14px;", onclick: async (e)=>{
     if(!state.topic.trim()){ topicWarn.textContent = "Décris d'abord le sujet du post avant de générer."; return; }
     topicWarn.textContent = "";
-    state.imagePrompt = buildImagePromptFull(platform, state.topic, PLATFORM_ASPECT[platform], state.mission);
-    state.textPrompt = (platform==="Story" || imageOnlyMode) ? null : buildTextPromptFull(platform, state.topic, state.mission);
-    state.textPasted = ""; state.feedbackComment = "";
-    state.textPromptOptimized = null; state.imagePromptOptimized = null;
-    setPostImageId(null);
-    renderMain();
+    /* T2 — pipeline UNIQUE : le mode manuel n'a plus de constructeur propre. Il déclenche la même
+       préparation (Phase A) que le moteur créatif ; le prompt copié est octet pour octet celui
+       qu'enverrait "Confirmer et générer l'image". Deux sorties, un seul constructeur. */
+    const btn = e.currentTarget; const oldLabel = btn.textContent; btn.disabled = true; btn.textContent = "Préparation via le moteur créatif...";
+    try{
+      const prepared = await prepareCreativeBrief({ mission: state.mission, platform, prestation: state.prestationName, topic: state.topic, aspectKey: PLATFORM_ASPECT[platform], size: API_IMAGE_SIZE_BY_PLATFORM[platform]||"1024x1024", isCampaign:false, registres: Array.isArray(state.registres) ? [...state.registres] : [] });
+      state.lastCreativeFlow = prepared;
+      state.imagePrompt = prepared.imagePrompt;
+      state.textPrompt = (platform==="Story" || imageOnlyMode) ? null : buildTextPromptFull(platform, state.topic, state.mission);
+      state.textPasted = ""; state.feedbackComment = "";
+      state.textPromptOptimized = null; state.imagePromptOptimized = null;
+      setPostImageId(null);
+      renderMain();
+    }catch(err){
+      topicWarn.textContent = "Préparation impossible : " + (err.message||err);
+      btn.disabled = false; btn.textContent = oldLabel;
+    }
   }}, [svgIcon(ICONS.wand,16), el("span",{}, platform==="Story" ? "Générer l'image (accroche + logo intégrés)" : imageOnlyMode ? "Générer l'image" : "Générer image + texte")]));
 
   if(imageOnlyMode) frag.appendChild(el("p",{class:"sublabel", style:"margin-top:-8px;"}, "Mode image seule — aucun texte ne sera généré. Passe par \"Créer un post\" si tu as aussi besoin d'une légende."));
@@ -4415,9 +4559,9 @@ function buildPostTab(){
     if(state.textPrompt && qScore.global < 70){
       frag.appendChild(el("button",{class:"btn-secondary", style:"margin-bottom:16px;", onclick: ()=>{
         const optimizedText = buildTextPromptFull(platform, state.topic, state.mission);
-        const optimizedImage = buildImagePromptFull(platform, state.topic, PLATFORM_ASPECT[platform], state.mission);
+        // T2 : plus aucun constructeur d'image parallèle — l'optimisation ne concerne que le texte.
         state.textPromptOptimized = optimizedText;
-        state.imagePromptOptimized = optimizedImage;
+        state.imagePromptOptimized = null;
         renderMain();
       }}, "🛠 Optimiser le prompt (contexte perfectible)"));
     }
@@ -4427,7 +4571,7 @@ function buildPostTab(){
         el("p",{style:"font-size:12px;color:var(--muted2);margin-bottom:8px;"},"La reconstruction applique la même logique de sélection avec le contexte le plus à jour (modules activés, historique récent). Choisis la version à utiliser."),
         el("div",{style:"display:flex;gap:8px;"},[
           el("button",{class:"btn-ghost", onclick:()=>{ state.textPromptOptimized=null; state.imagePromptOptimized=null; renderMain(); }}, "Garder l'actuelle"),
-          el("button",{class:"btn-ghost active", onclick:()=>{ state.textPrompt=state.textPromptOptimized; state.imagePrompt=state.imagePromptOptimized; state.textPromptOptimized=null; state.imagePromptOptimized=null; renderMain(); }}, "Utiliser l'optimisée"),
+          el("button",{class:"btn-ghost active", onclick:()=>{ state.textPrompt=state.textPromptOptimized; state.textPromptOptimized=null; state.imagePromptOptimized=null; renderMain(); }}, "Utiliser l'optimisée"),
         ]),
       ]));
     }
