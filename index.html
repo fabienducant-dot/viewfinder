@@ -690,6 +690,18 @@ function normalizeCampaignHistoryEntry(h){
 }
 /* Point d'entrée unique : à appeler après tout chargement externe (localStorage au démarrage,
    restauration Netlify Blobs, import JSON, restauration de sauvegarde) et avant chaque rendu/génération. */
+/* ============ TRACE TEMPORAIRE D'EXÉCUTION (diagnostic Phase B) ============
+   VF_TRACE=true : chaque étape du workflow image est journalisée en mémoire et copiable
+   depuis l'écran de création. À retirer une fois le point d'arrêt identifié. */
+const VF_TRACE = true;
+window.__VF_TRACE = window.__VF_TRACE || [];
+function vfTrace(step, data){
+  if(!VF_TRACE) return;
+  const entry = Object.assign({ t: new Date().toISOString().slice(11,23), step }, data||{});
+  window.__VF_TRACE.push(entry);
+  try{ console.log("[VF_TRACE]", step, data||{}); }catch(e){}
+}
+
 /* Unique point d'écriture de l'image retenue pour le post : état + persistance toujours synchrones.
    Toute évolution future (nettoyage, restauration) passe par ici — jamais d'écriture directe. */
 function setPostImageId(id){
@@ -2823,12 +2835,18 @@ async function callProviderImage(prompt, size, extraReferenceDataUrls, onStatus,
     }),
   });
   const createData = await fetchJsonOrThrowRaw(createRes, "création du travail");
+  vfTrace("2-create-image-job", { httpStatus: createRes.status, jobId: createData.jobId || null, error: createData.error || null });
   if(!createRes.ok || createData.error) throw new Error(createData.error || `Erreur ${createRes.status}`);
   const jobId = createData.jobId;
   try{ sessionStorage.setItem(IMAGE_JOB_SESSION_KEY, jobId); }catch(e){ /* stockage indisponible : tant pis, pas bloquant */ }
 
   try{
-    return await pollImageJob(jobId, onStatus, cancelToken);
+    const result = await pollImageJob(jobId, onStatus, cancelToken);
+    // logoSentAsReference est déterminé ICI, dans la portée où referenceImageUrls existe :
+    // getBrandReferenceImages() ne contient que le logo officiel — sa présence signifie exactement
+    // "le logo faisait partie des références envoyées à OpenAI". pollImageJob, fonction séparée
+    // (réutilisée par la reprise de job après rechargement), n'a pas accès à cette variable.
+    return { ...result, logoSentAsReference: referenceImageUrls.length > 0 };
   } finally {
     try{
       if(sessionStorage.getItem(IMAGE_JOB_SESSION_KEY) === jobId) sessionStorage.removeItem(IMAGE_JOB_SESSION_KEY);
@@ -2859,10 +2877,11 @@ async function pollImageJob(jobId, onStatus, cancelToken){
     if(statusData.status==="completed"){
       if(onStatus) onStatus("Finalisation…");
       if(!statusData.result || !statusData.result.resultUrl) throw new Error("Aucune image reçue du fournisseur.");
+      vfTrace("3-job-termine", { status: statusData.status, hasResultUrl: !!(statusData.result && statusData.result.resultUrl), usedReference: statusData.result && statusData.result.usedReference, fallbackReason: statusData.result && statusData.result.referenceFallbackReason || null });
       const dataUrl = await fetchImageAsDataUrl(statusData.result.resultUrl);
-      // logoSentAsReference : getBrandReferenceImages() ne contient que le logo officiel — sa présence
-      // signifie donc exactement "le logo faisait partie des références envoyées à OpenAI".
-      return { dataUrl, usedReference: !!statusData.result.usedReference, referenceFallbackReason: statusData.result.referenceFallbackReason || null, logoSentAsReference: referenceImageUrls.length > 0 };
+      vfTrace("4-dataUrl-recupere", { dataUrlLength: dataUrl ? dataUrl.length : 0, prefix: dataUrl ? dataUrl.slice(0,30) : null });
+      // logoSentAsReference est ajouté par callProviderImage (seule portée où les URLs de référence existent).
+      return { dataUrl, usedReference: !!statusData.result.usedReference, referenceFallbackReason: statusData.result.referenceFallbackReason || null };
     }
     if(onStatus) onStatus(statusData.status==="processing" ? "Génération OpenAI en cours…" : "Préparation de l'image…");
   }
@@ -3925,6 +3944,7 @@ function buildFeedbackBlock(ctx){
 }
 
 function buildPostTab(){
+  vfTrace("8-buildPostTab-entree", { postImageId: state.postImageId, imagesCount: state.images.length, hasImagePrompt: !!state.imagePrompt });
   const frag = el("div",{});
   const platform = state.network;
   const isCampaign = state.mission === "Créer une campagne complète";
@@ -4216,9 +4236,10 @@ function buildPostTab(){
 
     // --- Phase B : payante, uniquement après ce clic explicite ---
     confirmBtn.addEventListener("click", async ()=>{
-      if(!state.lastCreativeFlow || state.lastCreativeFlow.phase!=="prepared") return;
-      if(state.lastCreativeFlow.blockingError) return; // garde-fou : jamais d'appel image si un blocage est présent
-      if(!confirm("Lancer la génération d'image via OpenAI ? Ceci consomme du crédit API.")) return;
+      vfTrace("1-clic-confirmer", { hasFlow: !!state.lastCreativeFlow, phase: state.lastCreativeFlow && state.lastCreativeFlow.phase, blockingError: state.lastCreativeFlow && state.lastCreativeFlow.blockingError || null });
+      if(!state.lastCreativeFlow || state.lastCreativeFlow.phase!=="prepared"){ imgApiStatus.textContent = "Aucune préparation en attente — relance \"Préparer la création\" d'abord."; vfTrace("1-STOP-garde-phase",{}); return; }
+      if(state.lastCreativeFlow.blockingError){ imgApiStatus.textContent = "Génération bloquée : "+state.lastCreativeFlow.blockingError; vfTrace("1-STOP-blockingError",{}); return; }
+      if(!confirm("Lancer la génération d'image via OpenAI ? Ceci consomme du crédit API.")){ vfTrace("1-STOP-annule-par-utilisateur",{}); return; }
       confirmBtn.disabled = true; imgCancelBtn.style.display = "inline-block";
       const t0 = Date.now();
       const cancelToken = { cancelled:false }; activeCancelToken = cancelToken;
@@ -4244,12 +4265,14 @@ function buildPostTab(){
           dataUrl = composited.dataUrl; logoApplied = composited.applied;
         }
         const id = uid();
+        vfTrace("5-ajout-bibliotheque", { newId: id, imagesAvant: state.images.length });
         state.images.push({ id, name:`${platform}-${nowStr()}.png`, dataUrl, tags:[platform], favorite:false,
           logoApplied, usedReference: flow.usedReference, referenceFallbackReason: flow.referenceFallbackReason,
           creativeBrief: flow.brief, creativeContent: flow.content, altText: flow.content ? flow.content.altText : (flow.analysis && flow.analysis.altText) });
         LS.set("vf-images", state.images);
         updateCount();
         state.selectedId = id; setPostImageId(id);
+        vfTrace("6-postImageId-ecrit", { postImageId: state.postImageId, imagesApres: state.images.length, persiste: LS.get("vf-post-image-id", null) });
         flow.imageId = id; // les boutons de relance retrouveront TOUJOURS l'image par cet id, jamais par state.selectedId
         // Historique visuel structuré : uniquement maintenant, l'image existe réellement — et
         // uniquement les IDs des références utilisées, jamais leurs dataUrl complètes.
@@ -4545,6 +4568,14 @@ function buildPostTab(){
      rendait l'aperçu inatteignable après une génération API pure.
   ============================================================ */
   const previewImgForPost = state.images.find(i=>i.id===state.postImageId);
+  vfTrace("9-previewImgForPost", { postImageId: state.postImageId, trouve: !!previewImgForPost, sectionAffichee: !!(previewImgForPost || state.imagePrompt) });
+  if(VF_TRACE){
+    frag.appendChild(el("button",{class:"btn-ghost", style:"margin:4px 0 10px;", onclick: async (e)=>{
+      const txt = JSON.stringify(window.__VF_TRACE, null, 1);
+      try{ await navigator.clipboard.writeText(txt); e.target.textContent = "✓ Trace copiée ("+window.__VF_TRACE.length+" étapes)"; }
+      catch(err){ const ta=document.createElement("textarea"); ta.value=txt; document.body.appendChild(ta); ta.select(); document.execCommand("copy"); document.body.removeChild(ta); e.target.textContent = "✓ Trace copiée"; }
+    }}, "🧪 Copier la trace d'exécution (diagnostic)"));
+  }
   if(previewImgForPost || state.imagePrompt){
   if(previewImgForPost){
     frag.appendChild(el("p",{class:"label", style:"margin-top:14px;"},"Aperçu de l'image retenue pour ce post"));
@@ -6258,6 +6289,7 @@ function buildSettingsTab(){
    ROUTEUR
 ============================================================ */
 function renderMain(){
+  vfTrace("7-renderMain", { view: state.view, postImageId: state.postImageId });
   const main = document.getElementById("main");
   main.innerHTML = "";
   const builders = {
