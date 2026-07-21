@@ -17,6 +17,7 @@ exports.handler = async (event) => {
     return { statusCode: 400, body: JSON.stringify({ error: "Corps de requête invalide" }) };
   }
   const { kind, model, baseUrl, systemPrompt, userPrompt, responseSchema, imageDataUrl, reasoning_effort } = payload;
+    let usage = null; // renseigné uniquement par les providers qui exposent les tokens (OpenAI-compatible)
 
   try {
     let text;
@@ -116,9 +117,12 @@ exports.handler = async (event) => {
         console.log("[DIAG generate-text] 300 premiers caractères de message.content :", String(choice?.message?.content || "").slice(0, 300));
       }
       text = data.choices?.[0]?.message?.content || "";
+      // usage réel OpenAI (tokens) : transmis tel quel au client pour l'archivage des coûts mesurés.
+      // Additif et rétrocompatible : les consommateurs existants ne lisent que { text }.
+      if (data.usage) usage = { prompt_tokens: data.usage.prompt_tokens ?? null, completion_tokens: data.usage.completion_tokens ?? null };
     }
 
-    return { statusCode: 200, headers: { "Content-Type": "application/json" }, body: JSON.stringify({ text }) };
+    return { statusCode: 200, headers: { "Content-Type": "application/json" }, body: JSON.stringify({ text, usage }) };
   } catch (err) {
     return {
       statusCode: 500,
