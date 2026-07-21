@@ -1814,14 +1814,14 @@ function getRecentImageEntries(platform, limit){
   return (state.imageHistory||[]).filter(e=>e.platform===platform).slice(-limit);
 }
 /* typeCreationImpose sélectionne le catalogue de départ : jamais mélangé entre les deux registres. */
-function computeAllowedArchetypes(mission, prestation, platform, typeCreationImpose){
+function computeAllowedArchetypes(mission, prestation, platform, typeCreationImpose, recentEntriesOverride){
   const sourceCatalog = typeCreationImpose === "affiche_fantastique" ? ARCHETYPE_CATALOG_FANTASTIQUE : ARCHETYPE_CATALOG;
   const compatible = sourceCatalog.filter(a=>
     (a.missionsCompatibles.includes("toutes") || !mission || a.missionsCompatibles.includes(mission)) &&
     (a.prestationsCompatibles.includes("toutes") || !prestation || a.prestationsCompatibles.includes(prestation))
   );
   const base = compatible.length ? compatible : sourceCatalog; // repli : aucune contrainte ne doit jamais vider le catalogue
-  const recentIds = getRecentImageEntries(platform, 5).map(e=>e.archetype);
+  const recentIds = (recentEntriesOverride || getRecentImageEntries(platform, 5)).map(e=>e.archetype);
   const allowed = base.filter(a=> !recentIds.includes(a.id));
   if(allowed.length) return allowed;
   // Repli local déterministe (jamais de boucle d'appels) : l'archétype compatible le moins récemment
@@ -1835,8 +1835,8 @@ function computeAllowedArchetypes(mission, prestation, platform, typeCreationImp
 /* Compare aux 3 dernières générations de cette plateforme : décor/cadrage/action à éviter
    explicitement — c'est ce qui empêche concrètement "personne allongée + mains sur le dos"
    de revenir alors qu'aucun champ ne le nommait jusqu'ici. */
-function computeRecentCompositionExclusions(platform){
-  const recent = getRecentImageEntries(platform, 3);
+function computeRecentCompositionExclusions(platform, recentEntriesOverride){
+  const recent = recentEntriesOverride || getRecentImageEntries(platform, 3);
   const exclusions = [];
   recent.forEach(e=>{
     if(e.decor) exclusions.push(e.decor);
@@ -2087,9 +2087,9 @@ function validateAndFixBrief(brief, allowed, exclusions, typeCreationImpose, pre
   }
   return { brief: fixed, corrected, blockingError };
 }
-async function generateCreativeBrief(mission, prestation, platform, topic, typeCreationImpose, registres){
-  const allowed = computeAllowedArchetypes(mission, prestation, platform, typeCreationImpose);
-  const exclusions = computeRecentCompositionExclusions(platform);
+async function generateCreativeBrief(mission, prestation, platform, topic, typeCreationImpose, registres, recentEntriesOverride){
+  const allowed = computeAllowedArchetypes(mission, prestation, platform, typeCreationImpose, recentEntriesOverride||null);
+  const exclusions = computeRecentCompositionExclusions(platform, recentEntriesOverride||null);
   const systemPrompt = buildCreativePlannerSystemPrompt();
   const userPrompt = buildCreativePlannerUserPrompt(allowed, exclusions, mission, prestation, platform, topic, typeCreationImpose, registres);
   const provider = state.apiProviders.find(p=>p.id===state.selectedProviderId) || DEFAULT_OPENAI_PROVIDER;
@@ -2111,7 +2111,8 @@ async function generateCreativeBrief(mission, prestation, platform, topic, typeC
     throw new Error(`Creative Planner — erreur JSON.parse :\n${e.message}\n\nRéponse brute :\n${String(data.text||"").slice(0,1500)}`);
   }
   const { brief, corrected, blockingError } = validateAndFixBrief(rawBrief, allowed, exclusions, typeCreationImpose, prestation);
-  return { brief, corrected, blockingError, allowed, exclusions };
+  const usage = data.usage ? { promptTokens: data.usage.prompt_tokens ?? null, completionTokens: data.usage.completion_tokens ?? null, model: provider.model } : null;
+  return { brief, corrected, blockingError, allowed, exclusions, usage };
 }
 
 /* ---------- 4. PROMPT IMAGE COMPACT (12 sections dans l'ordre demandé) ---------- */
@@ -2262,9 +2263,9 @@ function narrativeMissingElements(text, exportable){
 
 /* Un appel texte, une relance corrective maximum, puis échec — le repli est géré par l'appelant.
    Retourne { text } ou lève une erreur avec la raison exacte (traçée dans le flow). */
-async function rewriteBriefAsNarrative(brief){
-  const exportable = extractExportableBriefFields(brief);
-  const systemPrompt = `Tu es le rédacteur d'un directeur artistique. Ta seule mission : transformer un brief structuré en une note de direction artistique fluide, en français, destinée à un générateur d'images.
+/* System prompt du Rédacteur — CONSTANTE CANONIQUE (sert aussi au Knowledge Fingerprint :
+   la logique métier du constructeur est représentée par ses données, jamais par toString()). */
+const DA_WRITER_SYSTEM_PROMPT = `Tu es le rédacteur d'un directeur artistique. Ta seule mission : transformer un brief structuré en une note de direction artistique fluide, en français, destinée à un générateur d'images.
 
 RÈGLES ABSOLUES — tu reformules, tu n'inventes JAMAIS :
 - Interdiction d'inventer un symbole, une émotion, un décor, un cadrage, une lumière, un personnage, ou d'enrichir librement la scène. Chaque idée de ton texte doit provenir du brief fourni.
@@ -2276,6 +2277,10 @@ RÈGLES ABSOLUES — tu reformules, tu n'inventes JAMAIS :
 - Ignore toute valeur technique ou interne qui semblerait être une donnée de contrôle.
 - Longueur : 180 à 250 mots. Un texte continu en 2 ou 3 paragraphes, sans titres, sans listes, sans étiquettes.
 - N'écris RIEN d'autre que la note elle-même : pas de préambule, pas de commentaire.`;
+
+async function rewriteBriefAsNarrative(brief){
+  const exportable = extractExportableBriefFields(brief);
+  const systemPrompt = DA_WRITER_SYSTEM_PROMPT;
   const userPrompt = `Brief structuré à transformer en note de direction artistique :\n${JSON.stringify(exportable, null, 2)}`;
 
   const callOnce = async (extraInstruction)=>{
@@ -2291,20 +2296,23 @@ RÈGLES ABSOLUES — tu reformules, tu n'inventes JAMAIS :
     if(!contentType.includes("application/json")) throw new Error(`Rédacteur DA : réponse non-JSON (statut ${res.status}).`);
     const data = await res.json();
     if(!res.ok || data.error) throw new Error(data.error || `Rédacteur DA : erreur ${res.status}`);
-    return String(data.text||"").trim();
+    return { text: String(data.text||"").trim(), usage: data.usage || null };
   };
 
-  let text = await callOnce();
+  const sumUsage = (a,b)=> (!a && !b) ? null : ({ promptTokens: (a?.prompt_tokens??a?.promptTokens??0)+(b?.prompt_tokens??b?.promptTokens??0), completionTokens: (a?.completion_tokens??a?.completionTokens??0)+(b?.completion_tokens??b?.completionTokens??0), model: DA_WRITER_MODEL });
+  let call1 = await callOnce();
+  let text = call1.text; let usageAcc = call1.usage;
   let missing = narrativeMissingElements(text, exportable);
   const tooLong = text.split(/\s+/).length > DA_WRITER_MAX_WORDS;
   if(missing.length || tooLong){
     const correction = `CORRECTION OBLIGATOIRE : ta précédente version ${tooLong?`dépassait ${DA_WRITER_MAX_WORDS} mots`:""}${tooLong&&missing.length?" et ":""}${missing.length?`omettait ces éléments du brief : ${missing.join(", ")}`:""}. Réécris la note en respectant strictement toutes les règles, en 180 à 250 mots, sans rien inventer.`;
-    text = await callOnce(correction);
+    const call2 = await callOnce(correction);
+    text = call2.text; usageAcc = sumUsage(usageAcc, call2.usage) || usageAcc;
     missing = narrativeMissingElements(text, exportable);
     if(missing.length) throw new Error(`Éléments du brief absents après relance : ${missing.join(", ")}`);
     if(text.split(/\s+/).length > DA_WRITER_MAX_WORDS) throw new Error(`Texte trop long après relance (> ${DA_WRITER_MAX_WORDS} mots)`);
   }
-  return { text };
+  return { text, usage: usageAcc ? { promptTokens: usageAcc.prompt_tokens ?? usageAcc.promptTokens ?? null, completionTokens: usageAcc.completion_tokens ?? usageAcc.completionTokens ?? null, model: DA_WRITER_MODEL } : null };
 }
 
 
@@ -2596,7 +2604,7 @@ async function buildFinalImagePrompt(brief, platform, aspectKey, isCampaign, opt
 ${narrative.text}
 
 ${buildFixedGuardrailBlocks(brief, platform)}`),
-        daWriterUsed: true, daWriterFallbackReason: null,
+        daWriterUsed: true, daWriterFallbackReason: null, redacteurUsage: narrative.usage || null,
       };
     }catch(err){
       return { prompt: serializeBriefToPromptFallback(brief, platform, aspectKey, isCampaign), daWriterUsed: false, daWriterFallbackReason: String(err.message||err) };
@@ -2615,14 +2623,18 @@ async function prepareCreativeBrief(inputs){
   const typeCreationImpose = (Array.isArray(registres) && registres.includes("fantastique"))
     ? "affiche_fantastique" : "luxe_silencieux";
 
-  const allowed = computeAllowedArchetypes(mission, prestation, platform, typeCreationImpose);
-  const exclusions = computeRecentCompositionExclusions(platform);
+  /* benchNeutralHistory (Banc d'essai) : la SOURCE de l'historique est paramétrée — la logique du
+     pipeline est strictement identique. Production : pas d'override -> comportement inchangé. */
+  const neutralHist = inputs.benchNeutralHistory ? [] : null;
+  const allowed = computeAllowedArchetypes(mission, prestation, platform, typeCreationImpose, neutralHist);
+  const exclusions = computeRecentCompositionExclusions(platform, neutralHist);
   steps.allowed = allowed.map(a=>a.id); steps.exclusions = exclusions;
 
-  let brief, briefCorrected = false, plannerError = null, usedLocalBriefFallback = false, blockingError = null;
+  let brief, briefCorrected = false, plannerError = null, usedLocalBriefFallback = false, blockingError = null, plannerUsage = null;
   try{
-    const plannerResult = await generateCreativeBrief(mission, prestation, platform, topic, typeCreationImpose, registres);
+    const plannerResult = await generateCreativeBrief(mission, prestation, platform, topic, typeCreationImpose, registres, neutralHist);
     brief = plannerResult.brief; briefCorrected = plannerResult.corrected; blockingError = plannerResult.blockingError;
+    plannerUsage = plannerResult.usage || null;
   }catch(err){
     plannerError = `Échec du Creative Planner : ${String(err.message||err)}`;
     brief = localFallbackBrief(mission, prestation, platform, topic, allowed, typeCreationImpose);
@@ -2652,6 +2664,9 @@ async function prepareCreativeBrief(inputs){
   const imagePrompt = built.prompt;
   const daWriterUsed = built.daWriterUsed;
   const daWriterFallbackReason = built.daWriterFallbackReason;
+  /* usage : tokens RÉELS remontés par le serveur (null si le provider ne les expose pas) —
+     jamais confondus avec une estimation. */
+  const usage = Object.freeze({ planner: plannerUsage || null, redacteur: built.redacteurUsage || null });
 
   /* T1 (architecture figée) — Orchestrateur + Validator en mode RAPPORT : ils observent le brief
      validé et le prompt assemblé, produisent des objets gelés pour l'Inspector. Le prompt envoyé
@@ -2665,7 +2680,7 @@ async function prepareCreativeBrief(inputs){
   return {
     phase: "prepared", inputs, allowed, exclusions, brief, briefCorrected, plannerError,
     usedLocalBriefFallback, referenceSelections, referenceError, imagePrompt, steps, blockingError,
-    daWriterUsed, daWriterFallbackReason,
+    daWriterUsed, daWriterFallbackReason, usage,
     paquetOrchestrateur, validatorReport,
   };
 }
@@ -5390,6 +5405,403 @@ function buildApiTab(){
    ONGLET LABORATOIRE IA
 ============================================================ */
 /* ============================================================
+   BANC D'ESSAI — B1 : SOCLE (versions, interfaces génériques, stockage)
+   Framework GÉNÉRIQUE de validation : le Banc ne connaît ni le Creative Planner,
+   ni le Prompt Builder, ni OpenAI — uniquement les contrats ci-dessous.
+   Le moteur créatif actuel sera enregistré comme UN TestExecutor parmi d'autres (B2).
+   Aucune modification du moteur : le Banc est un consommateur du pipeline.
+============================================================ */
+
+/* ---- Versionnage ---- */
+const VF_VERSION = "2.0.0-t2"; // semver manuelle : à incrémenter à chaque déploiement touchant le moteur
+/* Hash déterministe de l'état des règles : deux runs au même hash = strictement les mêmes règles.
+   Couvre : modules (contenu+état), UNIVERS_SDZ, charte condensée, garde-fou sécurité. */
+function computeModulesHash(){
+  const mods = (state.modules||[])
+    .map(m=>({ id:m.id, t:m.title, c:m.content, e:!!m.enabled, cat:m.category, cr:m.criteres||null }))
+    .sort((a,b)=> String(a.id).localeCompare(String(b.id)));
+  const payload = JSON.stringify({ mods, univers: MASTER_UNIVERS_SDZ_V0, charte: CHARTE_SDZ_SYNTHESE, safety: SAFETY_GUARDRAIL, v: VF_VERSION });
+  return hashPrompt(payload);
+}
+
+/* ---- Contrats génériques (documentation d'interface — objets simples, pas de classes imposées) ----
+   TestCase   : { caseId, executorId, params:{...libres pour l'exécuteur...}, sujet?, labels? }
+   TestSuite  : { suiteId, label, mode:"smoke"|"standard"|"complet", cases:[TestCase], topicBankVersion }
+   TestResult : { caseId, status:"ok"|"erreur"|"ignore", startedAt, durationMs, costEstimated,
+                  artefacts:{...libres : brief, prompt, imageId, rapports...}, error? }
+   TestExecutor : { id, label, estimateCost(testCase)->number|null, async execute(testCase, ctx)->TestResult }
+     ctx : { mode, benchMode:true, onStatus(label), storage } — l'exécuteur N'ÉCRIT JAMAIS dans les
+     données de production (isolation lecture+écriture : il reçoit son contexte, il ne lit pas l'état de prod).
+   QualityScorer : { id, label, async score(testResult, testCase)->{ total, grille:{...}, scorerId } }
+     Implémentations prévues : HumanScorer (B4), VisionScorer (post-T3). */
+const BENCH_EXECUTORS = new Map();
+function registerBenchExecutor(executor){
+  if(!executor || !executor.id || typeof executor.execute!=="function") throw new Error("TestExecutor invalide : { id, execute() } requis.");
+  BENCH_EXECUTORS.set(executor.id, executor);
+}
+const BENCH_SCORERS = new Map();
+function registerQualityScorer(scorer){
+  if(!scorer || !scorer.id || typeof scorer.score!=="function") throw new Error("QualityScorer invalide : { id, score() } requis.");
+  BENCH_SCORERS.set(scorer.id, scorer);
+}
+
+/* ---- BenchStorage : abstraction de stockage (le Banc ne dépend jamais d'IndexedDB directement) ----
+   Contrat async : saveRun(run) / getRun(runId) / listRuns() / deleteRun(runId)
+                   saveCaseImage(imageId, blob) / getCaseImage(imageId) / deleteCaseImage(imageId)
+                   exportRun(runId) -> objet JSON auto-suffisant (images en dataUrl)
+   Règles : un run "terminé" est gelé (seules ses notations `scores` peuvent s'ajouter) ;
+            un run épinglé (pinnedAsReference) refuse la suppression. */
+class MemoryBenchStorage {
+  constructor(){ this.runs = new Map(); this.images = new Map(); this.kind = "memory"; }
+  async saveRun(run){
+    const existing = this.runs.get(run.runId);
+    if(existing && existing.status==="terminé" && run.status==="terminé"){
+      // run gelé : seule la clé scores peut évoluer
+      const a = JSON.stringify({ ...existing, scores: null, pinnedAsReference: null }), b = JSON.stringify({ ...run, scores: null, pinnedAsReference: null });
+      if(a!==b) throw new Error("Run terminé : objet gelé — seules la notation (scores) et l'épinglage (pinnedAsReference) peuvent évoluer.");
+    }
+    this.runs.set(run.runId, JSON.parse(JSON.stringify(run)));
+    return run.runId;
+  }
+  async getRun(runId){ const r = this.runs.get(runId); return r ? JSON.parse(JSON.stringify(r)) : null; }
+  async listRuns(){ return [...this.runs.values()].map(r=>({ runId:r.runId, startedAt:r.startedAt, finishedAt:r.finishedAt||null, mode:r.mode, status:r.status, appVersion:r.appVersion, modulesHash:r.modulesHash, pinnedAsReference:!!r.pinnedAsReference, nbCases:(r.cases||[]).length })); }
+  async deleteRun(runId){
+    const r = this.runs.get(runId);
+    if(r && r.pinnedAsReference) throw new Error("Run épinglé comme Référence officielle : suppression refusée.");
+    this.runs.delete(runId); return true;
+  }
+  async saveCaseImage(imageId, blob){ this.images.set(imageId, blob); return imageId; }
+  async getCaseImage(imageId){ return this.images.get(imageId) || null; }
+  async deleteCaseImage(imageId){ this.images.delete(imageId); return true; }
+  async exportRun(runId){ const r = await this.getRun(runId); if(!r) return null; return { format:"vf-bench-run", exportedAt:new Date().toISOString(), run:r }; }
+}
+class IndexedDBBenchStorage {
+  constructor(){ this.kind = "indexeddb"; this._db = null; }
+  async _open(){
+    if(this._db) return this._db;
+    this._db = await new Promise((res, rej)=>{
+      const req = indexedDB.open("vf-bench", 1);
+      req.onupgradeneeded = ()=>{ const db = req.result;
+        if(!db.objectStoreNames.contains("runs")) db.createObjectStore("runs", { keyPath:"runId" });
+        if(!db.objectStoreNames.contains("images")) db.createObjectStore("images", { keyPath:"imageId" });
+      };
+      req.onsuccess = ()=> res(req.result);
+      req.onerror = ()=> rej(req.error || new Error("Ouverture IndexedDB impossible"));
+    });
+    return this._db;
+  }
+  async _tx(store, mode, fn){
+    const db = await this._open();
+    return new Promise((res, rej)=>{
+      const tx = db.transaction(store, mode); const st = tx.objectStore(store);
+      const out = fn(st);
+      tx.oncomplete = ()=> res(out && out.result !== undefined ? out.result : out);
+      tx.onerror = ()=> rej(tx.error || new Error("Transaction IndexedDB échouée"));
+    });
+  }
+  async saveRun(run){
+    const existing = await this.getRun(run.runId);
+    if(existing && existing.status==="terminé" && run.status==="terminé"){
+      const a = JSON.stringify({ ...existing, scores: null, pinnedAsReference: null }), b = JSON.stringify({ ...run, scores: null, pinnedAsReference: null });
+      if(a!==b) throw new Error("Run terminé : objet gelé — seules la notation (scores) et l'épinglage (pinnedAsReference) peuvent évoluer.");
+    }
+    await this._tx("runs", "readwrite", st=> st.put(run));
+    return run.runId;
+  }
+  async getRun(runId){
+    const db = await this._open();
+    return new Promise((res, rej)=>{
+      const req = db.transaction("runs").objectStore("runs").get(runId);
+      req.onsuccess = ()=> res(req.result || null); req.onerror = ()=> rej(req.error);
+    });
+  }
+  async listRuns(){
+    const db = await this._open();
+    return new Promise((res, rej)=>{
+      const out = []; const req = db.transaction("runs").objectStore("runs").openCursor();
+      req.onsuccess = ()=>{ const c = req.result;
+        if(c){ const r = c.value; out.push({ runId:r.runId, startedAt:r.startedAt, finishedAt:r.finishedAt||null, mode:r.mode, status:r.status, appVersion:r.appVersion, modulesHash:r.modulesHash, pinnedAsReference:!!r.pinnedAsReference, nbCases:(r.cases||[]).length }); c.continue(); }
+        else res(out);
+      };
+      req.onerror = ()=> rej(req.error);
+    });
+  }
+  async deleteRun(runId){
+    const r = await this.getRun(runId);
+    if(r && r.pinnedAsReference) throw new Error("Run épinglé comme Référence officielle : suppression refusée.");
+    await this._tx("runs", "readwrite", st=> st.delete(runId));
+    return true;
+  }
+  async saveCaseImage(imageId, blob){ await this._tx("images", "readwrite", st=> st.put({ imageId, blob })); return imageId; }
+  async getCaseImage(imageId){
+    const db = await this._open();
+    return new Promise((res, rej)=>{
+      const req = db.transaction("images").objectStore("images").get(imageId);
+      req.onsuccess = ()=> res(req.result ? req.result.blob : null); req.onerror = ()=> rej(req.error);
+    });
+  }
+  async deleteCaseImage(imageId){ await this._tx("images", "readwrite", st=> st.delete(imageId)); return true; }
+  async exportRun(runId){ const r = await this.getRun(runId); if(!r) return null; return { format:"vf-bench-run", exportedAt:new Date().toISOString(), run:r }; }
+}
+function createBenchStorage(){
+  try{ if(typeof indexedDB!=="undefined") return new IndexedDBBenchStorage(); }catch(e){}
+  return new MemoryBenchStorage(); // repli (tests, environnements sans IndexedDB)
+}
+/* Stockage durable : demandé une fois, au premier run (B2 l'appellera). */
+async function ensurePersistentBenchStorage(){
+  try{
+    if(navigator.storage && navigator.storage.persist){
+      const already = await navigator.storage.persisted();
+      if(already) return true;
+      return await navigator.storage.persist();
+    }
+  }catch(e){}
+  return false;
+}
+
+
+/* ============================================================
+   BANC D'ESSAI — B2 : PREMIER EXÉCUTEUR + EXÉCUTION DES RUNS
+   Le framework reste générique : tout ce qui connaît le moteur SDZ vit dans
+   l'executor "creative-image-sdz" et le constructeur de suite — jamais dans
+   le runner ni le stockage.
+============================================================ */
+
+/* ---- Table tarifaire VERSIONNÉE ($ par 1M tokens) : archivée avec chaque run pour que les
+   coûts restent auditables même après un changement de prix. Les tokens restent la vérité terrain. */
+const BENCH_PRICE_TABLE = Object.freeze({
+  version: "1.0.0",
+  perMTokens: Object.freeze({
+    "gpt-4o-mini": { in: 0.15, out: 0.60 },
+    "gpt-4o": { in: 2.50, out: 10.00 },
+    "gpt-5-mini": { in: 0.25, out: 2.00 },
+    "gpt-5-nano": { in: 0.05, out: 0.40 },
+  }),
+});
+/* Coût MESURÉ depuis les tokens réels — retourne null (jamais un chiffre inventé) si les tokens
+   ou le tarif du modèle sont inconnus. Toujours distinct du coût estimé. */
+function computeMeasuredTextCost(usage){
+  if(!usage || usage.promptTokens==null || usage.completionTokens==null) return null;
+  const price = BENCH_PRICE_TABLE.perMTokens[usage.model];
+  if(!price) return null;
+  return +( (usage.promptTokens/1e6)*price.in + (usage.completionTokens/1e6)*price.out ).toFixed(6);
+}
+
+/* ---- Versions déclaratives de la connaissance (documentaires, incrémentées à la main)... */
+const KNOWLEDGE_VERSIONS = Object.freeze({
+  constitution: "1.0.0", masterImage: "1.0.0", masterProduction: "1.0.0",
+  masterCampaign: "1.0.0", promptBuilder: "2.0.0", creativePlanner: "1.0.0",
+});
+/* ...ET empreintes CALCULÉES par composant : un oubli d'incrément est détecté quand même, et on
+   sait QUEL composant a changé. Principe : uniquement des DONNÉES CANONIQUES (contenus de modules,
+   system prompts constants, schémas, configuration) — JAMAIS Function.toString() : une mise en forme
+   du code ou un changement de runtime ne modifie aucune empreinte ; une modification réelle de la
+   logique métier (règle, template, schéma, modèle, paramètre) la modifie immédiatement.
+   Limite documentée : la "glue" d'assemblage du constructeur (ordre des blocs, connecteurs) n'est pas
+   une donnée canonique — un changement de glue exige l'incrément manuel de promptBuilder. */
+function computeKnowledgeFingerprints(){
+  const modsByCat = {};
+  (state.modules||[]).forEach(m=>{ (modsByCat[m.category||"?"] = modsByCat[m.category||"?"]||[]).push({ id:m.id, t:m.title, c:m.content, e:!!m.enabled, cr:m.criteres||null }); });
+  const catHash = {};
+  Object.keys(modsByCat).sort().forEach(cat=>{
+    catHash[cat] = hashPrompt(JSON.stringify(modsByCat[cat].sort((a,b)=>String(a.id).localeCompare(String(b.id)))));
+  });
+  return Object.freeze({
+    modulesParCategorie: Object.freeze(catHash),
+    universSDZ: hashPrompt(JSON.stringify(MASTER_UNIVERS_SDZ_V0)),
+    charte: hashPrompt(CHARTE_SDZ_SYNTHESE),
+    securite: hashPrompt(SAFETY_GUARDRAIL),
+    prestations: hashPrompt(getMergedPrestationsText()),
+    creativePlanner: hashPrompt(buildCreativePlannerSystemPrompt() + "\n" + JSON.stringify(CREATIVE_BRIEF_SCHEMA)),
+    promptBuilder: hashPrompt([CHARTE_SDZ_SYNTHESE, SAFETY_GUARDRAIL, DA_WRITER_SYSTEM_PROMPT, DA_WRITER_MODEL, String(DA_WRITER_MAX_WORDS)].join("\n---\n")),
+    topicBank: hashPrompt(JSON.stringify(BENCH_TOPIC_BANK)),
+  });
+}
+
+/* ---- Banque officielle de sujets, VERSIONNÉE — référence du Golden Set.
+   Comparer deux runs exige la même version (sinon "non comparables"). */
+const BENCH_TOPIC_BANK = {
+  version: "1.0.0",
+  parPrestation: {
+    "Massage Ayurvédique Abhyanga": { id:"t-abhyanga-1", mission:"decouvrir_soin", sujet:"lâcher prise" },
+    "Reiki": { id:"t-reiki-1", mission:"decouvrir_soin", sujet:"retrouver son énergie" },
+    "Réflexologie plantaire": { id:"t-reflexo-1", mission:"decouvrir_soin", sujet:"relancer la circulation, alléger les jambes" },
+    "PSiO": { id:"t-psio-1", mission:"decouvrir_soin", sujet:"apaiser le mental, mieux dormir" },
+  },
+  defaut: { id:"t-defaut-1", mission:"decouvrir_soin", sujet:"un moment pour soi, une vraie pause" },
+};
+
+/* Construit une TestSuite Smoke : matrice DYNAMIQUE prestations × plateformes (aucune valeur en dur —
+   une prestation ou plateforme ajoutée demain entre automatiquement). options: { prestations?, plateformes? } */
+function buildSmokeSuite(options){
+  const prestations = (options && options.prestations) || KNOWN_PRESTATIONS;
+  const plateformes = (options && options.plateformes) || PLATFORMS;
+  const registres = (options && options.registres) || ["cinematographie","architecture","fantastique"];
+  const cases = [];
+  prestations.forEach(prestation=>{
+    const t = BENCH_TOPIC_BANK.parPrestation[prestation] || BENCH_TOPIC_BANK.defaut;
+    plateformes.forEach(platform=>{
+      cases.push({
+        caseId: `smoke_${hashPrompt(prestation+"|"+platform+"|"+BENCH_TOPIC_BANK.version)}`,
+        executorId: "creative-image-sdz",
+        labels: { prestation, platform },
+        params: { mission: t.mission, prestation, platform, topic: t.sujet, topicId: t.id,
+                  registres: [...registres], aspectKey: PLATFORM_ASPECT[platform],
+                  size: API_IMAGE_SIZE_BY_PLATFORM[platform] || "1024x1024" },
+      });
+    });
+  });
+  return { suiteId: "smoke_"+BENCH_TOPIC_BANK.version, label: `Smoke — ${prestations.length} prestations × ${plateformes.length} plateformes`, mode: "smoke", topicBankVersion: BENCH_TOPIC_BANK.version, cases };
+}
+
+/* ---- Premier TestExecutor : le moteur créatif actuel (Phase A en mode smoke).
+   Appelle EXACTEMENT le pipeline de production ; benchNeutralHistory paramètre la seule
+   lecture d'état de prod (isolation lecture) ; aucune écriture n'existe dans la Phase A
+   (vérifié : les écritures de prod vivent dans les handlers UI, pas dans le pipeline). */
+registerBenchExecutor({
+  id: "creative-image-sdz",
+  label: "Moteur créatif SDZ (image)",
+  estimateCost(testCase){ return 0.005; }, // Phase A : Planner + Rédacteur, ordre de grandeur
+  async execute(testCase, ctx){
+    const startedAt = new Date().toISOString(); const t0 = Date.now();
+    const p = testCase.params;
+    try{
+      const prepared = await prepareCreativeBrief({
+        mission: p.mission, platform: p.platform, prestation: p.prestation, topic: p.topic,
+        aspectKey: p.aspectKey, size: p.size, isCampaign: false,
+        registres: [...(p.registres||[])], benchNeutralHistory: true,
+      });
+      const vr = prepared.validatorReport || {};
+      const u = prepared.usage || {};
+      const plannerCost = computeMeasuredTextCost(u.planner);
+      const redacteurCost = computeMeasuredTextCost(u.redacteur);
+      const textCostUsd = (plannerCost==null && redacteurCost==null) ? null : +( (plannerCost||0) + (redacteurCost||0) ).toFixed(6);
+      const promptTokens = (u.planner?.promptTokens||0) + (u.redacteur?.promptTokens||0);
+      const completionTokens = (u.planner?.completionTokens||0) + (u.redacteur?.completionTokens||0);
+      return {
+        resultSchemaVersion: 2,
+        caseId: testCase.caseId, status: prepared.blockingError ? "erreur" : "ok",
+        startedAt, durationMs: Date.now()-t0,
+        inputs: JSON.parse(JSON.stringify(testCase.params)),
+        outputs: { imagePrompt: prepared.imagePrompt },
+        metrics: {
+          promptTokens: (u.planner||u.redacteur) ? promptTokens : null,
+          completionTokens: (u.planner||u.redacteur) ? completionTokens : null,
+          textCostUsd, imageCostUsd: null,
+          totalCostUsd: textCostUsd, // + imageCostUsd en B3
+          costEstimated: 0.005, priceTableVersion: BENCH_PRICE_TABLE.version,
+          promptLength: (prepared.imagePrompt||"").length,
+          validatorContradictions: (vr.contradictions||[]).length,
+          validatorDoublons: (vr.doublons||[]).length,
+          validatorDecisionsAbsentes: (vr.decisionsAbsentes||[]).length,
+          daWriterFallback: prepared.daWriterUsed ? 0 : 1,
+        },
+        artifacts: { brief: prepared.brief },
+        diagnostics: {
+          daWriterUsed: !!prepared.daWriterUsed, daWriterFallbackReason: prepared.daWriterFallbackReason || null,
+          usedLocalBriefFallback: !!prepared.usedLocalBriefFallback, plannerError: prepared.plannerError || null,
+          validator: { contradictions: vr.contradictions||[], doublons: vr.doublons||[], decisionsAbsentes: vr.decisionsAbsentes||[], preparationT3: (vr.preparationT3||[]).length, longueur: vr.longueur||0 },
+          orchestrateur: prepared.paquetOrchestrateur ? prepared.paquetOrchestrateur.rapportFusion : null,
+          usage: u,
+        },
+        errors: prepared.blockingError ? [prepared.blockingError] : [],
+      };
+    }catch(err){
+      return { resultSchemaVersion: 2, caseId: testCase.caseId, status:"erreur", startedAt, durationMs: Date.now()-t0,
+        inputs: JSON.parse(JSON.stringify(testCase.params)), outputs: null,
+        metrics: { totalCostUsd: null, costEstimated: 0 }, artifacts: null, diagnostics: null,
+        errors: [String(err.message||err)] };
+    }
+  },
+});
+
+/* ---- Métadonnées d'environnement : distinguer, des mois plus tard, une différence de code
+   d'une différence de modèle, de provider ou d'environnement. */
+function collectBenchEnvironment(){
+  const host = (typeof location!=="undefined" && location.hostname) || "";
+  const env = /localhost|127\.0\.0\.1/.test(host) ? "local" : /deploy-preview|--/.test(host) ? "preview" : "production";
+  const textProvider = state.apiProviders.find(pr=>pr.id===state.selectedProviderId) || DEFAULT_OPENAI_PROVIDER;
+  return Object.freeze({
+    env, host,
+    providerTexte: textProvider.label, modeleTexte: textProvider.model,
+    modeleRedacteur: DA_WRITER_MODEL, modeleImage: "gpt-image-1", providerImage: "OpenAI (create-image-job)",
+    navigateur: (typeof navigator!=="undefined" && navigator.userAgent) || "inconnu",
+  });
+}
+
+/* ---- Runner générique : séquentiel, sauvegarde après CHAQUE cas, reprise exacte, plafonds.
+   Ne connaît AUCUN moteur : uniquement les contrats (suite, executors, storage). */
+async function runBenchSuite(suite, opts){
+  const o = opts || {};
+  const storage = o.storage || (window.__benchStorage = window.__benchStorage || createBenchStorage());
+  await ensurePersistentBenchStorage();
+  const caps = { maxCases: o.maxCases ?? Infinity, maxCostUsd: o.maxCostUsd ?? Infinity, maxDurationMs: o.maxDurationMs ?? Infinity };
+
+  let run;
+  if(o.resumeRunId){
+    run = await storage.getRun(o.resumeRunId);
+    if(!run) throw new Error("Run à reprendre introuvable : "+o.resumeRunId);
+    run = JSON.parse(JSON.stringify(run));
+    run.status = "en_cours";
+  } else {
+    run = {
+      runId: "run_"+Date.now().toString(36)+"_"+uid().slice(0,6),
+      startedAt: new Date().toISOString(), finishedAt: null,
+      mode: suite.mode, suiteId: suite.suiteId, suiteLabel: suite.label,
+      topicBankVersion: suite.topicBankVersion,
+      appVersion: VF_VERSION, modulesHash: computeModulesHash(),
+      environment: { ...collectBenchEnvironment(), knowledge: { versions: KNOWLEDGE_VERSIONS, fingerprints: computeKnowledgeFingerprints(), priceTableVersion: BENCH_PRICE_TABLE.version } },
+      selection: { nbCases: suite.cases.length },
+      status: "en_cours", budgetCap: caps.maxCostUsd===Infinity?null:caps.maxCostUsd,
+      costTotal: 0, costMeasuredTotal: 0, costMeasuredCases: 0, costEstimatedTotal: 0, durationTotal: 0,
+      cases: suite.cases.map(c=>({ testCase: c, result: null })),
+      scores: null, pinnedAsReference: false,
+    };
+    await storage.saveRun(run);
+  }
+
+  const runStart = Date.now();
+  let executedThisSession = 0;
+  for(let i=0; i<run.cases.length; i++){
+    const slot = run.cases[i];
+    if(slot.result) continue; // reprise : les cas déjà résolus ne sont JAMAIS ré-exécutés
+    // Plafonds — arrêt PROPRE : statut dédié, sauvegarde immédiate, reprise possible
+    let capHit = null;
+    if(executedThisSession >= caps.maxCases) capHit = "nombre maximal de générations";
+    else if(run.costTotal >= caps.maxCostUsd) capHit = "coût maximal";
+    else if(Date.now()-runStart >= caps.maxDurationMs) capHit = "durée maximale";
+    if(capHit){
+      run.status = "suspendu_plafond"; run.suspendReason = capHit;
+      await storage.saveRun(run);
+      if(o.onProgress) o.onProgress({ done:i, total:run.cases.length, suspended:capHit });
+      return run;
+    }
+    const executor = BENCH_EXECUTORS.get(slot.testCase.executorId);
+    if(!executor){
+      slot.result = { caseId: slot.testCase.caseId, status:"erreur", error:"Executor inconnu : "+slot.testCase.executorId, durationMs:0, costEstimated:0 };
+    } else {
+      if(o.onProgress) o.onProgress({ done:i, total:run.cases.length, current: slot.testCase.labels });
+      slot.result = await executor.execute(slot.testCase, { mode: run.mode, benchMode:true, storage, onStatus: o.onStatus||null });
+      executedThisSession++;
+    }
+    /* Séparation stricte mesuré/estimé : costTotal (plafond) consomme le mesuré quand il existe,
+       sinon l'estimé ; les deux cumuls restent archivés séparément. */
+    const m = slot.result.metrics || {};
+    const measured = (m.totalCostUsd!=null) ? m.totalCostUsd : null;
+    const estimated = (m.costEstimated!=null) ? m.costEstimated : (slot.result.costEstimated||0);
+    if(measured!=null){ run.costMeasuredTotal = +(run.costMeasuredTotal + measured).toFixed(6); run.costMeasuredCases++; }
+    run.costEstimatedTotal = +(run.costEstimatedTotal + estimated).toFixed(6);
+    run.costTotal = +(run.costTotal + (measured!=null ? measured : estimated)).toFixed(6);
+    run.durationTotal += (slot.result.durationMs||0);
+    await storage.saveRun(run); // sauvegarde après CHAQUE cas : la reprise est toujours exacte
+  }
+  run.status = "terminé"; run.finishedAt = new Date().toISOString();
+  await storage.saveRun(run);
+  if(o.onProgress) o.onProgress({ done:run.cases.length, total:run.cases.length, finished:true });
+  return run;
+}
+
+/* ============================================================
    ONGLET AUDIT DES GÉNÉRATIONS — statistiques en lecture seule sur vf-images,
    vf-scheduled et vf-lab. Logique reprise à l'identique de l'outil d'audit
    externe validé (audit_generations.html) : mêmes règles de périmètre, de
@@ -5955,6 +6367,53 @@ function buildModulesReportText(){
 
 function buildSettingsTab(){
   const frag = el("div",{});
+
+  /* ---- BANC D'ESSAI (B2) — lancement minimal en attendant l'écran complet (B4) ---- */
+  frag.appendChild(el("p",{class:"label"},"Banc d'essai (B2 — Smoke)"));
+  frag.appendChild(el("p",{class:"sublabel"},`Exécute la matrice complète prestations × plateformes en Phase A uniquement (briefs + prompts + rapports, aucune image, coût minime). Données totalement isolées de la production. Version ${VF_VERSION} · banque de sujets v${BENCH_TOPIC_BANK.version}.`));
+  const benchStatus = el("p",{style:"font-size:12px;color:var(--muted2);min-height:16px;margin:4px 0 8px;"},"");
+  const benchBtn = el("button",{class:"btn-secondary", style:"margin-bottom:6px;"}, [svgIcon(ICONS.sparkles,14), el("span",{},"Lancer un Smoke Run complet")]);
+  const benchResumeBtn = el("button",{class:"btn-ghost", style:"margin-bottom:10px;display:none;"}, "Reprendre le run interrompu");
+  let resumeCandidate = null;
+  (async ()=>{
+    try{
+      const storage = window.__benchStorage = window.__benchStorage || createBenchStorage();
+      const runs = await storage.listRuns();
+      resumeCandidate = runs.find(r=> r.status==="en_cours" || r.status==="suspendu_plafond") || null;
+      if(resumeCandidate){ benchResumeBtn.style.display=""; benchResumeBtn.textContent = `Reprendre le run interrompu (${resumeCandidate.runId})`; }
+    }catch(e){ benchStatus.textContent = "Stockage du Banc indisponible : "+(e.message||e); }
+  })();
+  const launchBench = async (resumeRunId)=>{
+    benchBtn.disabled = true; benchResumeBtn.disabled = true;
+    try{
+      const suite = buildSmokeSuite();
+      const run = await runBenchSuite(suite, {
+        resumeRunId: resumeRunId || undefined,
+        maxDurationMs: 45*60*1000, // garde-fou : 45 min max par session Smoke
+        onProgress: (p)=>{
+          if(p.finished){ return; }
+          if(p.suspended){ benchStatus.textContent = `Run suspendu (${p.suspended}) après ${p.done}/${p.total} — reprise possible.`; return; }
+          benchStatus.textContent = `${p.done+1}/${p.total} — ${p.current ? p.current.prestation+" × "+p.current.platform : "..."}`;
+        },
+      });
+      if(run.status==="terminé"){
+        const ok = run.cases.filter(c=>c.result && c.result.status==="ok").length;
+        const err = run.cases.filter(c=>c.result && c.result.status==="erreur").length;
+        const replis = run.cases.filter(c=>c.result && c.result.diagnostics && !c.result.diagnostics.daWriterUsed).length;
+        const coutTxt = run.costMeasuredCases>0 ? `${run.costMeasuredTotal.toFixed(4)} $ mesurés (${run.costMeasuredCases}/${run.cases.length} cas)` : `~${run.costEstimatedTotal.toFixed(4)} $ estimés (aucun usage remonté)`;
+        benchStatus.textContent = `✓ Run ${run.runId} terminé : ${ok} ok · ${err} erreur(s) · ${replis} repli(s) Rédacteur · ${(run.durationTotal/1000/60).toFixed(1)} min · ${coutTxt}. Run archivé — écran complet en B4.`;
+      } else {
+        benchStatus.textContent = `Run ${run.runId} : ${run.status}.`;
+      }
+    }catch(err){
+      benchStatus.textContent = "Échec du run : "+(err.message||err);
+    }
+    benchBtn.disabled = false; benchResumeBtn.disabled = false;
+  };
+  benchBtn.addEventListener("click", ()=> launchBench(null));
+  benchResumeBtn.addEventListener("click", ()=> resumeCandidate && launchBench(resumeCandidate.runId));
+  frag.appendChild(benchBtn); frag.appendChild(benchResumeBtn); frag.appendChild(benchStatus);
+  frag.appendChild(el("div",{style:"border-top:1px solid var(--border);margin:14px 0;"}));
 
   frag.appendChild(el("p",{class:"label"},"Synchronisation serveur (Netlify Blobs)"));
   frag.appendChild(el("p",{class:"sublabel"},"Le localStorage de ce téléphone reste toujours la copie principale et continue de fonctionner hors-ligne. Le serveur est une sauvegarde supplémentaire qui permet de retrouver tes données sur un autre appareil ou navigateur."));
