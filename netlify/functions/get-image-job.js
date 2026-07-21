@@ -65,6 +65,7 @@ exports.handler = async (event) => {
             resultUrl: `/.netlify/functions/get-image-result?jobId=${encodeURIComponent(jobId)}`,
             usedReference: !!job.usedReference,
             referenceFallbackReason: job.referenceFallbackReason || null,
+            usage: job.usage || null,
           },
         }),
       };

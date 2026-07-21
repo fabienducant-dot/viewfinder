@@ -212,7 +212,10 @@ exports.handler = async (event) => {
       return { statusCode: 200, body: JSON.stringify({ ok: false, error: "Échec d'écriture du résultat" }) };
     }
 
-    await safeSetJobStatus(store, jobId, { status: "completed", error: null, resultKey, usedReference, referenceFallbackReason });
+    // usage réel OpenAI Images (tokens texte/image) : persisté dans le STATUT (léger — jamais le b64)
+    // pour l'archivage des coûts mesurés côté client. Additif, rétrocompatible.
+    const usage = data.usage ? { input_tokens: data.usage.input_tokens ?? null, output_tokens: data.usage.output_tokens ?? null, input_tokens_details: data.usage.input_tokens_details ?? null } : null;
+    await safeSetJobStatus(store, jobId, { status: "completed", error: null, resultKey, usedReference, referenceFallbackReason, usage });
 
     // Nettoyage de l'entrée après usage réussi — best-effort, non bloquant si ça échoue.
     try { await store.delete(`jobs/${jobId}/input`); } catch (deleteErr) { /* pas grave, l'entrée reste simplement, sans impact fonctionnel */ }
