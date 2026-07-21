@@ -2688,16 +2688,32 @@ async function prepareCreativeBrief(inputs){
 /* ---------- PHASE B — GÉNÉRATION (PAYANTE, uniquement après confirmation explicite) ----------
    Prend le résultat EXACT de prepareCreativeBrief (rien n'est recalculé) : image -> analyse ->
    texte. Chaque étape a son propre repli, jamais de relance automatique d'un appel image payant. */
+/* B3.1 — POST-TRAITEMENT partagé (extraction validée) : calcule logoInScene et applique le Canvas
+   si le logo n'est pas déjà dans la scène. Fonction PURE : aucune écriture — le handler de
+   production garde ses écritures (bibliothèque, postImageId, historique, lab) après l'appel ;
+   l'exécuteur du Banc n'écrit rien. Une seule implémentation du post-traitement pour les deux. */
+async function finalizeGeneratedImage(flow){
+  const platform = flow.inputs.platform;
+  let dataUrl = flow.dataUrl;
+  let logoApplied = false;
+  const logoInScene = !!(flow.logoSentAsReference && flow.usedReference);
+  if(logoRequiredFor(platform) && !logoInScene){
+    const composited = await compositeBrandSignature(dataUrl, platform);
+    dataUrl = composited.dataUrl; logoApplied = composited.applied;
+  }
+  return { dataUrl, logoApplied, logoInScene };
+}
+
 async function confirmAndGenerateImage(prepared, onStatus, cancelToken){
   const { inputs, brief, referenceSelections } = prepared;
   const { platform, mission, size } = inputs;
 
   onStatus && onStatus("Génération de l'image...");
   const smartReferenceDataUrls = (referenceSelections||[]).map(r=>r.dataUrl).filter(Boolean);
-  let dataUrl, usedReference = false, referenceFallbackReason = null, logoSentAsReference = false;
+  let dataUrl, usedReference = false, referenceFallbackReason = null, logoSentAsReference = false, imageUsage = null;
   try{
-    const genResult = await callProviderImage(prepared.imagePrompt, size, undefined, onStatus, cancelToken, { smartReferenceDataUrls });
-    dataUrl = genResult.dataUrl; usedReference = genResult.usedReference; referenceFallbackReason = genResult.referenceFallbackReason; logoSentAsReference = !!genResult.logoSentAsReference;
+    const genResult = await callProviderImage(prepared.imagePrompt, size, undefined, onStatus, cancelToken, { smartReferenceDataUrls, onJobCreated: prepared.onImageJobCreated });
+    dataUrl = genResult.dataUrl; usedReference = genResult.usedReference; referenceFallbackReason = genResult.referenceFallbackReason; logoSentAsReference = !!genResult.logoSentAsReference; imageUsage = genResult.imageUsage || null;
   }catch(err){
     // Échec image : aucun historique visuel créé, aucune analyse ni texte lancés (jamais de relance
     // automatique d'un appel image payant).
@@ -2722,7 +2738,7 @@ async function confirmAndGenerateImage(prepared, onStatus, cancelToken){
     textError = `Échec de la génération de texte : ${String(err.message||err)} — image conservée, relance du texte seul possible.`;
   }
 
-  return { ...prepared, phase:"completed", ok:true, dataUrl, usedReference, referenceFallbackReason, logoSentAsReference,
+  return { ...prepared, phase:"completed", ok:true, dataUrl, usedReference, referenceFallbackReason, logoSentAsReference, imageUsage,
     analysis, analysisError, content, textError };
 }
 
@@ -2951,6 +2967,9 @@ async function callProviderImage(prompt, size, extraReferenceDataUrls, onStatus,
   vfTrace("2-create-image-job", { httpStatus: createRes.status, jobId: createData.jobId || null, error: createData.error || null });
   if(!createRes.ok || createData.error) throw new Error(createData.error || `Erreur ${createRes.status}`);
   const jobId = createData.jobId;
+  // Hook additif (Banc d'essai B3) : permet à l'appelant de persister le jobId AVANT le polling,
+  // pour reprendre un job payant déjà lancé après interruption — jamais de double facturation.
+  if(options && typeof options.onJobCreated === "function"){ try{ options.onJobCreated(jobId); }catch(e){} }
   try{ sessionStorage.setItem(IMAGE_JOB_SESSION_KEY, jobId); }catch(e){ /* stockage indisponible : tant pis, pas bloquant */ }
 
   try{
@@ -2994,7 +3013,7 @@ async function pollImageJob(jobId, onStatus, cancelToken){
       const dataUrl = await fetchImageAsDataUrl(statusData.result.resultUrl);
       vfTrace("4-dataUrl-recupere", { dataUrlLength: dataUrl ? dataUrl.length : 0, prefix: dataUrl ? dataUrl.slice(0,30) : null });
       // logoSentAsReference est ajouté par callProviderImage (seule portée où les URLs de référence existent).
-      return { dataUrl, usedReference: !!statusData.result.usedReference, referenceFallbackReason: statusData.result.referenceFallbackReason || null };
+      return { dataUrl, usedReference: !!statusData.result.usedReference, referenceFallbackReason: statusData.result.referenceFallbackReason || null, imageUsage: statusData.result.usage || null };
     }
     if(onStatus) onStatus(statusData.status==="processing" ? "Génération OpenAI en cours…" : "Préparation de l'image…");
   }
@@ -4401,17 +4420,9 @@ function buildPostTab(){
           confirmBtn.disabled = false; imgCancelBtn.style.display = "none"; activeCancelToken = null;
           return;
         }
-        let dataUrl = flow.dataUrl;
-        let logoApplied = false;
-        /* PROTOTYPE LOGO-RÉFÉRENCE : si le logo officiel est parti en référence ET a réellement été
-           utilisé par OpenAI (pas de fallback), l'incrustation Canvas est temporairement sautée pour
-           observer ce que le modèle produit seul — c'est l'objet exact du test. En cas de fallback
-           (référence non utilisée), le Canvas s'applique comme avant : jamais d'image sans identité. */
-        const logoInScene = !!(flow.logoSentAsReference && flow.usedReference);
-        if(logoRequiredFor(platform) && !logoInScene){
-          const composited = await compositeBrandSignature(dataUrl, platform);
-          dataUrl = composited.dataUrl; logoApplied = composited.applied;
-        }
+        const finalized = await finalizeGeneratedImage(flow);
+        let dataUrl = finalized.dataUrl;
+        let logoApplied = finalized.logoApplied;
         const id = uid();
         vfTrace("5-ajout-bibliotheque", { newId: id, imagesAvant: state.images.length });
         state.images.push({ id, name:`${platform}-${nowStr()}.png`, dataUrl, tags:[platform], favorite:false,
@@ -5457,8 +5468,8 @@ class MemoryBenchStorage {
     const existing = this.runs.get(run.runId);
     if(existing && existing.status==="terminé" && run.status==="terminé"){
       // run gelé : seule la clé scores peut évoluer
-      const a = JSON.stringify({ ...existing, scores: null, pinnedAsReference: null }), b = JSON.stringify({ ...run, scores: null, pinnedAsReference: null });
-      if(a!==b) throw new Error("Run terminé : objet gelé — seules la notation (scores) et l'épinglage (pinnedAsReference) peuvent évoluer.");
+      const a = JSON.stringify({ ...existing, scores: null, pinnedAsReference: null, imagesPurged: null }), b = JSON.stringify({ ...run, scores: null, pinnedAsReference: null, imagesPurged: null });
+      if(a!==b) throw new Error("Run terminé : objet gelé — seules la notation (scores), l'épinglage (pinnedAsReference) et le marqueur de purge (imagesPurged) peuvent évoluer.");
     }
     this.runs.set(run.runId, JSON.parse(JSON.stringify(run)));
     return run.runId;
@@ -5502,8 +5513,8 @@ class IndexedDBBenchStorage {
   async saveRun(run){
     const existing = await this.getRun(run.runId);
     if(existing && existing.status==="terminé" && run.status==="terminé"){
-      const a = JSON.stringify({ ...existing, scores: null, pinnedAsReference: null }), b = JSON.stringify({ ...run, scores: null, pinnedAsReference: null });
-      if(a!==b) throw new Error("Run terminé : objet gelé — seules la notation (scores) et l'épinglage (pinnedAsReference) peuvent évoluer.");
+      const a = JSON.stringify({ ...existing, scores: null, pinnedAsReference: null, imagesPurged: null }), b = JSON.stringify({ ...run, scores: null, pinnedAsReference: null, imagesPurged: null });
+      if(a!==b) throw new Error("Run terminé : objet gelé — seules la notation (scores), l'épinglage (pinnedAsReference) et le marqueur de purge (imagesPurged) peuvent évoluer.");
     }
     await this._tx("runs", "readwrite", st=> st.put(run));
     return run.runId;
@@ -5570,12 +5581,16 @@ async function ensurePersistentBenchStorage(){
 /* ---- Table tarifaire VERSIONNÉE ($ par 1M tokens) : archivée avec chaque run pour que les
    coûts restent auditables même après un changement de prix. Les tokens restent la vérité terrain. */
 const BENCH_PRICE_TABLE = Object.freeze({
-  version: "1.0.0",
+  version: "1.1.0",
   perMTokens: Object.freeze({
     "gpt-4o-mini": { in: 0.15, out: 0.60 },
     "gpt-4o": { in: 2.50, out: 10.00 },
     "gpt-5-mini": { in: 0.25, out: 2.00 },
     "gpt-5-nano": { in: 0.05, out: 0.40 },
+  }),
+  // Images gpt-image-1 : trois types de tokens ($ / 1M) — entrée texte, entrée image, sortie image.
+  imagePerMTokens: Object.freeze({
+    "gpt-image-1": { textIn: 5.00, imageIn: 10.00, imageOut: 40.00 },
   }),
 });
 /* Coût MESURÉ depuis les tokens réels — retourne null (jamais un chiffre inventé) si les tokens
@@ -5585,6 +5600,18 @@ function computeMeasuredTextCost(usage){
   const price = BENCH_PRICE_TABLE.perMTokens[usage.model];
   if(!price) return null;
   return +( (usage.promptTokens/1e6)*price.in + (usage.completionTokens/1e6)*price.out ).toFixed(6);
+}
+
+/* Coût image MESURÉ depuis les tokens réels du job — null si tokens ou tarif inconnus. */
+function computeMeasuredImageCost(imageUsage, model){
+  if(!imageUsage || imageUsage.output_tokens==null) return null;
+  const p = BENCH_PRICE_TABLE.imagePerMTokens[model||"gpt-image-1"];
+  if(!p) return null;
+  const det = imageUsage.input_tokens_details || {};
+  const textIn = det.text_tokens ?? null, imageIn = det.image_tokens ?? 0;
+  const textPart = textIn!=null ? (textIn/1e6)*p.textIn : (imageUsage.input_tokens!=null ? (imageUsage.input_tokens/1e6)*p.textIn : null);
+  if(textPart==null) return null;
+  return +( textPart + (imageIn/1e6)*p.imageIn + (imageUsage.output_tokens/1e6)*p.imageOut ).toFixed(6);
 }
 
 /* ---- Versions déclaratives de la connaissance (documentaires, incrémentées à la main)... */
@@ -5665,12 +5692,36 @@ registerBenchExecutor({
   async execute(testCase, ctx){
     const startedAt = new Date().toISOString(); const t0 = Date.now();
     const p = testCase.params;
+    const imageMode = ctx && (ctx.mode==="standard" || ctx.mode==="complet");
     try{
       const prepared = await prepareCreativeBrief({
         mission: p.mission, platform: p.platform, prestation: p.prestation, topic: p.topic,
         aspectKey: p.aspectKey, size: p.size, isCampaign: false,
         registres: [...(p.registres||[])], benchNeutralHistory: true,
       });
+      /* ---- Mode image (standard/complet) : Phase B EXACTE du pipeline + post-traitement partagé.
+         Reprise anti double-facturation : le jobId est persisté via ctx.savePartial AVANT le polling ;
+         si le cas reprend avec un pendingJobId, on tente d'abord de récupérer ce job déjà payé. */
+      let phaseB = null, finalized = null, imageId = null, imageCostUsd = null;
+      if(imageMode && !prepared.blockingError){
+        const pending = ctx && ctx.slotState && ctx.slotState.pendingJobId;
+        if(pending){
+          try{
+            const resumed = await pollImageJob(pending, ctx.onStatus||null, null);
+            phaseB = { ...prepared, ...resumed, logoSentAsReference: false, phase:"completed", ok:true, analysis:null, analysisError:"non ré-analysé (job repris)", content:null, textError:null };
+          }catch(e){ /* job perdu/expiré : on relance normalement */ }
+        }
+        if(!phaseB){
+          const preparedWithHook = { ...prepared, onImageJobCreated: (jobId)=>{ if(ctx && ctx.savePartial) ctx.savePartial({ pendingJobId: jobId }); } };
+          phaseB = await confirmAndGenerateImage(preparedWithHook, ctx && ctx.onStatus || null, null);
+        }
+        if(ctx && ctx.savePartial) await ctx.savePartial({ pendingJobId: null });
+        finalized = await finalizeGeneratedImage(phaseB);
+        imageId = `${(ctx&&ctx.runId)||"run"}_${testCase.caseId}`;
+        const blob = await (await fetch(finalized.dataUrl)).blob();
+        await ctx.storage.saveCaseImage(imageId, blob);
+        imageCostUsd = computeMeasuredImageCost(phaseB.imageUsage, "gpt-image-1");
+      }
       const vr = prepared.validatorReport || {};
       const u = prepared.usage || {};
       const plannerCost = computeMeasuredTextCost(u.planner);
@@ -5683,12 +5734,12 @@ registerBenchExecutor({
         caseId: testCase.caseId, status: prepared.blockingError ? "erreur" : "ok",
         startedAt, durationMs: Date.now()-t0,
         inputs: JSON.parse(JSON.stringify(testCase.params)),
-        outputs: { imagePrompt: prepared.imagePrompt },
+        outputs: { imagePrompt: prepared.imagePrompt, imageId, texteGenere: phaseB ? (phaseB.content||null) : null },
         metrics: {
           promptTokens: (u.planner||u.redacteur) ? promptTokens : null,
           completionTokens: (u.planner||u.redacteur) ? completionTokens : null,
-          textCostUsd, imageCostUsd: null,
-          totalCostUsd: textCostUsd, // + imageCostUsd en B3
+          textCostUsd, imageCostUsd,
+          totalCostUsd: (textCostUsd==null && imageCostUsd==null) ? null : +(((textCostUsd||0)+(imageCostUsd||0)).toFixed(6)),
           costEstimated: 0.005, priceTableVersion: BENCH_PRICE_TABLE.version,
           promptLength: (prepared.imagePrompt||"").length,
           validatorContradictions: (vr.contradictions||[]).length,
@@ -5703,6 +5754,7 @@ registerBenchExecutor({
           validator: { contradictions: vr.contradictions||[], doublons: vr.doublons||[], decisionsAbsentes: vr.decisionsAbsentes||[], preparationT3: (vr.preparationT3||[]).length, longueur: vr.longueur||0 },
           orchestrateur: prepared.paquetOrchestrateur ? prepared.paquetOrchestrateur.rapportFusion : null,
           usage: u,
+          image: phaseB ? { usedReference: !!phaseB.usedReference, referenceFallbackReason: phaseB.referenceFallbackReason||null, logoInScene: finalized ? finalized.logoInScene : null, logoApplied: finalized ? finalized.logoApplied : null, analysis: phaseB.analysis||null, analysisError: phaseB.analysisError||null, imageUsage: phaseB.imageUsage||null } : null,
         },
         errors: prepared.blockingError ? [prepared.blockingError] : [],
       };
@@ -5760,6 +5812,19 @@ async function runBenchSuite(suite, opts){
     await storage.saveRun(run);
   }
 
+  /* Contrôle d'espace pré-run (modes image uniquement) : blocage PROPRE avant toute dépense. */
+  if(run.mode!=="smoke" && typeof navigator!=="undefined" && navigator.storage && navigator.storage.estimate){
+    try{
+      const est = await navigator.storage.estimate();
+      const remaining = run.cases.filter(c=>!c.result).length;
+      const needed = remaining * 2.5 * 1024 * 1024;
+      const free = (est.quota||0) - (est.usage||0);
+      if(free < needed) throw new Error(`Espace de stockage insuffisant : ~${Math.round(needed/1e6)} Mo nécessaires, ~${Math.round(free/1e6)} Mo disponibles. Libère de l'espace (purge d'images de runs) avant de lancer.`);
+    }catch(e){ if(String(e.message||"").includes("insuffisant")) throw e; }
+  }
+  const keepAwake = o.keepAwake || { async acquire(){}, async release(){} }; // service injecté — no-op par défaut
+  try{ await keepAwake.acquire(); }catch(e){}
+  try{
   const runStart = Date.now();
   let executedThisSession = 0;
   for(let i=0; i<run.cases.length; i++){
@@ -5781,7 +5846,14 @@ async function runBenchSuite(suite, opts){
       slot.result = { caseId: slot.testCase.caseId, status:"erreur", error:"Executor inconnu : "+slot.testCase.executorId, durationMs:0, costEstimated:0 };
     } else {
       if(o.onProgress) o.onProgress({ done:i, total:run.cases.length, current: slot.testCase.labels });
-      slot.result = await executor.execute(slot.testCase, { mode: run.mode, benchMode:true, storage, onStatus: o.onStatus||null });
+      const ctx = {
+        mode: run.mode, benchMode:true, storage, onStatus: o.onStatus||null,
+        runId: run.runId, slotState: slot,
+        /* savePartial : persistance d'état intermédiaire du cas (ex. pendingJobId) — extension
+           GÉNÉRIQUE du contrat, utile à tout futur moteur long (vidéo, campagne). */
+        savePartial: async (patch)=>{ Object.assign(slot, patch); await storage.saveRun(run); },
+      };
+      slot.result = await executor.execute(slot.testCase, ctx);
       executedThisSession++;
     }
     /* Séparation stricte mesuré/estimé : costTotal (plafond) consomme le mesuré quand il existe,
@@ -5799,6 +5871,23 @@ async function runBenchSuite(suite, opts){
   await storage.saveRun(run);
   if(o.onProgress) o.onProgress({ done:run.cases.length, total:run.cases.length, finished:true });
   return run;
+  } finally { try{ await keepAwake.release(); }catch(e){} }
+}
+
+/* Purge des images d'un run (politique validée : métadonnées immortelles, images purgeables,
+   références épinglées JAMAIS purgées, jamais de purge silencieuse). */
+async function purgeRunImages(storage, runId){
+  const run = await storage.getRun(runId);
+  if(!run) throw new Error("Run introuvable.");
+  if(run.pinnedAsReference) throw new Error("Run épinglé Référence officielle : images protégées.");
+  let n = 0;
+  for(const slot of (run.cases||[])){
+    const id = slot.result && slot.result.outputs && slot.result.outputs.imageId;
+    if(id){ await storage.deleteCaseImage(id); n++; }
+  }
+  run.imagesPurged = true;
+  await storage.saveRun(run);
+  return n;
 }
 
 /* ============================================================
@@ -6369,8 +6458,14 @@ function buildSettingsTab(){
   const frag = el("div",{});
 
   /* ---- BANC D'ESSAI (B2) — lancement minimal en attendant l'écran complet (B4) ---- */
-  frag.appendChild(el("p",{class:"label"},"Banc d'essai (B2 — Smoke)"));
-  frag.appendChild(el("p",{class:"sublabel"},`Exécute la matrice complète prestations × plateformes en Phase A uniquement (briefs + prompts + rapports, aucune image, coût minime). Données totalement isolées de la production. Version ${VF_VERSION} · banque de sujets v${BENCH_TOPIC_BANK.version}.`));
+  frag.appendChild(el("p",{class:"label"},"Banc d'essai (B3)"));
+  frag.appendChild(el("p",{class:"sublabel"},`Version ${VF_VERSION} · banque de sujets v${BENCH_TOPIC_BANK.version} · tarifs v${BENCH_PRICE_TABLE.version}. Données totalement isolées de la production. Smoke = Phase A seule (prompts + rapports, coût minime). Standard = 12 cas avec images. Complet = matrice entière avec images — c'est le mode du Golden Run officiel.`));
+  const benchModeSel = el("select",{style:"margin:4px 0 8px;"},[
+    el("option",{value:"smoke"},"Smoke — matrice complète, Phase A seule (~20-40 min, centimes)"),
+    el("option",{value:"standard"},"Standard — 4 prestations × 3 plateformes, images (~15-25 min, ~1-3 $)"),
+    el("option",{value:"complet"},"Complet — matrice entière, images (GOLDEN RUN, ~2-3 h, ~8-20 $)"),
+  ]);
+  frag.appendChild(benchModeSel);
   const benchStatus = el("p",{style:"font-size:12px;color:var(--muted2);min-height:16px;margin:4px 0 8px;"},"");
   const benchBtn = el("button",{class:"btn-secondary", style:"margin-bottom:6px;"}, [svgIcon(ICONS.sparkles,14), el("span",{},"Lancer un Smoke Run complet")]);
   const benchResumeBtn = el("button",{class:"btn-ghost", style:"margin-bottom:10px;display:none;"}, "Reprendre le run interrompu");
@@ -6383,13 +6478,33 @@ function buildSettingsTab(){
       if(resumeCandidate){ benchResumeBtn.style.display=""; benchResumeBtn.textContent = `Reprendre le run interrompu (${resumeCandidate.runId})`; }
     }catch(e){ benchStatus.textContent = "Stockage du Banc indisponible : "+(e.message||e); }
   })();
+  /* Service Wake Lock réel — injecté au runner (le framework n'en connaît que le contrat).
+     Ré-acquisition sur visibilitychange : Android relâche le verrou à chaque arrière-plan. */
+  const makeWakeLockService = ()=>{
+    let sentinel = null, wanted = false;
+    const acquire = async ()=>{ wanted = true;
+      try{ if(navigator.wakeLock && !sentinel){ sentinel = await navigator.wakeLock.request("screen"); sentinel.addEventListener("release", ()=>{ sentinel = null; }); } }catch(e){}
+    };
+    const onVis = ()=>{ if(wanted && document.visibilityState==="visible") acquire(); };
+    document.addEventListener("visibilitychange", onVis);
+    return { acquire, async release(){ wanted = false; document.removeEventListener("visibilitychange", onVis); try{ if(sentinel) await sentinel.release(); }catch(e){} sentinel = null; } };
+  };
+  const STANDARD_PRESET = { prestations: Object.keys(BENCH_TOPIC_BANK.parPrestation), plateformes: ["Instagram","Story","Google Business"] };
   const launchBench = async (resumeRunId)=>{
     benchBtn.disabled = true; benchResumeBtn.disabled = true;
     try{
-      const suite = buildSmokeSuite();
+      const mode = benchModeSel.value;
+      const suite = mode==="standard" ? { ...buildSmokeSuite(STANDARD_PRESET), suiteId:"standard_"+BENCH_TOPIC_BANK.version, mode:"standard", label:"Standard — "+STANDARD_PRESET.prestations.length+"×"+STANDARD_PRESET.plateformes.length }
+        : mode==="complet" ? { ...buildSmokeSuite(), suiteId:"complet_"+BENCH_TOPIC_BANK.version, mode:"complet", label:"Complet (Golden Run)" }
+        : buildSmokeSuite();
+      if(!resumeRunId && mode!=="smoke"){
+        const estImage = suite.cases.length * 0.17; // qualité par défaut + analyse + contenu, ordre de grandeur
+        if(!confirm(`${mode==="complet" ? "GOLDEN RUN — matrice entière" : "Run Standard"} : ${suite.cases.length} générations d'images réelles.\nCoût estimé : ~${estImage.toFixed(2)} $ (mesuré précisément pendant le run).\nDurée : ${mode==="complet" ? "~2-3 h" : "~15-25 min"} — l'écran restera allumé (Wake Lock).\nLancer ?`)){ benchBtn.disabled=false; benchResumeBtn.disabled=false; return; }
+      }
       const run = await runBenchSuite(suite, {
         resumeRunId: resumeRunId || undefined,
-        maxDurationMs: 45*60*1000, // garde-fou : 45 min max par session Smoke
+        keepAwake: mode!=="smoke" ? makeWakeLockService() : undefined,
+        maxDurationMs: mode==="complet" ? 4*60*60*1000 : 45*60*1000,
         onProgress: (p)=>{
           if(p.finished){ return; }
           if(p.suspended){ benchStatus.textContent = `Run suspendu (${p.suspended}) après ${p.done}/${p.total} — reprise possible.`; return; }
@@ -6412,7 +6527,18 @@ function buildSettingsTab(){
   };
   benchBtn.addEventListener("click", ()=> launchBench(null));
   benchResumeBtn.addEventListener("click", ()=> resumeCandidate && launchBench(resumeCandidate.runId));
-  frag.appendChild(benchBtn); frag.appendChild(benchResumeBtn); frag.appendChild(benchStatus);
+  const benchPurgeBtn = el("button",{class:"btn-ghost", style:"margin:0 0 6px;", onclick: async ()=>{
+    try{
+      const storage = window.__benchStorage = window.__benchStorage || createBenchStorage();
+      const runs = (await storage.listRuns()).filter(r=> r.status==="terminé" && !r.pinnedAsReference);
+      if(!runs.length){ benchStatus.textContent = "Aucun run purgeable (terminés non épinglés)."; return; }
+      const target = runs.sort((a,b)=> String(a.startedAt).localeCompare(String(b.startedAt)))[0];
+      if(!confirm(`Purger les images du run ${target.runId} (${target.mode}, ${target.startedAt.slice(0,10)}) ? Les métadonnées, prompts et coûts sont conservés.`)) return;
+      const n = await purgeRunImages(storage, target.runId);
+      benchStatus.textContent = `✓ ${n} image(s) purgée(s) du run ${target.runId} — métadonnées conservées.`;
+    }catch(e){ benchStatus.textContent = "Purge impossible : "+(e.message||e); }
+  }}, "🧹 Libérer l'espace (images du plus ancien run non épinglé)");
+  frag.appendChild(benchBtn); frag.appendChild(benchResumeBtn); frag.appendChild(benchPurgeBtn); frag.appendChild(benchStatus);
   frag.appendChild(el("div",{style:"border-top:1px solid var(--border);margin:14px 0;"}));
 
   frag.appendChild(el("p",{class:"label"},"Synchronisation serveur (Netlify Blobs)"));
