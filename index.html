@@ -3724,6 +3724,8 @@ function buildKnowledgeTab(){
   frag.appendChild(el("button",{class:"btn-secondary", style:"margin-bottom:6px;", onclick:()=>{
     try{
       const payload = {
+        schema: "sdz-knowledge-export",       // identifiant de TYPE de fichier : un futur import
+                                              // doit refuser tout JSON dont schema ≠ cette valeur
         version: "1.0.0",                    // version du FORMAT d'export (pour un futur import)
         exportedAt: new Date().toISOString(),
         appVersion: VF_VERSION,
