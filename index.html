@@ -3714,6 +3714,38 @@ function buildKnowledgeTab(){
     el("p",{style:"font-size:12px;margin:0;"}, "🖼️ Le vrai logo ne s'importe pas ici. Ajoute-le dans l'onglet Bibliothèque, puis marque-le comme actif \"Logo\" — c'est cette image-là qui sera automatiquement surimposée sur tes visuels, jamais un logo dessiné par l'IA."),
   ]));
 
+  /* EXPORT DE LA BASE DE CONNAISSANCES — lecture seule, aucune écriture, aucun modèle modifié.
+     Sérialise l'intégralité des modules tels qu'ils sont en mémoire (tous les champs du modèle
+     normalizeModule : id, category, title, content, enabled, createdAt, updatedAt, sourcePack,
+     packVersion, criteres, tags, registre, status) + les métadonnées de packs. Format conçu pour
+     un import futur sans perte : versionné, structure stable. */
+  const knowledgeExportMsg = el("p",{style:"font-size:11px;color:var(--muted2);margin:0 0 16px;"},
+    "Sauvegarde JSON complète de la base de connaissances (tous les modules, toutes les catégories, tous les champs et identifiants) — relisible pour un import ultérieur.");
+  frag.appendChild(el("button",{class:"btn-secondary", style:"margin-bottom:6px;", onclick:()=>{
+    try{
+      const payload = {
+        version: "1.0.0",                    // version du FORMAT d'export (pour un futur import)
+        exportedAt: new Date().toISOString(),
+        appVersion: VF_VERSION,
+        categories: [...CATEGORIES],
+        packVersions: JSON.parse(JSON.stringify(state.packVersions || {})),
+        moduleCount: state.modules.length,
+        modules: JSON.parse(JSON.stringify(state.modules)), // copie fidèle, tous champs, tous IDs
+      };
+      const d = new Date();
+      const p2 = n => String(n).padStart(2,"0");
+      const stamp = `${d.getFullYear()}-${p2(d.getMonth()+1)}-${p2(d.getDate())}-${p2(d.getHours())}${p2(d.getMinutes())}`;
+      const blob = new Blob([JSON.stringify(payload, null, 2)], { type:"application/json" });
+      const link = document.createElement("a");
+      link.href = URL.createObjectURL(blob);
+      link.download = `sdz-connaissances-${stamp}.json`;
+      link.click();
+      setTimeout(()=> URL.revokeObjectURL(link.href), 5000);
+      knowledgeExportMsg.textContent = `✓ ${payload.moduleCount} module(s) exporté(s) — ${(blob.size/1024).toFixed(0)} Ko. Fichier : ${link.download}`;
+    }catch(e){ knowledgeExportMsg.textContent = "Export impossible : "+(e.message||e); }
+  }}, [svgIcon(ICONS.download,14), el("span",{},"📤 Exporter les modules")]));
+  frag.appendChild(knowledgeExportMsg);
+
   const GENERIC_MODULE_TITLES = ["Ton & identité visuelle","Interdits généraux","Structure générale","Style par défaut","Présentation de la marque"];
   const genericCount = state.modules.filter(m=>GENERIC_MODULE_TITLES.includes(m.title)).length;
   if(genericCount>0){
