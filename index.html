@@ -6538,7 +6538,23 @@ function buildSettingsTab(){
       benchStatus.textContent = `✓ ${n} image(s) purgée(s) du run ${target.runId} — métadonnées conservées.`;
     }catch(e){ benchStatus.textContent = "Purge impossible : "+(e.message||e); }
   }}, "🧹 Libérer l'espace (images du plus ancien run non épinglé)");
-  frag.appendChild(benchBtn); frag.appendChild(benchResumeBtn); frag.appendChild(benchPurgeBtn); frag.appendChild(benchStatus);
+  const benchExportBtn = el("button",{class:"btn-ghost", style:"margin:0 8px 6px 0;", onclick: async ()=>{
+    try{
+      const storage = window.__benchStorage = window.__benchStorage || createBenchStorage();
+      const runs = await storage.listRuns();
+      if(!runs.length){ benchStatus.textContent = "Aucun run à exporter."; return; }
+      const latest = runs.sort((a,b)=> String(b.startedAt).localeCompare(String(a.startedAt)))[0];
+      const exported = await storage.exportRun(latest.runId); // fonction B1 réutilisée telle quelle
+      const blob = new Blob([JSON.stringify(exported, null, 1)], { type:"application/json" });
+      const a = document.createElement("a");
+      a.href = URL.createObjectURL(blob);
+      a.download = `bench-run-${latest.runId}.json`;
+      a.click();
+      setTimeout(()=> URL.revokeObjectURL(a.href), 5000);
+      benchStatus.textContent = `✓ Run ${latest.runId} exporté (${(blob.size/1024).toFixed(0)} Ko) — fichier JSON complet, partageable pour diagnostic.`;
+    }catch(e){ benchStatus.textContent = "Export impossible : "+(e.message||e); }
+  }}, [svgIcon(ICONS.download,13), el("span",{},"Exporter le dernier run (JSON)")]);
+  frag.appendChild(benchBtn); frag.appendChild(benchResumeBtn); frag.appendChild(benchExportBtn); frag.appendChild(benchPurgeBtn); frag.appendChild(benchStatus);
   frag.appendChild(el("div",{style:"border-top:1px solid var(--border);margin:14px 0;"}));
 
   frag.appendChild(el("p",{class:"label"},"Synchronisation serveur (Netlify Blobs)"));
