@@ -172,7 +172,8 @@ const ASPECTS = {
 
 const PLATFORMS = ["Instagram","Facebook","Google Business","Article Blog Wix","Story"];
 
-const PLATFORM_ASPECT = { "Instagram":"1:1", "Facebook":"4:5", "Google Business":"4:3", "Article Blog Wix":"16:9", "Story":"9:16" };
+/* V1.0 — format officiel Instagram/Facebook : 1080x1350 (4:5), une seule image pour les deux. */
+const PLATFORM_ASPECT = { "Instagram":"4:5", "Facebook":"4:5", "Google Business":"4:3", "Article Blog Wix":"16:9", "Story":"9:16" };
 // Tailles réellement acceptées par gpt-image-1 (1024x1024, 1024x1536, 1536x1024 — pas les tailles
 // DALL·E 3 comme 1792x1024). Mapping direct par plateforme, pas par ratio calculé.
 const API_IMAGE_SIZE_BY_PLATFORM = {
@@ -182,19 +183,21 @@ const API_IMAGE_SIZE_BY_PLATFORM = {
   "Google Business": "1024x1024",
   "Article Blog Wix": "1536x1024",
 };
-const PLATFORM_OVERLAY = { "Instagram":"léger", "Facebook":"léger", "Google Business":"aucun", "Article Blog Wix":"fiche", "Story":"fort" };
+/* V1.0 : plus aucun texte n'est demandé au modèle. L'overlay décrit ce que le POST-TRAITEMENT
+   Canvas incrustera (jamais GPT). "aucun" = image livrée sans texte. */
+const PLATFORM_OVERLAY = { "Instagram":"accroche", "Facebook":"accroche", "Google Business":"aucun", "Article Blog Wix":"aucun", "Story":"fort" };
 const PLATFORM_MAXCHARS = { "Instagram":110, "Facebook":120, "Google Business":0, "Article Blog Wix":220, "Story":220 };
 const PLATFORM_NOTE = {
-  "Instagram": "Format carré, 1 à 2 phrases courtes incrustées sur l'image (pas un simple mot-clé, une vraie accroche).",
-  "Facebook": "Format portrait, 1 à 2 phrases courtes incrustées sur l'image (pas un simple mot-clé, une vraie accroche).",
+  "Instagram": "Format portrait 4:5. Aucun texte dans l'image : le tiers inférieur reste calme, une accroche y sera incrustée ensuite en post-traitement.",
+  "Facebook": "Utilise exactement la même image qu'Instagram (4:5) — aucune génération distincte. Aucun texte dans l'image.",
   "Google Business": "Aucun texte sur l'image (recommandation Google) — le texte porte tout le SEO.",
   "Article Blog Wix": "Image de couverture avec un texte court façon fiche explicative, élégant et sobre — jamais de faux logo, badge ou icône générés par l'IA.",
   "Story": "Format vertical plein écran, 4 à 5 phrases fortes disposées avec des tailles de police variées (hiérarchie visuelle, jamais uniforme) et le logo en bas, centré — publiée simultanément sur Instagram et Facebook.",
 };
 const TEXT_STRUCTURE = {
-  "Instagram": "Réponds avec :\n1) Légende (2 à 4 phrases)\n2) Exactement 5 hashtags pertinents maximum\n3) Une suggestion d'alt text (accessibilité)",
-  "Facebook": "Réponds avec :\n1) Texte du post\n2) 2 à 4 hashtags optionnels\n3) Une suggestion d'alt text",
-  "Google Business": "Réponds avec :\n1) Texte du post (150 à 300 mots, sans hashtags, mots-clés SEO locaux intégrés naturellement)\n2) Un bouton d'action suggéré (Réserver, En savoir plus, Acheter...)\n3) Un alt text descriptif SEO pour l'image",
+  "Instagram": "Réponds avec :\n1) Légende structurée : accroche, développement, bénéfice, CTA\n2) Maximum 5 hashtags\n3) Une suggestion d'alt text (accessibilité)",
+  "Facebook": "Réponds avec :\n1) Texte du post (accroche, développement, bénéfice, CTA)\n2) Maximum 5 hashtags\n3) Une suggestion d'alt text",
+  "Google Business": "Réponds avec :\n1) Texte du post de 100 à 150 mots, structuré ainsi : accroche, explication, bénéfices, prise de contact. Sans hashtags, sans slogan publicitaire, mots-clés SEO locaux intégrés naturellement\n2) Un bouton d'action suggéré (Réserver, En savoir plus, Acheter...)\n3) Un alt text descriptif SEO pour l'image",
   "Article Blog Wix": "Réponds avec :\n1) Titre SEO (H1)\n2) Meta description (155 caractères max)\n3) Slug d'URL suggéré\n4) Introduction\n5) 2 à 3 sections avec sous-titres H2\n6) Conclusion avec appel à l'action\n7) 5 mots-clés SEO\n8) Catégorie suggérée",
 };
 /* MASTER SDZ et CODEX SDZ sont les documents de plus haute autorité : toujours injectés,
@@ -926,18 +929,24 @@ function wrapText(ctx, text, maxWidth){
   return lines;
 }
 
-async function compositeBrandSignature(baseDataUrl, platform){
-  const logoResult = await compositeRealLogo(baseDataUrl);
-  if(!logoResult.applied) return logoResult; // sans logo réel disponible, rien de fiable à ancrer le texte dessus
+async function compositeBrandSignature(baseDataUrl, platform, options){
+  /* V1.0 — options.headline : accroche incrustée, passée EXPLICITEMENT (plus de lecture d'état
+     global). options.withLogo=false permet d'incruster l'accroche seule quand le logo est déjà
+     dans la scène. Sans accroche ni logo, l'image ressort inchangée. */
+  const opts = options || {};
+  const headline = String(opts.headline !== undefined ? opts.headline : (state.visualAccroche || "")).trim();
+  const withLogo = opts.withLogo !== false;
+  const logoResult = withLogo ? await compositeRealLogo(baseDataUrl) : { applied:false, dataUrl:baseDataUrl };
+  if(!logoResult.applied && !headline) return { applied:false, dataUrl: baseDataUrl };
   try{
-    const img = await loadImage(logoResult.dataUrl);
+    const img = await loadImage(logoResult.applied ? logoResult.dataUrl : baseDataUrl);
     const canvas = document.createElement("canvas");
     canvas.width = img.width; canvas.height = img.height;
     const ctx = canvas.getContext("2d");
     ctx.drawImage(img, 0, 0);
 
     // --- Accroche / titre visuel : texte saisi par Fabien, jamais généré par l'IA (fiabilité à 100%) ---
-    if(state.visualAccroche && state.visualAccroche.trim()){
+    if(headline){
       const zone = state.textOverlayZone || { y: 60, maxWidthPct: 82 };
       const maxWidth = canvas.width * (zone.maxWidthPct/100);
       const titleFontSize = Math.max(20, Math.round(canvas.width * 0.052));
@@ -947,7 +956,7 @@ async function compositeBrandSignature(baseDataUrl, platform){
       ctx.shadowBlur = 8;
       ctx.fillStyle = "#F5F4EF"; // blanc cassé de la charte SDZ
       ctx.font = `700 ${titleFontSize}px Georgia, 'Times New Roman', serif`;
-      const lines = wrapText(ctx, state.visualAccroche.trim().toUpperCase(), maxWidth);
+      const lines = wrapText(ctx, headline.toUpperCase(), maxWidth);
       const lineHeight = titleFontSize * 1.25;
       const totalHeight = lines.length * lineHeight;
       const startY = (canvas.height * (zone.y/100)) - totalHeight/2 + lineHeight/2;
@@ -955,6 +964,7 @@ async function compositeBrandSignature(baseDataUrl, platform){
       ctx.shadowBlur = 0;
     }
 
+    if(logoResult.applied){
     const logoW = canvas.width * (state.logoOverlay.size/100);
     const cx = (state.logoOverlay.x/100) * canvas.width;
     const logoBottomY = (state.logoOverlay.y/100) * canvas.height + logoW/2;
@@ -974,12 +984,33 @@ async function compositeBrandSignature(baseDataUrl, platform){
     ctx.fillStyle = "#C9A227"; // or officiel SDZ
     ctx.font = `${cityFontSize}px Georgia, 'Times New Roman', serif`;
     ctx.fillText("RAISMES", cx, logoBottomY + 8 + brandFontSize + 6);
+    }
 
     ctx.shadowBlur = 0;
     return { dataUrl: canvas.toDataURL("image/png"), applied:true };
   }catch(e){
-    return logoResult; // dégradation propre : au pire, le logo reste appliqué sans le texte
+    return logoResult.applied ? logoResult : { applied:false, dataUrl: baseDataUrl }; // dégradation propre
   }
+}
+
+/* V1.0 — L'API gpt-image-1 n'accepte que 1024x1024 / 1024x1536 / 1536x1024 (contrainte OpenAI
+   documentée) : aucune ne correspond au 1080x1350 officiel. L'image générée est donc recadrée et
+   redimensionnée ici, au format exact de la plateforme, avant incrustation. Recadrage centré
+   (cover) : jamais de déformation, jamais de bande noire. */
+async function normalizeToPlatformFormat(dataUrl, platform){
+  const target = ASPECTS[PLATFORM_ASPECT[platform]];
+  if(!target) return dataUrl;
+  try{
+    const img = await loadImage(dataUrl);
+    if(img.width === target.w && img.height === target.h) return dataUrl;
+    const canvas = document.createElement("canvas");
+    canvas.width = target.w; canvas.height = target.h;
+    const ctx = canvas.getContext("2d");
+    const scale = Math.max(target.w/img.width, target.h/img.height);
+    const dw = img.width*scale, dh = img.height*scale;
+    ctx.drawImage(img, (target.w-dw)/2, (target.h-dh)/2, dw, dh);
+    return canvas.toDataURL("image/png");
+  }catch(e){ return dataUrl; } // dégradation propre : format d'origine conservé
 }
 
 /* true si cette plateforme/ce réglage exige le vrai logo sur l'image (Story : toujours ; sinon selon la DA). */
@@ -2470,7 +2501,10 @@ const CONTENT_FROM_BRIEF_SCHEMA = {
   schema: { type:"object", additionalProperties:false, properties: {
     caption: {type:"string"}, hashtags: {type:"array", items:{type:"string"}}, altText: {type:"string"},
     cta: {type:"string"}, factsUsed: {type:"array", items:{type:"string"}},
-  }, required: ["caption","hashtags","altText","cta","factsUsed"] },
+    /* V1.0 — accroche incrustée par Canvas sur Instagram/Facebook. Champ INDÉPENDANT de la
+       caption (jamais dérivé de sa première phrase). Chaîne vide = image sans texte (défaut). */
+    imageHeadline: {type:"string"},
+  }, required: ["caption","hashtags","altText","cta","factsUsed","imageHeadline"] },
 };
 /* Socle de voix de marque — ce qui manquait au rédacteur du brief : univers de marque, règles
    rédactionnelles, vocabulaire interdit, retours récents (déjà triés par pertinence/récence, voir
@@ -2518,7 +2552,14 @@ Analyse de l'image RÉELLEMENT obtenue (fonde l'alt text UNIQUEMENT sur ceci, ja
 - Lumière visible : ${analysis.lighting}
 ${(analysis.briefMismatch||[]).length ? `- Écarts constatés avec le brief : ${analysis.briefMismatch.join(", ")}` : ""}
 
-La légende (caption) peut s'appuyer sur le brief et sur l'univers de marque ci-dessus. L'alt text doit décrire fidèlement uniquement ce qui est listé comme visible ci-dessus — jamais un élément absent (pas de bon cadeau, huile ou accessoire non constaté). Maximum 5 hashtags pertinents pour Instagram.`);
+La légende (caption) peut s'appuyer sur le brief et sur l'univers de marque ci-dessus. L'alt text doit décrire fidèlement uniquement ce qui est listé comme visible ci-dessus — jamais un élément absent (pas de bon cadeau, huile ou accessoire non constaté). Maximum 5 hashtags pertinents (Instagram et Facebook).
+
+CHAMP imageHeadline (accroche incrustée sur l'image par post-traitement, Instagram et Facebook uniquement) :
+- Par DÉFAUT, renvoie une chaîne vide "". L'image sans texte est le choix normal (environ 7 publications sur 10).
+- Ne renseigne ce champ QUE si une phrase renforce clairement le concept créatif de cette image précise (environ 3 publications sur 10).
+- Il est INDÉPENDANT de la légende : ne reprends jamais sa première phrase.
+- Contraintes strictes quand il est rempli : 4 à 9 mots, 1 ligne (2 exceptionnellement), pas de point final, pas d'emoji, pas de hashtag, pas de CTA, lisible en moins de 2 secondes.
+- Sur Google Business, Story et Article Blog Wix : toujours "".`);
 }
 async function generateContentFromBrief(brief, analysis, platform, mission){
   const provider = state.apiProviders.find(p=>p.id===state.selectedProviderId) || DEFAULT_OPENAI_PROVIDER;
@@ -2694,14 +2735,46 @@ async function prepareCreativeBrief(inputs){
    l'exécuteur du Banc n'écrit rien. Une seule implémentation du post-traitement pour les deux. */
 async function finalizeGeneratedImage(flow){
   const platform = flow.inputs.platform;
-  let dataUrl = flow.dataUrl;
-  let logoApplied = false;
   const logoInScene = !!(flow.logoSentAsReference && flow.usedReference);
-  if(logoRequiredFor(platform) && !logoInScene){
-    const composited = await compositeBrandSignature(dataUrl, platform);
-    dataUrl = composited.dataUrl; logoApplied = composited.applied;
+  /* 1) format officiel de la plateforme */
+  let dataUrl = await normalizeToPlatformFormat(flow.dataUrl, platform);
+  /* 2) accroche : uniquement là où la spec V1.0 l'autorise (Instagram/Facebook), uniquement si le
+        Planner a jugé utile de la remplir. Le texte vient du contenu généré, jamais de GPT-image. */
+  const headline = (PLATFORM_OVERLAY[platform]==="accroche" && flow.content && typeof flow.content.imageHeadline==="string")
+    ? flow.content.imageHeadline.trim() : "";
+  /* 3) logo : appliqué sauf s'il est déjà dans la scène. Un seul appel, même fonction pour les
+        deux besoins — aucune duplication, aucun chemin parallèle. */
+  const needLogo = logoRequiredFor(platform) && !logoInScene;
+  let logoApplied = false;
+  if(needLogo || headline){
+    const composited = await compositeBrandSignature(dataUrl, platform, { headline, withLogo: needLogo });
+    dataUrl = composited.dataUrl;
+    logoApplied = composited.applied && needLogo;
   }
-  return { dataUrl, logoApplied, logoInScene };
+  return { dataUrl, logoApplied, logoInScene, headlineApplied: !!headline };
+}
+
+/* P1 — Applique l'accroche à une image de campagne DÉJÀ finalisée (format + logo posés lors de la
+   génération). Aucune logique de finalisation ici : simple appel à finalizeGeneratedImage avec
+   logoSentAsReference/usedReference à true, ce qui neutralise la ré-incrustation du logo. Le
+   recadrage est idempotent (mêmes dimensions -> retour immédiat).
+   Garde-fou : une accroche déjà incrustée n'est jamais superposée une seconde fois. */
+async function applyHeadlineToItem(item){
+  if(!item || !item.imageDataUrl || item.headlineApplied) return false;
+  const headline = item.contentData && typeof item.contentData.imageHeadline==="string" ? item.contentData.imageHeadline.trim() : "";
+  if(!headline || PLATFORM_OVERLAY[item.platform]!=="accroche") return false;
+  const finalized = await finalizeGeneratedImage({
+    inputs:{ platform:item.platform }, dataUrl:item.imageDataUrl,
+    logoSentAsReference:true, usedReference:true, content:item.contentData,
+  });
+  if(!finalized.headlineApplied) return false;
+  item.imageDataUrl = finalized.dataUrl; item.headlineApplied = true;
+  /* Facebook réutilise EXACTEMENT l'image Instagram : la copie est mise à jour au même instant. */
+  if(item.platform==="Instagram"){
+    state.scheduled.filter(p=> p.campaignId===item.campaignId && p.platform==="Facebook" && p.reusedFrom==="Instagram")
+      .forEach(fb=>{ fb.imageDataUrl = item.imageDataUrl; fb.headlineApplied = true; });
+  }
+  return true;
 }
 
 async function confirmAndGenerateImage(prepared, onStatus, cancelToken){
@@ -3040,9 +3113,10 @@ async function fetchImageAsDataUrl(url){
 
 /* Cherche, parmi les autres formats de la MÊME campagne, une image déjà générée — pour la
    transmettre comme référence visuelle et garantir que tous les formats montrent la même scène. */
-function getCampaignSiblingImage(campaignId, excludeItemId){
+function getCampaignSiblingImage(campaignId, excludeItemId, fromPlatform){
   if(!campaignId) return null;
-  const sibling = state.scheduled.find(p=> p.campaignId===campaignId && p.id!==excludeItemId && p.imageDataUrl);
+  const sibling = state.scheduled.find(p=> p.campaignId===campaignId && p.id!==excludeItemId && p.imageDataUrl
+    && (!fromPlatform || p.platform===fromPlatform));
   return sibling ? sibling.imageDataUrl : null;
 }
 
@@ -4041,7 +4115,8 @@ function buildValidationChecklist(ctx){
   }
   if(requiresText && platform==="Google Business"){
     checks.push({ label:"Pas de hashtags (non recommandé pour Google Business)", ok: !text.includes("#") });
-    checks.push({ label:"Longueur adaptée à un résumé Google Business (150 à 300 mots environ)", ok: text.split(/\s+/).filter(Boolean).length>=80 });
+    const gbWords = text.split(/\s+/).filter(Boolean).length;
+    checks.push({ label:`Longueur Google Business : 100 à 150 mots (actuel : ${gbWords})`, ok: gbWords>=100 && gbWords<=150 });
   }
   if(requiresText && (platform==="Instagram" || platform==="Facebook")){
     checks.push({ label:"Longueur raisonnable pour un réseau social (moins de 2200 caractères)", ok: text.length>0 && text.length<2200 });
@@ -4699,7 +4774,7 @@ function buildPostTab(){
     const confirmMsg = el("p",{style:"font-size:12px;color:var(--green);margin-top:8px;min-height:14px;"},"");
     imgFileInput.addEventListener("change", async (e)=>{
       const file = e.target.files[0]; if(!file) return;
-      let dataUrl = await resizeImageFile(file);
+      let dataUrl = await normalizeToPlatformFormat(await resizeImageFile(file), platform); // V1.0 : format officiel, même pour une image importée
       let logoApplied = false;
       if(logoRequiredFor(platform)){
         const composited = await compositeBrandSignature(dataUrl, platform);
@@ -4977,16 +5052,37 @@ function buildCalendarCard(item, inCampaign){
         const cancelToken = { cancelled:false };
         activeCancelToken = cancelToken;
         try{
+          /* V1.0 — Facebook réutilise EXACTEMENT l'image Instagram de la même campagne : aucune
+             seconde génération, aucune seconde facturation. Même format (4:5), image identique. */
+          if(item.platform==="Facebook"){
+            const twin = getCampaignSiblingImage(item.campaignId, item.id, "Instagram");
+            if(!twin){
+              imgApiStatus.textContent = "Génère d'abord l'image Instagram de cette campagne : Facebook réutilise exactement la même image.";
+              imgApiBtn.disabled = false; imgCancelBtn.style.display = "none"; activeCancelToken = null;
+              return;
+            }
+            item.imageDataUrl = twin; item.usedReference = false; item.referenceFallbackReason = null;
+            item.reusedFrom = "Instagram";
+            const okSave = LS.set("vf-scheduled", state.scheduled);
+            imgApiStatus.textContent = okSave ? "Image Instagram réutilisée à l'identique ✓ (aucun crédit consommé)"
+                                              : "Image réutilisée, mais échec d'enregistrement (stockage plein ?).";
+            imgApiBtn.disabled = false; imgCancelBtn.style.display = "none"; activeCancelToken = null;
+            renderMain();
+            return;
+          }
           const siblingImage = getCampaignSiblingImage(item.campaignId, item.id);
           const generationResult = await callProviderImage(item.imagePrompt, size, siblingImage ? [siblingImage] : undefined, (label)=>{ imgApiStatus.textContent = label; }, cancelToken);
-          let dataUrl = generationResult.dataUrl;
           const { usedReference, referenceFallbackReason } = generationResult;
-          let logoApplied = false;
-          if(logoRequiredFor(item.platform)){
-            const composited = await compositeBrandSignature(dataUrl, item.platform);
-            dataUrl = composited.dataUrl; logoApplied = composited.applied;
-          }
+          /* Post-traitement : MÊME fonction que la génération unitaire (format officiel, accroche,
+             logo) — aucun code dupliqué, aucun chemin parallèle. */
+          const finalizedItem = await finalizeGeneratedImage({
+            inputs:{ platform:item.platform }, dataUrl: generationResult.dataUrl,
+            logoSentAsReference:false, usedReference, content: item.contentData || null,
+          });
+          let dataUrl = finalizedItem.dataUrl;
+          const logoApplied = finalizedItem.logoApplied;
           item.imageDataUrl = dataUrl; item.logoApplied = logoApplied; item.usedReference = usedReference; item.referenceFallbackReason = referenceFallbackReason;
+          item.headlineApplied = !!finalizedItem.headlineApplied; // texte déjà présent : accroche posée dès la génération
           const saved = LS.set("vf-scheduled", state.scheduled);
           logToLab({ provider:"OpenAI", model:"gpt-image-1-mini", type:"image", prompt:item.imagePrompt, promptHash:hashPrompt(item.imagePrompt), cost:null, durationMs:Date.now()-t0, status:"accepted" });
           let referenceLabel;
@@ -5011,7 +5107,7 @@ function buildCalendarCard(item, inCampaign){
     const imgFileInput = el("input",{type:"file", accept:"image/*", style:"display:none"});
     imgFileInput.addEventListener("change", async (e)=>{
       const file = e.target.files[0]; if(!file) return;
-      let dataUrl = await resizeImageFile(file);
+      let dataUrl = await normalizeToPlatformFormat(await resizeImageFile(file), item.platform); // V1.0 : format officiel
       let logoApplied = false;
       if(logoRequiredFor(item.platform)){
         const composited = await compositeBrandSignature(dataUrl, item.platform);
@@ -5027,6 +5123,33 @@ function buildCalendarCard(item, inCampaign){
     card.appendChild(imgFileInput);
     card.appendChild(el("button",{class:"btn-secondary", style:"margin:6px 0;", onclick:()=>imgFileInput.click()}, [svgIcon(ICONS.upload,14), el("span",{},"Importer une image")]));
     card.appendChild(imgApiStatus);
+
+    /* P1 — Le texte d'une campagne passe désormais par le MÊME appel structuré que la génération
+       unitaire (generateContentFromBrief) : même schéma, même imageHeadline, même résultat visuel.
+       Le copier-coller manuel reste disponible en secours, inchangé. */
+    if(item.creativeBrief && item.platform!=="Story"){
+      const textApiStatus = el("p",{style:"font-size:12px;color:var(--muted2);margin:4px 0;min-height:14px;"}, item.contentData ? "Texte généré ✓" : "");
+      const textApiBtn = el("button",{class:"btn-secondary", style:"margin:6px 0;"}, [svgIcon(ICONS.sparkles,14), el("span",{},"Générer le texte (API)")]);
+      textApiBtn.addEventListener("click", async ()=>{
+        textApiBtn.disabled = true; textApiStatus.textContent = "Génération du texte...";
+        try{
+          const content = await generateContentFromBrief(item.creativeBrief, item.analysis || null, item.platform, item.mission);
+          item.contentData = content;
+          const hashtagsText = (content.hashtags||[]).map(x=> x.startsWith("#") ? x : "#"+x).slice(0,5).join(" ");
+          item.textFinal = [content.caption||"", hashtagsText].filter(Boolean).join("\n\n");
+          item.altText = content.altText || "";
+          const headlineDone = await applyHeadlineToItem(item);
+          const saved = LS.set("vf-scheduled", state.scheduled);
+          textApiStatus.textContent = (!saved ? "Texte généré, mais échec d'enregistrement (stockage plein ?)."
+            : headlineDone ? "Texte généré ✓ — accroche incrustée sur l'image"
+            : item.imageDataUrl ? "Texte généré ✓ — aucune accroche pour cette publication (image sans texte)"
+            : "Texte généré ✓ — génère l'image pour appliquer l'éventuelle accroche");
+          renderMain();
+        }catch(err){ textApiStatus.textContent = "Échec : " + (err.message||err); }
+        textApiBtn.disabled = false;
+      });
+      card.appendChild(textApiBtn); card.appendChild(textApiStatus);
+    }
 
     if(item.textPrompt){
       card.appendChild(el("p",{class:"label", style:"margin-top:10px;"}, "Prompt texte"));
