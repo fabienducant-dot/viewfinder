@@ -1193,7 +1193,7 @@ const PRICE_PATTERNS = [/tarifs?\s*[:\-]\s*([^\n]+)/i, /prix\s*[:\-]\s*([^\n]+)/
    simplement omis — le bloc brut complet est de toute façon toujours transmis en renfort. */
 const PRESTATION_FICHE_LABELS = ["histoire","émotion","psychologie","codes visuels","matières",
   "textures","lumière","composition","vocabulaire","cta","interdits","scène visuelle",
-  "description","déroulé de la séance","bienfaits","public concerné","précautions"];
+  "description","déroulé de la séance","bienfaits","public concerné","précautions","caractéristique citable"];
 function extractFicheFields(block){
   const found = {};
   PRESTATION_FICHE_LABELS.forEach(label=>{
@@ -1969,6 +1969,7 @@ function buildPrestationFicheBlock(prestation){
 
   const f = info.fiche || {};
   const fields = {
+    citable: f["caractéristique citable"] || "",
     description: f["description"] || "",
     deroule: f["déroulé de la séance"] || "",
     bienfaits: f["bienfaits"] || "",
@@ -1979,6 +1980,9 @@ function buildPrestationFicheBlock(prestation){
   };
   function assemble(includeTarif, includeDuree, includePublic, precautionsMaxLen){
     let out = `FICHE DE LA PRESTATION :\nNom : ${info.name}\n`;
+    /* Rubrique prioritaire : si la fiche désigne une caractéristique citable, le Planner la reprend
+       telle quelle — il ne choisit plus lui-même quelle phrase citer. Jamais tronquée. */
+    if(fields.citable) out += `Caractéristique citable (à reprendre TELLE QUELLE dans "caracteristiqueSourcePrestation") : ${fields.citable}\n`;
     if(fields.description) out += `Description : ${fields.description}\n`;
     if(fields.deroule) out += `Déroulé de la séance : ${fields.deroule}\n`;
     if(fields.bienfaits) out += `Bienfaits : ${fields.bienfaits}\n`;
@@ -2021,7 +2025,7 @@ Photographie éditoriale premium, sobre, réaliste et intime. Les champs de stru
     ? `- La scène doit refléter au moins une caractéristique réelle et distinctive de cette prestation — geste, matière, position, matériel ou déroulé identifiable — visible ou clairement suggérée selon le niveau de présence du soin autorisé par l'archétype.
 - Ne jamais inventer une technique, un accessoire, une position ou un bénéfice absent de cette fiche.
 - Ne réduis jamais cette prestation à un portrait générique si la fiche contient un geste, un matériel ou un déroulé identifiable — utilise-le dans la scène.
-- Pour "caracteristiqueSourcePrestation" : reprends une courte formulation fidèle issue de Description ou Déroulé de la séance, ci-dessus. Ne paraphrase pas et n'invente pas — recopie une expression réellement présente dans la fiche.`
+- Pour "caracteristiqueSourcePrestation" : si la fiche comporte une "Caractéristique citable", RECOPIE-LA MOT POUR MOT, sans rien ajouter ni retirer (pas même un article). Sinon, recopie une expression réellement présente dans Description ou Déroulé de la séance, sans fusionner deux passages différents et sans changer un seul mot. Ne paraphrase jamais, n'invente jamais.`
     : `- Aucune prestation précise et documentée n'est sélectionnée : "caracteristiqueSourcePrestation" doit rester une valeur sobre comme "aucune prestation précise" — n'invente aucun détail technique de soin, aucun geste, aucun matériel qui ne provient pas d'une fiche réelle.`;
   return cleanPrompt(`Mission : ${mission||"non précisée"}
 ${prestationBlock}
@@ -2074,6 +2078,25 @@ const GENERIC_CARACTERISTIQUE_FORBIDDEN = ["detente","serenite","lacher prise","
    le flux préparé reste indépendant de l'état courant de l'interface.
    La vérification stricte de caracteristiqueSourcePrestation ne s'applique QUE si la prestation
    sélectionnée est précise ET documentée (point 1) — sinon aucun blocage métier n'est produit. */
+/* Provenance d'une caractéristique — containment TOLÉRANT calibré sur données réelles.
+   Motif (bug démontré) : le containment strict rejetait des citations fidèles pour un mot d'écart
+   ("La formule la plus complète" vs "Formule la plus complète" = 3 blocages sur Offre Gold), ou
+   pour une phrase reconstituée à partir de deux passages de la même fiche.
+   Règle : la phrase est acceptée si elle est contenue telle quelle, OU si une séquence d'au moins
+   CARAC_NGRAM_MIN mots consécutifs de la caractéristique figure dans la fiche. Seuil calibré sur le
+   run run_mrxy42vl : accepte les citations fidèles, rejette une phrase étrangère à la fiche. */
+const CARAC_NGRAM_MIN = 8;
+function caracVientDeLaFiche(caracNorm, ficheSourceNorm){
+  if(!caracNorm || !ficheSourceNorm) return false;
+  if(ficheSourceNorm.includes(caracNorm)) return true;
+  const mots = caracNorm.split(" ").filter(Boolean);
+  if(mots.length < CARAC_NGRAM_MIN) return false; // trop courte pour être vérifiée autrement
+  for(let i=0; i+CARAC_NGRAM_MIN <= mots.length; i++){
+    if(ficheSourceNorm.includes(mots.slice(i, i+CARAC_NGRAM_MIN).join(" "))) return true;
+  }
+  return false;
+}
+
 function validateAndFixBrief(brief, allowed, exclusions, typeCreationImpose, prestation){
   const allowedIds = allowed.map(a=>a.id);
   const fixed = { ...brief };
@@ -2108,16 +2131,23 @@ function validateAndFixBrief(brief, allowed, exclusions, typeCreationImpose, pre
     // ici bloque l'image (voir prepareCreativeBrief).
     const carac = (fixed.caracteristiqueSourcePrestation || "").trim();
     const caracNorm = normalizeForContainmentCheck(carac);
+    /* V1.0 — ORDRE CORRIGÉ (bug démontré par le Smoke Run run_mrxy42vl) : la vérification de
+       provenance passe AVANT la liste noire. Une phrase réellement issue de la fiche est par
+       définition spécifique à cette prestation : la liste noire ne doit attraper que les formules
+       que le Planner invente, jamais censurer les fiches elles-mêmes (« massage bien-être sur
+       table » EST le texte officiel de Prestations en entreprise).
+       La rubrique « Caractéristique citable » de la fiche, si elle existe, fait partie des sources
+       vérifiables au même titre que Description et Déroulé. */
+    const ficheSource = `${(info.fiche && info.fiche["caractéristique citable"]) || ""} ${(info.fiche && info.fiche["description"]) || ""} ${(info.fiche && info.fiche["déroulé de la séance"]) || ""}`;
+    const ficheSourceNorm = normalizeForContainmentCheck(ficheSource);
     if(!carac){
       blockingError = `Caractéristique de prestation manquante — le Planner n'a fourni aucune valeur pour "caracteristiqueSourcePrestation".`;
+    } else if(caracVientDeLaFiche(caracNorm, ficheSourceNorm)){
+      blockingError = null; // provenance établie : aucune autre condition ne s'applique
     } else if(GENERIC_CARACTERISTIQUE_FORBIDDEN.some(mot => caracNorm.includes(mot))){
-      blockingError = `Caractéristique de prestation trop générique : "${carac}" — reformulation attendue à partir de la fiche réelle (Description ou Déroulé de la séance), pas une formule générique de bien-être.`;
+      blockingError = `Caractéristique de prestation trop générique : "${carac}" — formule générique de bien-être introuvable dans la fiche de "${prestation}". Reprends une phrase réelle de la Caractéristique citable, de la Description ou du Déroulé de la séance.`;
     } else {
-      const ficheSource = `${(info.fiche && info.fiche["description"]) || ""} ${(info.fiche && info.fiche["déroulé de la séance"]) || ""}`;
-      const ficheSourceNorm = normalizeForContainmentCheck(ficheSource);
-      if(!ficheSourceNorm || !ficheSourceNorm.includes(caracNorm)){
-        blockingError = `Caractéristique de prestation non vérifiable dans la fiche : "${carac}" n'a pas été retrouvée dans Description ou Déroulé de la séance de "${prestation}". Aucune correction automatique n'est tentée.`;
-      }
+      blockingError = `Caractéristique de prestation non vérifiable dans la fiche : "${carac}" n'a pas été retrouvée dans "${prestation}". Aucune correction automatique n'est tentée.`;
     }
   }
   return { brief: fixed, corrected, blockingError };
@@ -5592,7 +5622,7 @@ function buildApiTab(){
 ============================================================ */
 
 /* ---- Versionnage ---- */
-const VF_VERSION = "2.0.0-t2"; // semver manuelle : à incrémenter à chaque déploiement touchant le moteur
+const VF_VERSION = "2.1.0-v1"; // semver manuelle : à incrémenter à chaque déploiement touchant le moteur
 /* Hash déterministe de l'état des règles : deux runs au même hash = strictement les mêmes règles.
    Couvre : modules (contenu+état), UNIVERS_SDZ, charte condensée, garde-fou sécurité. */
 function computeModulesHash(){
