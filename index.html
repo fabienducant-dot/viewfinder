@@ -3821,6 +3821,47 @@ function importModulesFromText(text){
   LS.set("vf-modules", state.modules);
   return count;
 }
+/* Rendu du diff — partagé par l'import JSON et l'import de fiches (aucune duplication).
+   Pastilles : 🟢 créé · 🟡 modifié · ⚪ inchangé · 🔴 supprimé. Détail dépliable par module. */
+const DIFF_PUCE = { cree:"🟢", modifie:"🟡", inchange:"⚪", supprime:"🔴" };
+const DIFF_LABEL = { cree:"créé", modifie:"modifié", inchange:"inchangé", supprime:"supprimé" };
+function renderImportDiff(diff, container){
+  container.innerHTML = "";
+  container.appendChild(el("p",{style:"font-size:13px;font-weight:600;margin-bottom:6px;"},
+    `${DIFF_PUCE.cree} ${diff.compte.cree} créé(s) · ${DIFF_PUCE.modifie} ${diff.compte.modifie} modifié(s) · ${DIFF_PUCE.inchange} ${diff.compte.inchange} inchangé(s) · ${DIFF_PUCE.supprime} ${diff.compte.supprime} supprimé(s)`));
+  const ordre = { modifie:0, cree:1, supprime:2, inchange:3 };
+  [...diff.entries].sort((a,b)=> ordre[a.statut]-ordre[b.statut] || String(a.titre).localeCompare(String(b.titre))).forEach(entry=>{
+    const ligne = el("div",{style:"border-bottom:1px solid var(--border);padding:6px 0;"});
+    const head = el("div",{style:"display:flex;align-items:center;gap:8px;cursor:pointer;"});
+    const chevron = el("span",{style:"font-size:11px;color:var(--muted2);width:12px;"}, entry.champs.length ? "▸" : " ");
+    head.appendChild(chevron);
+    head.appendChild(el("span",{style:"font-size:14px;"}, DIFF_PUCE[entry.statut]));
+    head.appendChild(el("span",{style:"font-size:13px;flex:1;"}, entry.titre));
+    head.appendChild(el("span",{style:"font-size:11px;color:var(--muted2);"}, DIFF_LABEL[entry.statut]));
+    const detail = el("div",{style:"display:none;padding:6px 0 6px 20px;"});
+    entry.champs.forEach(c=>{
+      const bloc = el("div",{style:"margin-bottom:6px;"});
+      bloc.appendChild(el("p",{style:"font-size:12px;font-weight:600;"}, `${DIFF_PUCE[c.statut]} ${c.champ}`));
+      if(c.statut==="inchange"){
+        bloc.appendChild(el("p",{style:"font-size:11px;color:var(--muted2);"}, "= inchangé"));
+      } else {
+        if(c.avant) bloc.appendChild(el("p",{style:"font-size:11px;color:var(--red);white-space:pre-wrap;"}, "− "+c.avant));
+        if(c.apres) bloc.appendChild(el("p",{style:"font-size:11px;color:var(--green);white-space:pre-wrap;"}, "+ "+c.apres));
+      }
+      detail.appendChild(bloc);
+    });
+    if(entry.champs.length){
+      head.addEventListener("click", ()=>{
+        const open = detail.style.display!=="none";
+        detail.style.display = open ? "none" : "block";
+        chevron.textContent = open ? "▸" : "▾";
+      });
+    }
+    ligne.appendChild(head); ligne.appendChild(detail);
+    container.appendChild(ligne);
+  });
+}
+
 function buildKnowledgeTab(){
   const frag = el("div",{});
 
@@ -3862,6 +3903,98 @@ function buildKnowledgeTab(){
     }catch(e){ knowledgeExportMsg.textContent = "Export impossible : "+(e.message||e); }
   }}, [svgIcon(ICONS.download,14), el("span",{},"📤 Exporter les modules")]));
   frag.appendChild(knowledgeExportMsg);
+
+  /* ---- IMPORT JSON de la base de connaissances ---- */
+  const importMsg = el("p",{style:"font-size:11px;color:var(--muted2);margin:0 0 10px;"},
+    "Import d'un export complet (format sdz-knowledge-export) : les modules existants sont mis à jour par identifiant, les nouveaux sont créés. Rien n'est écrit avant ta validation.");
+  const importZone = el("div",{style:"margin-bottom:10px;"});
+  const fileInput = el("input",{type:"file", accept:"application/json,.json", style:"display:none;"});
+  fileInput.addEventListener("change", async (e)=>{
+    const file = e.target.files && e.target.files[0]; if(!file) return;
+    importZone.innerHTML = ""; importMsg.textContent = "Lecture du fichier...";
+    try{
+      const payload = JSON.parse(await file.text());
+      const { valid, errors, warnings, plan } = validateKnowledgeImport(payload);
+      importMsg.textContent = `Fichier lu : ${(payload.modules||[]).length} module(s).`;
+      const resume = el("div",{class:"card"});
+      resume.appendChild(el("p",{class:"label"},"Résumé avant validation"));
+      resume.appendChild(el("p",{style:"font-size:13px;"}, `Modules à créer : ${plan.toCreate.length}`));
+      resume.appendChild(el("p",{style:"font-size:13px;"}, `Modules à modifier : ${plan.toUpdate.length}`));
+      resume.appendChild(el("p",{style:"font-size:13px;"}, `Modules ignorés (identiques) : ${plan.ignored.length}`));
+      resume.appendChild(el("p",{style:"font-size:13px;color:var(--muted2);"}, `Présents dans la base mais absents du fichier : ${plan.toDelete.length}`));
+      warnings.forEach(w=> resume.appendChild(el("p",{style:"font-size:12px;color:var(--amber,#c90);"}, "⚠ "+w)));
+      errors.forEach(er=> resume.appendChild(el("p",{style:"font-size:12px;color:var(--red);"}, "✗ "+er)));
+      if(!valid){
+        resume.appendChild(el("p",{style:"font-size:12px;font-weight:600;margin-top:6px;"},"Import bloqué : aucune modification n'a été appliquée."));
+      } else {
+        const delWrap = el("label",{style:"display:flex;align-items:center;gap:6px;font-size:12px;margin-top:8px;"});
+        const delCb = el("input",{type:"checkbox"});
+        delWrap.appendChild(delCb);
+        delWrap.appendChild(el("span",{},`Supprimer aussi les ${plan.toDelete.length} module(s) absent(s) du fichier (désactivé par défaut)`));
+        resume.appendChild(delWrap);
+        /* Prévisualisation : ce qui va réellement changer, avant toute écriture. */
+        const diffBox = el("div",{style:"margin-top:10px;max-height:340px;overflow:auto;"});
+        renderImportDiff(computeImportDiff(plan, { deleteMissing:false }), diffBox);
+        delCb.addEventListener("change", ()=> renderImportDiff(computeImportDiff(plan, { deleteMissing: delCb.checked }), diffBox));
+        resume.appendChild(el("p",{class:"label", style:"margin-top:8px;"},"Prévisualisation des changements"));
+        resume.appendChild(diffBox);
+        resume.appendChild(el("button",{class:"btn-primary", style:"margin-top:8px;", onclick:()=>{
+          const res = applyKnowledgeImport(plan, { deleteMissing: delCb.checked });
+          if(res.ok){
+            importMsg.textContent = `✓ Import terminé : ${plan.toCreate.length} créé(s), ${plan.toUpdate.length} modifié(s)${delCb.checked?`, ${plan.toDelete.length} supprimé(s)`:""}. Base : ${res.total} modules.`;
+            importZone.innerHTML = ""; renderMain();
+          } else {
+            importMsg.textContent = "✗ Import annulé et base restaurée : " + res.error;
+          }
+        }}, "Appliquer l'import"));
+      }
+      importZone.appendChild(resume);
+    }catch(err){ importMsg.textContent = "Fichier illisible : " + (err.message||err); }
+    fileInput.value = "";
+  });
+  frag.appendChild(el("button",{class:"btn-secondary", style:"margin-bottom:6px;", onclick:()=> fileInput.click()},
+    [svgIcon(ICONS.upload || ICONS.download,14), el("span",{},"📥 Importer des modules (JSON)")]));
+  frag.appendChild(fileInput);
+  frag.appendChild(importMsg);
+  frag.appendChild(importZone);
+
+  /* ---- IMPORT PRESTATIONS depuis un texte ---- */
+  const prestaMsg = el("p",{style:"font-size:11px;color:var(--muted2);margin:0 0 6px;"},
+    "Colle un document de fiches (« Nom : … » puis « Description : … », « Déroulé de la séance : … », « Caractéristique citable : … »). Seules les sections présentes sont remplacées ; les autres sont conservées.");
+  const prestaZone = el("div",{style:"margin-bottom:14px;"});
+  const prestaArea = el("textarea",{rows:"6", placeholder:"Nom : Reiki\nCaractéristique citable : ...\nDescription : ...", style:"width:100%;font-size:12px;"});
+  frag.appendChild(el("p",{class:"label", style:"margin-top:10px;"},"Import de fiches prestation (texte)"));
+  frag.appendChild(prestaMsg);
+  frag.appendChild(prestaArea);
+  frag.appendChild(el("button",{class:"btn-secondary", style:"margin:6px 0;", onclick:()=>{
+    prestaZone.innerHTML = "";
+    const { valid, errors, plan, details } = planPrestationsImport(prestaArea.value);
+    const resume = el("div",{class:"card"});
+    resume.appendChild(el("p",{class:"label"},"Résumé avant validation"));
+    resume.appendChild(el("p",{style:"font-size:13px;"}, `Fiches à mettre à jour : ${plan.toUpdate.length}`));
+    resume.appendChild(el("p",{style:"font-size:13px;"}, `Fiches ignorées (identiques ou vides) : ${plan.ignored.length}`));
+    details.forEach(d=> resume.appendChild(el("p",{style:"font-size:11px;color:var(--muted2);"}, "• "+d)));
+    errors.forEach(er=> resume.appendChild(el("p",{style:"font-size:12px;color:var(--red);"}, "✗ "+er)));
+    if(plan.toUpdate.length){
+      const diffBox = el("div",{style:"margin-top:10px;max-height:340px;overflow:auto;"});
+      renderImportDiff(computeImportDiff(plan, { deleteMissing:false }), diffBox);
+      resume.appendChild(el("p",{class:"label", style:"margin-top:8px;"},"Prévisualisation des changements"));
+      resume.appendChild(diffBox);
+    }
+    if(valid){
+      resume.appendChild(el("button",{class:"btn-primary", style:"margin-top:8px;", onclick:()=>{
+        const res = applyKnowledgeImport(plan, { deleteMissing:false });
+        prestaMsg.textContent = res.ok
+          ? `✓ ${plan.toUpdate.length} fiche(s) mise(s) à jour.`
+          : "✗ Import annulé et base restaurée : " + res.error;
+        prestaZone.innerHTML = ""; if(res.ok){ prestaArea.value=""; renderMain(); }
+      }}, "Appliquer la mise à jour"));
+    } else if(!errors.length){
+      resume.appendChild(el("p",{style:"font-size:12px;"},"Aucune modification à appliquer."));
+    }
+    prestaZone.appendChild(resume);
+  }}, "Analyser le document"));
+  frag.appendChild(prestaZone);
 
   const GENERIC_MODULE_TITLES = ["Ton & identité visuelle","Interdits généraux","Structure générale","Style par défaut","Présentation de la marque"];
   const genericCount = state.modules.filter(m=>GENERIC_MODULE_TITLES.includes(m.title)).length;
@@ -6789,6 +6922,226 @@ function buildModulesReportText(){
   lines.push("FIN DU RAPPORT");
   lines.push("========================================");
   return lines.join("\n");
+}
+
+/* ============================================================
+   IMPORT DE LA BASE DE CONNAISSANCES — deux entrées, une seule logique d'écriture.
+   1) importKnowledgeJson  : fichier d'export complet (format sdz-knowledge-export).
+   2) importPrestationsText: document texte de fiches, met à jour les modules Prestations.
+   Règles communes : validation intégrale AVANT toute écriture, résumé soumis à l'utilisateur,
+   application ATOMIQUE (la base n'est remplacée qu'après succès complet, rollback sinon),
+   identifiants existants toujours conservés, suppression désactivée par défaut.
+============================================================ */
+
+/* ---------- 1. Validation d'un export JSON ---------- */
+function validateKnowledgeImport(payload){
+  const errors = [], warnings = [];
+  const plan = { toCreate:[], toUpdate:[], ignored:[], toDelete:[] };
+  if(!payload || typeof payload!=="object") { errors.push("Fichier illisible : ce n'est pas un objet JSON."); return { valid:false, errors, warnings, plan }; }
+  if(payload.schema !== "sdz-knowledge-export")
+    errors.push(`Type de fichier incompatible : "schema" vaut ${JSON.stringify(payload.schema)} au lieu de "sdz-knowledge-export". (Un export de Banc d'essai ou une sauvegarde ne peuvent pas être importés ici.)`);
+  if(!Array.isArray(payload.modules)) errors.push("Champ \"modules\" absent ou invalide : un tableau est attendu.");
+  if(errors.length) return { valid:false, errors, warnings, plan };
+
+  const existingById = new Map((state.modules||[]).map(m=>[m.id, m]));
+  const seenIds = new Set();
+  payload.modules.forEach((m, i)=>{
+    const ref = `module #${i+1}${m && m.title ? ` (« ${m.title} »)` : ""}`;
+    if(!m || typeof m!=="object"){ errors.push(`${ref} : entrée invalide.`); return; }
+    if(typeof m.title!=="string" || !m.title.trim()){ errors.push(`${ref} : champ "title" obligatoire manquant.`); return; }
+    if(typeof m.content!=="string" || !m.content.trim()){ errors.push(`${ref} : champ "content" obligatoire manquant.`); return; }
+    if(typeof m.category!=="string" || !m.category.trim()){ errors.push(`${ref} : champ "category" obligatoire manquant.`); return; }
+    if(!CATEGORIES.includes(m.category)) warnings.push(`${ref} : catégorie « ${m.category} » inconnue — le module sera importé tel quel.`);
+    const id = m.id || null;
+    if(id){
+      if(seenIds.has(id)){ errors.push(`${ref} : identifiant en double dans le fichier (${id}).`); return; }
+      seenIds.add(id);
+    }
+    if(id && existingById.has(id)){
+      const cur = existingById.get(id);
+      const identique = cur.title===m.title && cur.content===m.content && cur.category===m.category && !!cur.enabled===(m.enabled!==false);
+      (identique ? plan.ignored : plan.toUpdate).push(m);
+    } else {
+      plan.toCreate.push(m);
+    }
+  });
+  const importedIds = new Set(payload.modules.filter(m=>m && m.id).map(m=>m.id));
+  plan.toDelete = (state.modules||[]).filter(m=> !importedIds.has(m.id));
+  return { valid: errors.length===0, errors, warnings, plan };
+}
+
+/* ---------- Application ATOMIQUE (commune aux deux imports) ---------- */
+function applyKnowledgeImport(plan, options){
+  const opts = options || {};
+  const backup = JSON.parse(JSON.stringify(state.modules || []));   // rollback complet
+  const backupPacks = JSON.parse(JSON.stringify(state.packVersions || {}));
+  try{
+    const byId = new Map((state.modules||[]).map(m=>[m.id, m]));
+    plan.toUpdate.forEach(m=>{
+      const cur = byId.get(m.id);
+      const merged = normalizeModule({ ...cur, ...m, id: cur.id, createdAt: cur.createdAt, updatedAt: Date.now() });
+      if(!merged) throw new Error(`Module « ${m.title} » : normalisation impossible.`);
+      byId.set(cur.id, merged);
+    });
+    plan.toCreate.forEach(m=>{
+      const created = normalizeModule({ ...m, id: m.id || uid(), createdAt: Date.now(), updatedAt: Date.now() });
+      if(!created) throw new Error(`Module « ${m.title} » : normalisation impossible.`);
+      byId.set(created.id, created);
+    });
+    if(opts.deleteMissing) (plan.toDelete||[]).forEach(m=> byId.delete(m.id));
+    const next = [...byId.values()];
+    if(!next.length) throw new Error("L'import produirait une base vide — opération annulée.");
+    state.modules = next;
+    if(!LS.set("vf-modules", state.modules)) throw new Error("Écriture impossible (stockage saturé ?).");
+    return { ok:true, total: next.length };
+  }catch(e){
+    state.modules = backup; state.packVersions = backupPacks;   // ROLLBACK
+    LS.set("vf-modules", state.modules);
+    return { ok:false, error: String(e.message||e) };
+  }
+}
+
+/* ---------- 2. Import de fiches prestation depuis un texte ---------- */
+const PRESTATION_TEXT_SECTIONS = ["description","déroulé de la séance","déroulé","caractéristique citable","bienfaits","public concerné","précautions","durée","tarif"];
+const PRESTATION_SECTION_CANON = { "déroulé":"déroulé de la séance" };
+
+/* Découpe un document en fiches (séparateur : une ligne "Nom :" ou un titre de prestation connu),
+   puis en sections "Libellé : valeur". Seules les sections présentes seront remplacées. */
+function parsePrestationsText(text){
+  const fiches = [];
+  const lines = String(text||"").split(/\r?\n/);
+  let current = null;
+  const flush = ()=>{ if(current && current.nom) fiches.push(current); current = null; };
+  const sectionRe = new RegExp(`^\\s*(${PRESTATION_TEXT_SECTIONS.join("|")})\\s*:\\s*(.*)$`, "i");
+  let lastSection = null;
+  lines.forEach(raw=>{
+    const line = raw.trim();
+    const nomMatch = line.match(/^\s*(?:nom|prestation)\s*:\s*(.+)$/i);
+    if(nomMatch){ flush(); current = { nom: nomMatch[1].trim(), sections:{} }; lastSection = null; return; }
+    if(!current){ return; }
+    const sm = line.match(sectionRe);
+    if(sm){
+      const key = PRESTATION_SECTION_CANON[sm[1].toLowerCase()] || sm[1].toLowerCase();
+      current.sections[key] = sm[2].trim();
+      lastSection = key;
+      return;
+    }
+    if(lastSection && line){ current.sections[lastSection] += " " + line; } // continuation multi-lignes
+  });
+  flush();
+  return fiches;
+}
+
+/* Retrouve le module Prestations correspondant à un nom, via les alias officiels puis par
+   correspondance normalisée du titre. Retourne null si aucune correspondance certaine. */
+function findPrestationModule(nom){
+  const mods = (state.modules||[]).filter(m=> m.category==="Prestations");
+  const n = normalizeForContainmentCheck(nom);
+  let hit = mods.find(m=> normalizeForContainmentCheck(m.title) === n);
+  if(hit) return hit;
+  for(const canon of KNOWN_PRESTATIONS){
+    const aliases = PRESTATION_ALIASES[canon] || [canon];
+    if(aliases.some(a=> normalizeForContainmentCheck(a) === n)){
+      hit = mods.find(m=> normalizeForContainmentCheck(m.title) === normalizeForContainmentCheck(canon)
+                       || aliases.some(a=> normalizeForContainmentCheck(m.title) === normalizeForContainmentCheck(a)));
+      if(hit) return hit;
+    }
+  }
+  return mods.find(m=> normalizeForContainmentCheck(m.title).includes(n) || n.includes(normalizeForContainmentCheck(m.title))) || null;
+}
+
+/* Reconstruit le contenu d'une fiche en ne remplaçant QUE les sections fournies.
+   Le format de sortie reste celui que le parseur du moteur sait lire ("Libellé : valeur"). */
+/* Découpe un contenu "Libellé : valeur" en sections. Utilisé par la fusion ET par le diff —
+   une seule implémentation, aucun risque de divergence entre ce qui est affiché et ce qui est écrit. */
+function parseSectionedContent(content){
+  const lines = String(content||"").split(/\r?\n/);
+  const titre = lines.length && !/^\s*\w[^:]*:/.test(lines[0]) ? lines[0].trim() : "";
+  const sections = {}; let last = null;
+  lines.forEach(l=>{
+    const m = l.match(/^\s*([^:]{2,40})\s*:\s*(.*)$/);
+    if(m){ const k = m[1].trim().toLowerCase(); sections[k] = m[2].trim(); last = k; }
+    else if(last && l.trim()){ sections[last] += " " + l.trim(); }
+  });
+  return { titre, sections };
+}
+
+function mergePrestationContent(currentContent, sections){
+  const ORDER = ["description","déroulé de la séance","caractéristique citable","bienfaits","public concerné","précautions","durée","tarif"];
+  const LABEL = { "description":"Description", "déroulé de la séance":"Déroulé de la séance",
+    "caractéristique citable":"Caractéristique citable", "bienfaits":"Bienfaits",
+    "public concerné":"Public concerné", "précautions":"Précautions", "durée":"Durée", "tarif":"Tarif" };
+  const parsed = parseSectionedContent(currentContent);
+  const titre = parsed.titre;
+  const existing = parsed.sections;
+  Object.entries(sections).forEach(([k,v])=>{ if(v && v.trim()) existing[k] = v.trim(); });
+  const out = [];
+  if(titre) out.push(titre);
+  ORDER.forEach(k=>{ if(existing[k]) out.push(`${LABEL[k]} : ${existing[k]}`); });
+  Object.keys(existing).forEach(k=>{ if(!ORDER.includes(k)) out.push(`${k.charAt(0).toUpperCase()+k.slice(1)} : ${existing[k]}`); });
+  return out.join("\n");
+}
+
+/* ---------- DIFF avant import : ce qui va réellement changer, section par section ----------
+   Statuts : cree | modifie | inchange | supprime. Pour un contenu structuré ("Libellé : valeur"),
+   le diff est calculé PAR SECTION via le même parseur que la fusion ; sinon, comparaison du texte
+   entier. Aucune écriture, aucun effet de bord : cette fonction ne fait que décrire. */
+function computeImportDiff(plan, options){
+  const opts = options || {};
+  const byId = new Map((state.modules||[]).map(m=>[m.id, m]));
+  const entries = [];
+  const champDiff = (avant, apres)=>{
+    const a = parseSectionedContent(avant), b = parseSectionedContent(apres);
+    const keys = [...new Set([...Object.keys(a.sections), ...Object.keys(b.sections)])];
+    if(!keys.length){ // contenu non structuré : comparaison globale
+      return avant===apres ? [] : [{ champ:"contenu", statut:"modifie", avant, apres }];
+    }
+    const out = [];
+    if(a.titre !== b.titre) out.push({ champ:"titre du bloc", statut:"modifie", avant:a.titre, apres:b.titre });
+    keys.forEach(k=>{
+      const av = a.sections[k] || "", ap = b.sections[k] || "";
+      if(av === ap) out.push({ champ:k, statut:"inchange", avant:av, apres:ap });
+      else if(!av) out.push({ champ:k, statut:"cree", avant:"", apres:ap });
+      else if(!ap) out.push({ champ:k, statut:"supprime", avant:av, apres:"" });
+      else out.push({ champ:k, statut:"modifie", avant:av, apres:ap });
+    });
+    return out;
+  };
+  (plan.toUpdate||[]).forEach(m=>{
+    const cur = byId.get(m.id) || {};
+    const champs = [];
+    if(m.title!==undefined && m.title!==cur.title) champs.push({ champ:"titre", statut:"modifie", avant:cur.title||"", apres:m.title });
+    if(m.category!==undefined && m.category!==cur.category) champs.push({ champ:"catégorie", statut:"modifie", avant:cur.category||"", apres:m.category });
+    if(m.enabled!==undefined && !!m.enabled!==!!cur.enabled) champs.push({ champ:"actif", statut:"modifie", avant:String(!!cur.enabled), apres:String(!!m.enabled) });
+    if(m.content!==undefined && m.content!==cur.content) champs.push(...champDiff(cur.content||"", m.content));
+    entries.push({ statut:"modifie", id:m.id, titre:m.title||cur.title||m.id, champs });
+  });
+  (plan.toCreate||[]).forEach(m=> entries.push({ statut:"cree", id:m.id||"(nouvel identifiant)", titre:m.title,
+    champs:[{ champ:"contenu", statut:"cree", avant:"", apres:m.content||"" }] }));
+  (plan.ignored||[]).forEach(m=> entries.push({ statut:"inchange", id:m.id, titre:m.title, champs:[] }));
+  if(opts.deleteMissing) (plan.toDelete||[]).forEach(m=> entries.push({ statut:"supprime", id:m.id, titre:m.title,
+    champs:[{ champ:"contenu", statut:"supprime", avant:m.content||"", apres:"" }] }));
+  const compte = { cree:0, modifie:0, inchange:0, supprime:0 };
+  entries.forEach(e=> compte[e.statut]++);
+  return { entries, compte };
+}
+
+/* Prépare le plan d'import à partir d'un texte : aucune écriture ici. */
+function planPrestationsImport(text){
+  const fiches = parsePrestationsText(text);
+  const errors = [], plan = { toCreate:[], toUpdate:[], ignored:[], toDelete:[] }, details = [];
+  if(!fiches.length) errors.push("Aucune fiche détectée. Chaque fiche doit commencer par une ligne « Nom : … ».");
+  fiches.forEach(f=>{
+    const mod = findPrestationModule(f.nom);
+    const sectionsFournies = Object.keys(f.sections).filter(k=> f.sections[k]);
+    if(!mod){ errors.push(`« ${f.nom} » : aucun module Prestations correspondant (aucune création automatique pour éviter les doublons).`); return; }
+    if(!sectionsFournies.length){ plan.ignored.push(mod); details.push(`${f.nom} : aucune section exploitable`); return; }
+    const content = mergePrestationContent(mod.content, f.sections);
+    if(content === mod.content){ plan.ignored.push(mod); details.push(`${f.nom} : contenu identique`); return; }
+    plan.toUpdate.push({ ...mod, content });
+    details.push(`${f.nom} → ${sectionsFournies.join(", ")}`);
+  });
+  return { valid: errors.length===0 && plan.toUpdate.length>0, errors, warnings:[], plan, details, fiches };
 }
 
 /* ============================================================
