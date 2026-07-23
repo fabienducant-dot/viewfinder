@@ -1938,6 +1938,8 @@ function buildCreativePlannerSystemPrompt(){
    par registre actif. Budget cible : ~2500 caractères max. `registres` doit être une copie figée
    transmise explicitement par l'appelant — jamais lu directement depuis state.registres ici, pour
    que le flux préparé reste indépendant de l'état courant de l'interface. */
+/* B4 — retourne { text, ids } : les identifiants des modules réellement injectés sont tracés
+   (jamais leur contenu) pour l'analyse d'usage et de conflit au Banc d'essai. */
 function buildCompactMasterImageSocle(registres){
   const BUDGET = 2500;
   const all = state.modules.filter(m=> m.enabled && m.category==="MASTER_IMAGE");
@@ -1950,7 +1952,7 @@ function buildCompactMasterImageSocle(registres){
   const picked = [...permanents, ...noirOrHaute.slice(0,3), ...registreHaute];
   let text = picked.map(m=>m.content).join(" ");
   if(text.length > BUDGET) text = text.slice(0, BUDGET) + "…";
-  return text;
+  return { text, ids: picked.map(m=>m.id) };
 }
 
 /* Plafond global du bloc fiche prestation dans le prompt du Creative Planner — entre 1400 et 1600
@@ -2001,8 +2003,10 @@ function buildPrestationFicheBlock(prestation){
   return out;
 }
 
-function buildCreativePlannerUserPrompt(allowed, exclusions, mission, prestation, platform, topic, typeCreationImpose, registres){
-  const socle = buildCompactMasterImageSocle(registres);
+function buildCreativePlannerUserPrompt(allowed, exclusions, mission, prestation, platform, topic, typeCreationImpose, registres, trace){
+  const socleResult = buildCompactMasterImageSocle(registres);
+  const socle = socleResult.text;
+  if(trace) trace.moduleIds = socleResult.ids; // collecte explicite, aucune lecture d'état global
   // Ajout MASTER_UNIVERS_SDZ v0 : vocabulaire symbolique SDZ pour les archétypes autorisés (vide en luxe_silencieux, voir buildUniversSDZBlock).
   const universBlock = buildUniversSDZBlock(allowed);
   const prestationBlock = buildPrestationFicheBlock(prestation);
@@ -2118,11 +2122,11 @@ function validateAndFixBrief(brief, allowed, exclusions, typeCreationImpose, pre
   }
   return { brief: fixed, corrected, blockingError };
 }
-async function generateCreativeBrief(mission, prestation, platform, topic, typeCreationImpose, registres, recentEntriesOverride){
+async function generateCreativeBrief(mission, prestation, platform, topic, typeCreationImpose, registres, recentEntriesOverride, trace){
   const allowed = computeAllowedArchetypes(mission, prestation, platform, typeCreationImpose, recentEntriesOverride||null);
   const exclusions = computeRecentCompositionExclusions(platform, recentEntriesOverride||null);
   const systemPrompt = buildCreativePlannerSystemPrompt();
-  const userPrompt = buildCreativePlannerUserPrompt(allowed, exclusions, mission, prestation, platform, topic, typeCreationImpose, registres);
+  const userPrompt = buildCreativePlannerUserPrompt(allowed, exclusions, mission, prestation, platform, topic, typeCreationImpose, registres, trace);
   const provider = state.apiProviders.find(p=>p.id===state.selectedProviderId) || DEFAULT_OPENAI_PROVIDER;
   const res = await fetch("/.netlify/functions/generate-text", {
     method:"POST", headers:{ "Content-Type":"application/json" },
@@ -2667,15 +2671,18 @@ async function prepareCreativeBrief(inputs){
   /* benchNeutralHistory (Banc d'essai) : la SOURCE de l'historique est paramétrée — la logique du
      pipeline est strictement identique. Production : pas d'override -> comportement inchangé. */
   const neutralHist = inputs.benchNeutralHistory ? [] : null;
+  const moduleTrace = {}; // B4 : identifiants des modules injectés (contenu jamais archivé)
   const allowed = computeAllowedArchetypes(mission, prestation, platform, typeCreationImpose, neutralHist);
   const exclusions = computeRecentCompositionExclusions(platform, neutralHist);
   steps.allowed = allowed.map(a=>a.id); steps.exclusions = exclusions;
+  steps.moduleIds = null; // renseigné après l'appel du Planner
 
   let brief, briefCorrected = false, plannerError = null, usedLocalBriefFallback = false, blockingError = null, plannerUsage = null;
   try{
-    const plannerResult = await generateCreativeBrief(mission, prestation, platform, topic, typeCreationImpose, registres, neutralHist);
+    const plannerResult = await generateCreativeBrief(mission, prestation, platform, topic, typeCreationImpose, registres, neutralHist, moduleTrace);
     brief = plannerResult.brief; briefCorrected = plannerResult.corrected; blockingError = plannerResult.blockingError;
     plannerUsage = plannerResult.usage || null;
+    steps.moduleIds = moduleTrace.moduleIds || null;
   }catch(err){
     plannerError = `Échec du Creative Planner : ${String(err.message||err)}`;
     brief = localFallbackBrief(mission, prestation, platform, topic, allowed, typeCreationImpose);
@@ -3332,6 +3339,9 @@ function parseAuditReport(text){
 /* ============================================================
    NAVIGATION
 ============================================================ */
+/* B4 — état de navigation de l'écran Banc (UI uniquement, jamais persisté). */
+const benchUI = { runId:null, caseId:null, expert:false, runCache:null, refCache:null };
+
 const TABS = [
   {id:"accueil", label:"Accueil"},
   {id:"library", label:"Bibliothèque"},
@@ -3343,6 +3353,7 @@ const TABS = [
   {id:"calendar", label:"Calendrier"},
   {id:"audit", label:"Audit IA"},
   {id:"genaudit", label:"Audit générations"},
+  {id:"bench", label:"Banc d'essai"},
   {id:"lab", label:"Laboratoire IA"},
   {id:"api", label:"Paramètres API"},
   {id:"history", label:"Base de prompts"},
@@ -5641,7 +5652,7 @@ class MemoryBenchStorage {
   async saveCaseImage(imageId, blob){ this.images.set(imageId, blob); return imageId; }
   async getCaseImage(imageId){ return this.images.get(imageId) || null; }
   async deleteCaseImage(imageId){ this.images.delete(imageId); return true; }
-  async exportRun(runId){ const r = await this.getRun(runId); if(!r) return null; return { format:"vf-bench-run", exportedAt:new Date().toISOString(), run:r }; }
+  async exportRun(runId, options){ return exportRunWithStorage(this, runId, options); }
 }
 class IndexedDBBenchStorage {
   constructor(){ this.kind = "indexeddb"; this._db = null; }
@@ -5709,7 +5720,26 @@ class IndexedDBBenchStorage {
     });
   }
   async deleteCaseImage(imageId){ await this._tx("images", "readwrite", st=> st.delete(imageId)); return true; }
-  async exportRun(runId){ const r = await this.getRun(runId); if(!r) return null; return { format:"vf-bench-run", exportedAt:new Date().toISOString(), run:r }; }
+  async exportRun(runId, options){ return exportRunWithStorage(this, runId, options); }
+}
+/* Export d'un run — les images sont embarquées UNIQUEMENT à la demande (Golden Run archivable ou
+   transférable vers un autre appareil). Implémentation partagée par les deux stockages. */
+async function exportRunWithStorage(storage, runId, options){
+  const r = await storage.getRun(runId); if(!r) return null;
+  const out = { format:"vf-bench-run", exportedAt:new Date().toISOString(), withImages:false, run:r };
+  if(options && options.withImages){
+    const images = {};
+    for(const slot of (r.cases||[])){
+      const id = slot.result && slot.result.outputs && slot.result.outputs.imageId;
+      if(!id) continue;
+      try{
+        const blob = await storage.getCaseImage(id);
+        if(blob) images[id] = await new Promise((res,rej)=>{ const fr = new FileReader(); fr.onload=()=>res(fr.result); fr.onerror=rej; fr.readAsDataURL(blob); });
+      }catch(e){ /* image manquante : export poursuivi, absence visible */ }
+    }
+    out.images = images; out.withImages = true;
+  }
+  return out;
 }
 function createBenchStorage(){
   try{ if(typeof indexedDB!=="undefined") return new IndexedDBBenchStorage(); }catch(e){}
@@ -5800,6 +5830,125 @@ function computeKnowledgeFingerprints(){
     promptBuilder: hashPrompt([CHARTE_SDZ_SYNTHESE, SAFETY_GUARDRAIL, DA_WRITER_SYSTEM_PROMPT, DA_WRITER_MODEL, String(DA_WRITER_MAX_WORDS)].join("\n---\n")),
     topicBank: hashPrompt(JSON.stringify(BENCH_TOPIC_BANK)),
   });
+}
+
+/* ---- B4 — NOTATION RAPIDE : trois statuts, motifs fermés (exploitables statistiquement).
+   Liste dérivée de la spécification V1.0 (qualité visuelle obligatoire). */
+const BENCH_SCORE_STATUTS = Object.freeze({ publiable:"⭐ Publiable", retravailler:"🟡 À retravailler", regenerer:"❌ À régénérer" });
+const BENCH_REFUS_MOTIFS = Object.freeze([
+  "ambiance spa générique","or incorrect","noir bouché","rendu IA visible","composition faible",
+  "émotion absente","prestation non reconnaissable","texte illisible","logo incorrect",
+  "peau plastique","décor vide","plusieurs idées fortes","autre",
+]);
+/* Grille détaillée — MODE EXPERT uniquement, facultatif, jamais requis en Golden Run. */
+const BENCH_EXPERT_CRITERES = Object.freeze(["fidelite_brief","charte_noir_or","composition","lumiere","emotion","differenciation"]);
+
+/* Scorer humain rapide : enregistré via le contrat QualityScorer de B1 (aucune architecture nouvelle).
+   La notation est saisie dans l'écran Banc et stockée dans run.scores — score() ne fait que la relire. */
+registerQualityScorer({
+  id: "human-rapide", label: "Notation humaine rapide (statut + motifs)",
+  async score(testResult, testCase, run){
+    const s = run && run.scores ? run.scores[testResult.caseId] : null;
+    return s ? { total: s.statut==="publiable"?1:0, grille:{ statut:s.statut, motifs:s.motifs||[] }, scorerId:"human-rapide" } : null;
+  },
+});
+
+/* Agrégats de notation d'un run (aucun stockage : toujours recalculé depuis run.scores). */
+function computeRunScoreStats(run){
+  const cases = (run.cases||[]).filter(c=> c.result);
+  const okCases = cases.filter(c=> c.result.status==="ok");
+  const scores = run.scores || {};
+  const notes = okCases.map(c=> scores[c.result.caseId]).filter(Boolean);
+  const compte = { publiable:0, retravailler:0, regenerer:0 };
+  const motifs = {};
+  const parPrestation = {};
+  notes.forEach((s,i)=>{
+    compte[s.statut] = (compte[s.statut]||0) + 1;
+    (s.motifs||[]).forEach(m=>{ motifs[m] = (motifs[m]||0)+1; });
+  });
+  okCases.forEach(c=>{
+    const s = scores[c.result.caseId]; if(!s) return;
+    const p = c.testCase.labels.prestation;
+    parPrestation[p] = parPrestation[p] || { notes:0, publiables:0 };
+    parPrestation[p].notes++; if(s.statut==="publiable") parPrestation[p].publiables++;
+  });
+  return {
+    total: cases.length, ok: okCases.length, erreurs: cases.length - okCases.length,
+    notes: notes.length, compte, motifs, parPrestation,
+    tauxPubliables: notes.length ? compte.publiable/notes.length : null,
+    tauxEchecTechnique: cases.length ? (cases.length-okCases.length)/cases.length : null,
+    coutMoyen: run.costMeasuredCases ? run.costMeasuredTotal/run.costMeasuredCases : null,
+    dureeMoyenneMs: cases.length ? run.durationTotal/cases.length : null,
+  };
+}
+
+/* VERDICT — 4 états. "non concluant" est OBLIGATOIRE tant que l'écart n'est pas significatif :
+   le pipeline est stochastique, un verdict binaire sur quelques images serait trompeur.
+   Marge = intervalle de confiance binomial approché (95%) sur la différence de deux proportions. */
+function computeRunVerdict(run, refRun){
+  const a = computeRunScoreStats(run);
+  if(!refRun) return { verdict:"non concluant", raison:"Aucun run de référence épinglé — ce run peut devenir la référence.", stats:a, ref:null };
+  const b = computeRunScoreStats(refRun);
+  if(run.topicBankVersion !== refRun.topicBankVersion)
+    return { verdict:"non concluant", raison:`Banques de sujets différentes (v${run.topicBankVersion} vs v${refRun.topicBankVersion}) : runs non comparables.`, stats:a, ref:b };
+  if(a.notes < 10 || b.notes < 10)
+    return { verdict:"non concluant", raison:`Notation insuffisante (${a.notes} cas notés contre ${b.notes} sur la référence) : au moins 10 de chaque côté.`, stats:a, ref:b };
+  const p1=a.tauxPubliables, n1=a.notes, p2=b.tauxPubliables, n2=b.notes;
+  const marge = 1.96*Math.sqrt(Math.max(p1*(1-p1)/n1 + p2*(1-p2)/n2, 1e-9));
+  const delta = p1-p2;
+  let verdict;
+  if(Math.abs(delta) < marge) verdict = "stabilité";
+  else verdict = delta>0 ? "amélioration" : "régression";
+  return {
+    verdict, delta, marge,
+    raison: verdict==="stabilité"
+      ? `Écart de ${(delta*100).toFixed(1)} pt sur le taux de publiables, sous la marge d'incertitude (±${(marge*100).toFixed(1)} pt).`
+      : `Taux de publiables ${delta>0?"en hausse":"en baisse"} de ${Math.abs(delta*100).toFixed(1)} pt (marge ±${(marge*100).toFixed(1)} pt).`,
+    stats:a, ref:b,
+  };
+}
+
+/* Niveau 2 — le "pourquoi" : motifs qui varient le plus, prestations qui bougent, composants modifiés. */
+function computeRunExplanation(run, refRun){
+  const a = computeRunScoreStats(run), b = refRun ? computeRunScoreStats(refRun) : null;
+  const motifsDelta = [];
+  if(b){
+    new Set([...Object.keys(a.motifs), ...Object.keys(b.motifs)]).forEach(m=>{
+      const d = (a.motifs[m]||0) - (b.motifs[m]||0);
+      if(d!==0) motifsDelta.push({ motif:m, delta:d, actuel:a.motifs[m]||0, reference:b.motifs[m]||0 });
+    });
+    motifsDelta.sort((x,y)=> Math.abs(y.delta)-Math.abs(x.delta));
+  }
+  const prestations = [];
+  if(b){
+    Object.keys(a.parPrestation).forEach(p=>{
+      const pa=a.parPrestation[p], pb=b.parPrestation[p];
+      if(!pb || !pa.notes || !pb.notes) return;
+      const d = (pa.publiables/pa.notes) - (pb.publiables/pb.notes);
+      if(Math.abs(d) >= 0.2) prestations.push({ prestation:p, delta:d });
+    });
+    prestations.sort((x,y)=> y.delta-x.delta);
+  }
+  const composants = [];
+  if(b && refRun.environment && run.environment){
+    if(run.appVersion !== refRun.appVersion) composants.push(`VF_VERSION : ${refRun.appVersion} → ${run.appVersion}`);
+    if(run.modulesHash !== refRun.modulesHash) composants.push("Modules (hash global) modifiés");
+    const fa=(run.environment.knowledge||{}).fingerprints||{}, fb=(refRun.environment.knowledge||{}).fingerprints||{};
+    Object.keys(fa).forEach(k=>{ if(k!=="modulesParCategorie" && fa[k]!==fb[k]) composants.push(`Connaissance modifiée : ${k}`); });
+    const ca=fa.modulesParCategorie||{}, cb=fb.modulesParCategorie||{};
+    Object.keys(ca).forEach(k=>{ if(ca[k]!==cb[k]) composants.push(`Modules ${k} modifiés`); });
+    if(run.environment.modeleTexte !== refRun.environment.modeleTexte) composants.push(`Modèle texte : ${refRun.environment.modeleTexte} → ${run.environment.modeleTexte}`);
+    if(run.environment.modeleRedacteur !== refRun.environment.modeleRedacteur) composants.push(`Modèle Rédacteur : ${refRun.environment.modeleRedacteur} → ${run.environment.modeleRedacteur}`);
+  }
+  /* Usage des modules : toujours utilisés / jamais utilisés (depuis les identifiants archivés). */
+  const usage = {}; let casAvecModules = 0;
+  (run.cases||[]).forEach(c=>{
+    const ids = c.result && c.result.artifacts && c.result.artifacts.moduleIds;
+    if(!Array.isArray(ids)) return;
+    casAvecModules++;
+    ids.forEach(id=>{ usage[id] = (usage[id]||0)+1; });
+  });
+  return { motifsDelta, prestations, composants, moduleUsage:{ usage, casAvecModules } };
 }
 
 /* ---- Banque officielle de sujets, VERSIONNÉE — référence du Golden Set.
@@ -5904,7 +6053,8 @@ registerBenchExecutor({
           validatorDecisionsAbsentes: (vr.decisionsAbsentes||[]).length,
           daWriterFallback: prepared.daWriterUsed ? 0 : 1,
         },
-        artifacts: { brief: prepared.brief },
+        artifacts: { brief: prepared.brief, moduleIds: (prepared.steps && prepared.steps.moduleIds) || null,
+                     archetypesAutorises: (prepared.steps && prepared.steps.allowed) || null },
         diagnostics: {
           daWriterUsed: !!prepared.daWriterUsed, daWriterFallbackReason: prepared.daWriterFallbackReason || null,
           usedLocalBriefFallback: !!prepared.usedLocalBriefFallback, plannerError: prepared.plannerError || null,
@@ -6611,6 +6761,267 @@ function buildModulesReportText(){
   return lines.join("\n");
 }
 
+/* ============================================================
+   B4 — ÉCRAN BANC D'ESSAI : décision en moins d'une minute.
+   Niveau 1 verdict + 4 métriques · Niveau 2 le pourquoi · Niveau 3 le détail d'un cas.
+   Lecture seule sur les runs (seules la notation et l'épinglage sont écrits, conformément au gel).
+============================================================ */
+function benchStorage(){ return window.__benchStorage = window.__benchStorage || createBenchStorage(); }
+function pct(x){ return x==null ? "—" : (x*100).toFixed(0)+" %"; }
+function deltaLabel(cur, ref, unit, inverse){
+  if(cur==null || ref==null) return "";
+  const d = cur-ref; if(Math.abs(d) < 1e-9) return " (=)";
+  const better = inverse ? d<0 : d>0;
+  const val = unit==="%" ? (Math.abs(d)*100).toFixed(1)+" pt" : unit==="$" ? Math.abs(d).toFixed(4)+" $" : Math.round(Math.abs(d)/1000)+" s";
+  return ` (${d>0?"+":"−"}${val} ${better?"✅":"⚠️"})`;
+}
+
+function buildBenchTab(){
+  const frag = el("div",{});
+  frag.appendChild(el("p",{class:"label"},"Banc d'essai — validation officielle de Viewfinder"));
+  if(!benchUI.runId){ buildBenchRunList(frag); return frag; }
+  if(benchUI.caseId){ buildBenchCaseDetail(frag); return frag; }
+  buildBenchDashboard(frag);
+  return frag;
+}
+
+/* ---------- Liste des runs ---------- */
+function buildBenchRunList(frag){
+  const msg = el("p",{style:"font-size:12px;color:var(--muted2);min-height:16px;"},"Chargement des runs...");
+  frag.appendChild(msg);
+  const list = el("div",{}); frag.appendChild(list);
+  (async ()=>{
+    try{
+      const runs = (await benchStorage().listRuns()).sort((a,b)=> String(b.startedAt).localeCompare(String(a.startedAt)));
+      msg.textContent = runs.length ? `${runs.length} run(s) archivé(s).` : "Aucun run archivé. Lance un run depuis Réglages.";
+      runs.forEach(r=>{
+        const card = el("div",{class:"card", style:"margin-bottom:8px;"});
+        card.appendChild(el("p",{style:"font-weight:600;"}, `${r.pinnedAsReference?"📌 ":""}${r.mode.toUpperCase()} — ${String(r.startedAt).slice(0,16).replace("T"," ")}`));
+        card.appendChild(el("p",{style:"font-size:12px;color:var(--muted2);"}, `${r.nbCases} cas · ${r.status} · ${r.appVersion} · ${r.runId}`));
+        const row = el("div",{style:"display:flex;gap:6px;flex-wrap:wrap;margin-top:6px;"});
+        row.appendChild(el("button",{class:"btn-primary", onclick:()=>{ benchUI.runId=r.runId; benchUI.caseId=null; benchUI.runCache=null; renderMain(); }}, "Ouvrir"));
+        row.appendChild(el("button",{class:"btn-ghost", onclick: async ()=>{
+          const run = await benchStorage().getRun(r.runId);
+          const runs2 = await benchStorage().listRuns();
+          for(const other of runs2.filter(x=>x.pinnedAsReference && x.runId!==r.runId)){
+            const o = await benchStorage().getRun(other.runId); o.pinnedAsReference=false; await benchStorage().saveRun(o);
+          }
+          run.pinnedAsReference = !r.pinnedAsReference; await benchStorage().saveRun(run); renderMain();
+        }}, r.pinnedAsReference ? "Retirer la référence" : "Épingler comme référence"));
+        row.appendChild(el("button",{class:"btn-ghost", onclick:()=> benchExport(r.runId, false, msg)}, "Exporter (JSON)"));
+        row.appendChild(el("button",{class:"btn-ghost", onclick:()=> benchExport(r.runId, true, msg)}, "Exporter avec images"));
+        card.appendChild(row);
+        list.appendChild(card);
+      });
+    }catch(e){ msg.textContent = "Erreur de lecture : "+(e.message||e); }
+  })();
+}
+
+async function benchExport(runId, withImages, msgEl){
+  try{
+    msgEl.textContent = withImages ? "Préparation de l'export (images incluses)..." : "Préparation de l'export...";
+    const data = await benchStorage().exportRun(runId, { withImages });
+    const blob = new Blob([JSON.stringify(data, null, 1)], { type:"application/json" });
+    const a = document.createElement("a");
+    a.href = URL.createObjectURL(blob); a.download = `bench-run-${runId}${withImages?"-images":""}.json`; a.click();
+    setTimeout(()=> URL.revokeObjectURL(a.href), 8000);
+    msgEl.textContent = `✓ Export ${withImages?"avec images ":""}(${(blob.size/1048576).toFixed(1)} Mo)`;
+  }catch(e){ msgEl.textContent = "Export impossible : "+(e.message||e); }
+}
+
+/* ---------- Niveau 1 + 2 : tableau de bord de décision ---------- */
+function buildBenchDashboard(frag){
+  frag.appendChild(el("button",{class:"btn-ghost", style:"margin-bottom:8px;", onclick:()=>{ benchUI.runId=null; benchUI.runCache=null; renderMain(); }}, "← Tous les runs"));
+  const zone = el("div",{}); frag.appendChild(zone);
+  zone.appendChild(el("p",{style:"font-size:12px;color:var(--muted2);"},"Chargement..."));
+  (async ()=>{
+    try{
+      const run = benchUI.runCache && benchUI.runCache.runId===benchUI.runId ? benchUI.runCache : await benchStorage().getRun(benchUI.runId);
+      benchUI.runCache = run;
+      const list = await benchStorage().listRuns();
+      const refMeta = list.find(x=> x.pinnedAsReference && x.runId!==run.runId);
+      const refRun = refMeta ? await benchStorage().getRun(refMeta.runId) : null;
+      benchUI.refCache = refRun;
+      const v = computeRunVerdict(run, refRun);
+      const exp = computeRunExplanation(run, refRun);
+      zone.innerHTML = "";
+
+      /* NIVEAU 1 — verdict + 4 métriques */
+      const couleur = { "amélioration":"var(--green)", "régression":"var(--red)", "stabilité":"var(--muted2)", "non concluant":"var(--muted2)" }[v.verdict];
+      const banner = el("div",{class:"card", style:`border-left:4px solid ${couleur};margin-bottom:10px;`});
+      banner.appendChild(el("p",{style:`font-size:20px;font-weight:700;color:${couleur};`}, v.verdict.toUpperCase()));
+      banner.appendChild(el("p",{style:"font-size:13px;margin-top:4px;"}, v.raison));
+      banner.appendChild(el("p",{style:"font-size:11px;color:var(--muted2);margin-top:4px;"},
+        refRun ? `Comparé à la référence épinglée ${String(refRun.startedAt).slice(0,10)} (${refRun.appVersion})` : "Aucune référence épinglée"));
+      zone.appendChild(banner);
+
+      const s=v.stats, r=v.ref;
+      const grid = el("div",{class:"card", style:"margin-bottom:10px;"});
+      [["Taux de publiables", pct(s.tauxPubliables)+deltaLabel(s.tauxPubliables, r&&r.tauxPubliables, "%"), `${s.notes}/${s.ok} cas notés`],
+       ["Échecs techniques", pct(s.tauxEchecTechnique)+deltaLabel(s.tauxEchecTechnique, r&&r.tauxEchecTechnique, "%", true), `${s.erreurs}/${s.total} cas`],
+       ["Coût moyen / cas", (s.coutMoyen!=null? s.coutMoyen.toFixed(4)+" $":"—")+deltaLabel(s.coutMoyen, r&&r.coutMoyen, "$", true), `total ${run.costMeasuredTotal.toFixed(4)} $`],
+       ["Durée moyenne / cas", (s.dureeMoyenneMs!=null? (s.dureeMoyenneMs/1000).toFixed(1)+" s":"—")+deltaLabel(s.dureeMoyenneMs, r&&r.dureeMoyenneMs, "s", true), `total ${(run.durationTotal/60000).toFixed(1)} min`],
+      ].forEach(([k,val,sub])=>{
+        grid.appendChild(el("div",{style:"display:flex;justify-content:space-between;align-items:baseline;padding:4px 0;border-bottom:1px solid var(--border);"},[
+          el("span",{style:"font-size:13px;"},k), el("span",{style:"font-size:14px;font-weight:600;text-align:right;"}, val)]));
+        grid.appendChild(el("p",{style:"font-size:11px;color:var(--muted2);margin:0 0 4px;"}, sub));
+      });
+      zone.appendChild(grid);
+
+      /* NIVEAU 2 — pourquoi */
+      const why = el("div",{class:"card", style:"margin-bottom:10px;"});
+      why.appendChild(el("p",{class:"label"},"Pourquoi"));
+      if(exp.motifsDelta.length){
+        why.appendChild(el("p",{style:"font-size:12px;font-weight:600;margin-top:6px;"},"Motifs de refus qui varient le plus"));
+        exp.motifsDelta.slice(0,5).forEach(m=> why.appendChild(el("p",{style:"font-size:12px;color:var(--muted2);"},
+          `${m.delta>0?"▲":"▼"} ${m.motif} : ${m.reference} → ${m.actuel}`)));
+      }
+      if(exp.prestations.length){
+        why.appendChild(el("p",{style:"font-size:12px;font-weight:600;margin-top:8px;"},"Prestations qui bougent (≥ 20 pt)"));
+        exp.prestations.forEach(p=> why.appendChild(el("p",{style:"font-size:12px;color:var(--muted2);"},
+          `${p.delta>0?"▲":"▼"} ${p.prestation} : ${(p.delta*100).toFixed(0)} pt`)));
+      }
+      if(exp.composants.length){
+        why.appendChild(el("p",{style:"font-size:12px;font-weight:600;margin-top:8px;"},"Composants modifiés depuis la référence"));
+        exp.composants.forEach(c=> why.appendChild(el("p",{style:"font-size:12px;color:var(--muted2);"}, "• "+c)));
+      }
+      const mu = exp.moduleUsage;
+      if(mu.casAvecModules){
+        const ids = Object.keys(mu.usage).sort((a,b)=> mu.usage[b]-mu.usage[a]);
+        const toujours = ids.filter(id=> mu.usage[id]===mu.casAvecModules);
+        const actifs = new Set(ids);
+        const jamais = (state.modules||[]).filter(m=> m.enabled && m.category==="MASTER_IMAGE" && !actifs.has(m.id));
+        why.appendChild(el("p",{style:"font-size:12px;font-weight:600;margin-top:8px;"},"Modules MASTER_IMAGE"));
+        why.appendChild(el("p",{style:"font-size:12px;color:var(--muted2);"}, `${toujours.length} toujours injecté(s) · ${ids.length} utilisé(s) au moins une fois · ${jamais.length} jamais utilisé(s)`));
+        if(jamais.length) why.appendChild(el("p",{style:"font-size:11px;color:var(--muted2);"}, "Jamais utilisés : "+jamais.map(m=>m.title).join(", ")));
+      }
+      if(!exp.motifsDelta.length && !exp.composants.length && !mu.casAvecModules)
+        why.appendChild(el("p",{style:"font-size:12px;color:var(--muted2);"},"Notation en cours : les explications apparaîtront dès que les cas seront notés."));
+      zone.appendChild(why);
+
+      /* Notation : liste des cas */
+      const head = el("div",{style:"display:flex;justify-content:space-between;align-items:center;margin:10px 0 6px;"},[
+        el("p",{class:"label", style:"margin:0;"}, `Cas (${run.cases.length})`),
+        el("button",{class:"btn-ghost", onclick:()=>{ benchUI.expert=!benchUI.expert; renderMain(); }}, benchUI.expert?"Mode expert ✓":"Mode expert"),
+      ]);
+      zone.appendChild(head);
+      run.cases.forEach(slot=>{
+        if(!slot.result) return;
+        const l=slot.testCase.labels, res=slot.result;
+        const note = (run.scores||{})[res.caseId];
+        const card = el("div",{class:"card", style:"margin-bottom:6px;padding:8px;"});
+        card.appendChild(el("p",{style:"font-size:13px;font-weight:600;"}, `${l.prestation} × ${l.platform}`));
+        card.appendChild(el("p",{style:"font-size:11px;color:var(--muted2);"},
+          `${res.status}${res.errors&&res.errors.length?" — "+String(res.errors[0]).slice(0,70):""} · ${(res.durationMs/1000).toFixed(1)} s${res.metrics&&res.metrics.totalCostUsd!=null?" · "+res.metrics.totalCostUsd.toFixed(4)+" $":""}`));
+        if(res.status==="ok"){
+          const noteRow = el("div",{style:"display:flex;gap:6px;margin-top:6px;flex-wrap:wrap;"});
+          Object.entries(BENCH_SCORE_STATUTS).forEach(([k,label])=>{
+            const active = note && note.statut===k;
+            noteRow.appendChild(el("button",{class: active?"btn-primary":"btn-ghost", style:"font-size:12px;padding:4px 8px;",
+              onclick: ()=> benchSetNote(run, res.caseId, k)}, label));
+          });
+          card.appendChild(noteRow);
+          if(note && note.statut!=="publiable"){
+            const motifsRow = el("div",{style:"display:flex;gap:4px;flex-wrap:wrap;margin-top:6px;"});
+            BENCH_REFUS_MOTIFS.forEach(m=>{
+              const on = (note.motifs||[]).includes(m);
+              motifsRow.appendChild(el("button",{class: on?"btn-secondary":"btn-ghost", style:"font-size:11px;padding:3px 6px;",
+                onclick: ()=> benchToggleMotif(run, res.caseId, m)}, m));
+            });
+            card.appendChild(motifsRow);
+          }
+        }
+        card.appendChild(el("button",{class:"btn-ghost", style:"margin-top:6px;font-size:12px;", onclick:()=>{ benchUI.caseId=res.caseId; renderMain(); }}, "Détail →"));
+        zone.appendChild(card);
+      });
+    }catch(e){ zone.innerHTML=""; zone.appendChild(el("p",{style:"color:var(--red);"},"Erreur : "+(e.message||e))); }
+  })();
+}
+
+async function benchSetNote(run, caseId, statut){
+  run.scores = run.scores || {};
+  const prev = run.scores[caseId] || {};
+  run.scores[caseId] = { statut, motifs: statut==="publiable" ? [] : (prev.motifs||[]), expert: prev.expert||null, scorerId:"human-rapide", notedAt:new Date().toISOString() };
+  await benchStorage().saveRun(run); benchUI.runCache = run; renderMain();
+}
+async function benchToggleMotif(run, caseId, motif){
+  run.scores = run.scores || {};
+  const s = run.scores[caseId]; if(!s) return;
+  const set = new Set(s.motifs||[]); set.has(motif) ? set.delete(motif) : set.add(motif);
+  s.motifs = [...set]; s.notedAt = new Date().toISOString();
+  await benchStorage().saveRun(run); benchUI.runCache = run; renderMain();
+}
+
+/* ---------- Niveau 3 : détail d'un cas (+ comparaison avec la référence) ---------- */
+function buildBenchCaseDetail(frag){
+  frag.appendChild(el("button",{class:"btn-ghost", style:"margin-bottom:8px;", onclick:()=>{ benchUI.caseId=null; renderMain(); }}, "← Tableau de bord"));
+  const zone = el("div",{}); frag.appendChild(zone);
+  (async ()=>{
+    try{
+      const run = benchUI.runCache || await benchStorage().getRun(benchUI.runId);
+      const slot = run.cases.find(c=> c.result && c.result.caseId===benchUI.caseId);
+      if(!slot){ zone.appendChild(el("p",{},"Cas introuvable.")); return; }
+      const res = slot.result, l = slot.testCase.labels;
+      zone.appendChild(el("p",{class:"label"}, `${l.prestation} × ${l.platform}`));
+
+      const showImage = async (container, storage, imageId, legende)=>{
+        if(!imageId){ container.appendChild(el("p",{style:"font-size:12px;color:var(--muted2);"}, legende+" : aucune image (mode Smoke)")); return; }
+        try{
+          const blob = await storage.getCaseImage(imageId);
+          if(!blob){ container.appendChild(el("p",{style:"font-size:12px;color:var(--muted2);"}, legende+" : image purgée")); return; }
+          const url = URL.createObjectURL(blob);
+          container.appendChild(el("p",{style:"font-size:11px;color:var(--muted2);margin-top:6px;"}, legende));
+          container.appendChild(el("img",{src:url, style:"width:100%;border-radius:8px;"}));
+        }catch(e){ container.appendChild(el("p",{style:"font-size:12px;color:var(--red);"}, legende+" : "+(e.message||e))); }
+      };
+
+      /* Comparaison A/B avec la même cellule du run de référence */
+      const ref = benchUI.refCache;
+      const refSlot = ref ? (ref.cases||[]).find(c=> c.result && c.testCase.labels.prestation===l.prestation && c.testCase.labels.platform===l.platform) : null;
+      const imgs = el("div",{}); zone.appendChild(imgs);
+      await showImage(imgs, benchStorage(), res.outputs && res.outputs.imageId, "Image A — ce run");
+      if(refSlot) await showImage(imgs, benchStorage(), refSlot.result.outputs && refSlot.result.outputs.imageId, "Image B — référence");
+
+      const bloc = (titre, contenu)=>{
+        const c = el("div",{class:"card", style:"margin-top:8px;"});
+        c.appendChild(el("p",{class:"label"}, titre));
+        c.appendChild(vfWrap(el("pre",{style:"font-size:11px;white-space:pre-wrap;"}, contenu)));
+        return c;
+      };
+      zone.appendChild(bloc("Prompt final envoyé à OpenAI (A)", (res.outputs && res.outputs.imagePrompt) || "—"));
+      if(refSlot) zone.appendChild(bloc("Prompt de la référence (B)", (refSlot.result.outputs && refSlot.result.outputs.imagePrompt) || "—"));
+      zone.appendChild(bloc("Brief", JSON.stringify(res.artifacts && res.artifacts.brief || {}, null, 1)));
+      zone.appendChild(bloc("Modules injectés", ((res.artifacts && res.artifacts.moduleIds) || []).join("\n") || "non archivé (run antérieur à B4)"));
+      zone.appendChild(bloc("Diagnostics", JSON.stringify(res.diagnostics || {}, null, 1)));
+      zone.appendChild(bloc("Métriques", JSON.stringify(res.metrics || {}, null, 1)));
+      if((res.errors||[]).length) zone.appendChild(bloc("Erreurs", res.errors.join("\n")));
+
+      /* Mode expert : grille détaillée facultative */
+      if(benchUI.expert && res.status==="ok"){
+        const note = (run.scores||{})[res.caseId] || {};
+        const card = el("div",{class:"card", style:"margin-top:8px;"});
+        card.appendChild(el("p",{class:"label"},"Mode expert — grille détaillée (facultative)"));
+        BENCH_EXPERT_CRITERES.forEach(crit=>{
+          const val = (note.expert && note.expert[crit]) || 5;
+          const row = el("div",{style:"display:flex;align-items:center;gap:8px;margin:4px 0;"});
+          row.appendChild(el("span",{style:"font-size:12px;flex:1;"}, crit.replace(/_/g," ")));
+          const input = el("input",{type:"range", min:"0", max:"10", value:String(val), style:"flex:2;"});
+          const out = el("span",{style:"font-size:12px;width:24px;"}, String(val));
+          input.addEventListener("input", e=>{ out.textContent = e.target.value; });
+          input.addEventListener("change", async e=>{
+            run.scores = run.scores || {}; run.scores[res.caseId] = run.scores[res.caseId] || { statut:"retravailler", motifs:[], scorerId:"human-rapide" };
+            const s = run.scores[res.caseId]; s.expert = s.expert || {}; s.expert[crit] = Number(e.target.value); s.notedAt = new Date().toISOString();
+            await benchStorage().saveRun(run); benchUI.runCache = run;
+          });
+          row.appendChild(input); row.appendChild(out);
+          card.appendChild(row);
+        });
+        zone.appendChild(card);
+      }
+    }catch(e){ zone.appendChild(el("p",{style:"color:var(--red);"},"Erreur : "+(e.message||e))); }
+  })();
+}
+
 function buildSettingsTab(){
   const frag = el("div",{});
 
@@ -7197,7 +7608,7 @@ function renderMain(){
   const builders = {
     accueil: buildAccueilTab, library: buildLibraryTab, editor: buildEditorTab, knowledge: buildKnowledgeTab,
     da: buildDaTab, styles: buildStylesTab, post: buildPostTab, calendar: buildCalendarTab, audit: buildAuditTab, genaudit: buildGenerationAuditTab, lab: buildLabTab, api: buildApiTab,
-    history: buildHistoryTab, settings: buildSettingsTab,
+    history: buildHistoryTab, settings: buildSettingsTab, bench: buildBenchTab,
   };
   try{
     normalizeState();
