@@ -2467,7 +2467,7 @@ function serializeBriefToPromptFallbackGroupe(brief, platform, aspectKey, isCamp
     ["Émotion", g.emotion],
   ].filter(([,v])=> String(v||"").trim()).map(([k,v])=> `${k} : ${s(v)}`).join(" ");
   const ligneContexte = [
-    ["Action", g.action], ["Décor", g.decor],
+    ["Idée visuelle", g.ideeVisuelle], ["Action", g.action], ["Décor", g.decor],
     ["Cadrage", [g.cadrage, g.pointDeVue].filter(Boolean).join(", ")],
     ["Lumière", [g.lumiere, g.elementOr].filter(Boolean).join(" ")],
     ["Niveau de luminosité", g.niveauLuminosite],
@@ -2930,6 +2930,21 @@ function localFallbackBrief(mission, prestation, platform, topic, allowed, typeC
 ============================================================ */
 async function buildFinalImagePrompt(brief, platform, aspectKey, isCampaign, opts){
   const blockingError = !!(opts && opts.blockingError);
+  /* EXPÉRIENCE experience2_prompt_direct (D1 uniquement pour l'instant, D2 non implémentée) —
+     branche additive, jamais empruntée par la production. Hypothèse testée : la reformulation
+     en prose par le Rédacteur DA fait-elle perdre une partie de la structure utile au modèle
+     d'image ? Ici, AUCUN Rédacteur n'est appelé — le prompt part directement du sérialiseur
+     déterministe groupé vers gpt-image-1. Réutilise serializeBriefToPromptFallbackGroupe (corrigé :
+     ideeVisuelle ajoutée) EXACTEMENT comme chemin principal — mêmes champs que ceux envoyés au
+     Rédacteur en variante A, aucune information en plus ni en moins, pour isoler une seule
+     variable : la présence ou non du Rédacteur. */
+  if(opts && opts.experimentalMode === "prompt_direct_D1" && !blockingError){
+    const direct = serializeBriefToPromptFallbackGroupe(brief, platform, aspectKey, isCampaign, "A");
+    return {
+      prompt: direct.prompt, daWriterUsed: false, daWriterFallbackReason: null,
+      instrumentation: { ...direct.instrumentation, variante: "D1", redacteurCourtCircuite: true },
+    };
+  }
   /* EXPÉRIENCE experience2_priorites (A/B) — branche additive, jamais empruntée par la production.
      "priorites_A" : regroupement visuel seul, 0 instruction ajoutée.
      "priorites_B" : même regroupement + une unique phrase de règle de priorité. */
@@ -6718,10 +6733,12 @@ registerBenchExecutor({
    Ce n'est PAS une fonction de production ni de génération : c'est uniquement l'emballage bench,
    à faible risque à factoriser. La seule variable entre A et B est experimentalMode. */
 function makePrioritesExecutor(variante){
-  const experimentalMode = variante==="B" ? "priorites_B" : "priorites_A";
+  const experimentalMode = variante==="D1" ? "prompt_direct_D1" : variante==="B" ? "priorites_B" : "priorites_A";
+  const idSuffix = variante==="D1" ? "prompt-direct-d1" : `priorites-${variante.toLowerCase()}`;
+  const labelSuffix = variante==="D1" ? "prompt direct D1 (sans Rédacteur)" : `priorités ${variante}`;
   return {
-    id: `creative-image-sdz-priorites-${variante.toLowerCase()}`,
-    label: `Moteur créatif SDZ (image) — expérience priorités ${variante}`,
+    id: `creative-image-sdz-${idSuffix}`,
+    label: `Moteur créatif SDZ (image) — expérience ${labelSuffix}`,
     estimateCost(testCase){ return 0.005; },
     async execute(testCase, ctx){
       const startedAt = new Date().toISOString(); const t0 = Date.now();
@@ -6803,6 +6820,7 @@ function makePrioritesExecutor(variante){
 }
 registerBenchExecutor(makePrioritesExecutor("A"));
 registerBenchExecutor(makePrioritesExecutor("B"));
+registerBenchExecutor(makePrioritesExecutor("D1"));
 
 /* ---- Métadonnées d'environnement : distinguer, des mois plus tard, une différence de code
    d'une différence de modèle, de provider ou d'environnement. */
@@ -8104,7 +8122,7 @@ function computePrioritesComparison(runExp, runBaseline){
     runExpId: runExp.runId, runBaselineId: runBaseline.runId,
     nbCasComparables: comp.length, nbCasTotal: rows.length, nbCasEchecTechnique: echecs.length,
     regroupementConfirmeSur: `${regroupementOk}/${comp.length}`,
-    instructionConfirmeeSur: variante==="B" ? `${instructionOk}/${comp.length}` : "n/a (variante A, aucune instruction)",
+    instructionConfirmeeSur: variante==="B" ? `${instructionOk}/${comp.length}` : "n/a (aucune instruction de priorité dans cette variante)",
     ameliores, stables, degrades,
     seuilMonumentalCorrigeSur: `${seuilCorrige}/${seuilBaseCount}`,
     profondeurCorrigeeSur: `${profCorrige}/${profBaseCount}`,
@@ -8118,7 +8136,8 @@ function renderPrioritesComparison(zone, comparison){
   const couleurs = { "amélioration nette":"var(--green)", "amélioration partielle":"var(--green)", "gain faible ou nul":"var(--muted2)", "dégradation":"var(--red)" };
   const couleur = estNonConcluant ? "var(--muted2)" : (couleurs[comparison.verdict] || "var(--red)");
   const card = el("div",{class:"card", style:`border-left:4px solid ${couleur};margin-top:10px;`});
-  card.appendChild(el("p",{class:"label"},`Comparaison automatique — experience2_priorites (variante ${comparison.variante})`));
+  const nomExperience = comparison.variante==="D1" ? "experience2_prompt_direct" : "experience2_priorites";
+  card.appendChild(el("p",{class:"label"},`Comparaison automatique — ${nomExperience} (variante ${comparison.variante})`));
   card.appendChild(el("p",{style:`font-size:16px;font-weight:700;color:${couleur};margin-top:4px;`}, comparison.verdict.toUpperCase()));
   card.appendChild(el("p",{style:"font-size:12px;color:var(--muted2);margin-top:2px;"},
     `Baseline : ${comparison.runBaselineId} · Expérience : ${comparison.runExpId} · ${comparison.nbCasComparables}/${comparison.nbCasTotal} cas exploitables`));
@@ -8168,6 +8187,7 @@ function buildSettingsTab(){
     el("option",{value:"standard_brief_complet"},"Standard — expérience brief_complet (mêmes 12 cas, plansVisuels réintégré)"),
     el("option",{value:"standard_priorites_a"},"Standard — expérience priorités A (regroupement seul, 0 instruction)"),
     el("option",{value:"standard_priorites_b"},"Standard — expérience priorités B (regroupement + règle de priorité)"),
+    el("option",{value:"standard_prompt_direct_d1"},"Standard — expérience prompt direct D1 (sans Rédacteur)"),
     el("option",{value:"complet"},"Complet — matrice entière, images (GOLDEN RUN, ~2-3 h, ~8-20 $)"),
   ]);
   frag.appendChild(benchModeSel);
@@ -8203,11 +8223,12 @@ function buildSettingsTab(){
         : mode==="standard_brief_complet" ? { ...buildSmokeSuite({ ...STANDARD_PRESET, executorId:"creative-image-sdz-brief-complet" }), suiteId:"standard-brief-complet_"+BENCH_TOPIC_BANK.version, mode:"standard", label:"Standard — expérience brief_complet" }
         : mode==="standard_priorites_a" ? { ...buildSmokeSuite({ ...STANDARD_PRESET, executorId:"creative-image-sdz-priorites-a" }), suiteId:"standard-priorites-a_"+BENCH_TOPIC_BANK.version, mode:"standard", label:"Standard — expérience priorités A" }
         : mode==="standard_priorites_b" ? { ...buildSmokeSuite({ ...STANDARD_PRESET, executorId:"creative-image-sdz-priorites-b" }), suiteId:"standard-priorites-b_"+BENCH_TOPIC_BANK.version, mode:"standard", label:"Standard — expérience priorités B" }
+        : mode==="standard_prompt_direct_d1" ? { ...buildSmokeSuite({ ...STANDARD_PRESET, executorId:"creative-image-sdz-prompt-direct-d1" }), suiteId:"standard-prompt-direct-d1_"+BENCH_TOPIC_BANK.version, mode:"standard", label:"Standard — expérience prompt direct D1" }
         : mode==="complet" ? { ...buildSmokeSuite(), suiteId:"complet_"+BENCH_TOPIC_BANK.version, mode:"complet", label:"Complet (Golden Run)" }
         : buildSmokeSuite();
       if(!resumeRunId && mode!=="smoke"){
         const estImage = suite.cases.length * 0.17; // qualité par défaut + analyse + contenu, ordre de grandeur
-        const modeLabel = mode==="complet" ? "GOLDEN RUN — matrice entière" : mode==="standard_brief_complet" ? "Run Standard — expérience brief_complet" : mode==="standard_priorites_a" ? "Run Standard — expérience priorités A" : mode==="standard_priorites_b" ? "Run Standard — expérience priorités B" : "Run Standard";
+        const modeLabel = mode==="complet" ? "GOLDEN RUN — matrice entière" : mode==="standard_brief_complet" ? "Run Standard — expérience brief_complet" : mode==="standard_priorites_a" ? "Run Standard — expérience priorités A" : mode==="standard_priorites_b" ? "Run Standard — expérience priorités B" : mode==="standard_prompt_direct_d1" ? "Run Standard — expérience prompt direct D1" : "Run Standard";
         if(!confirm(`${modeLabel} : ${suite.cases.length} générations d'images réelles.\nCoût estimé : ~${estImage.toFixed(2)} $ (mesuré précisément pendant le run).\nDurée : ${mode==="complet" ? "~2-3 h" : "~15-25 min"} — l'écran restera allumé (Wake Lock).\nLancer ?`)){ benchBtn.disabled=false; benchResumeBtn.disabled=false; return; }
       }
       const run = await runBenchSuite(suite, {
@@ -8230,7 +8251,7 @@ function buildSettingsTab(){
            avec la baseline Standard. Recherche la baseline la plus récente de suiteId
            "standard_"+version parmi les runs archivés (mode==="standard", status==="terminé").
            N'affecte aucun autre mode. */
-        if(mode==="standard_brief_complet" || mode==="standard_priorites_a" || mode==="standard_priorites_b"){
+        if(mode==="standard_brief_complet" || mode==="standard_priorites_a" || mode==="standard_priorites_b" || mode==="standard_prompt_direct_d1"){
           try{
             const storageForCompare = benchStorage();
             const candidats = (await storageForCompare.listRuns()).filter(r=> r.mode==="standard" && r.status==="terminé" && r.runId!==run.runId);
