@@ -6235,10 +6235,18 @@ function computeBriefCompletComparison(runComplet, runBaseline){
     const labels = cComplet.testCase.labels;
     const analyseComplet = cComplet.result?.diagnostics?.image?.analysis || null;
     const analyseBase = cBase?.result?.diagnostics?.image?.analysis || null;
+    /* CORRECTIF : un cas en échec technique (status !== "ok", ou pas d'analyse visuelle produite,
+       ex. "Failed to fetch" réseau) ne doit JAMAIS être traité comme "0 mismatch" — ce serait
+       compter un crash comme une amélioration parfaite. Un tel cas est explicitement EXCLU du
+       calcul et signalé à part (echecTechnique: true), jamais mélangé aux deltas. */
+    const echecComplet = !cComplet.result || cComplet.result.status!=="ok" || !analyseComplet;
+    const echecBaseline = !cBase || !cBase.result || cBase.result.status!=="ok" || !analyseBase;
     const mismComplet = (analyseComplet && analyseComplet.briefMismatch) || [];
     const mismBase = (analyseBase && analyseBase.briefMismatch) || [];
     return {
-      caseId: id, prestation: labels.prestation, platform: labels.platform, trouveDansBaseline: !!cBase,
+      caseId: id, prestation: labels.prestation, platform: labels.platform,
+      trouveDansBaseline: !!cBase, echecTechnique: echecComplet || echecBaseline,
+      echecDetail: echecComplet ? "brief_complet : "+((cComplet.result && cComplet.result.errors && cComplet.result.errors[0]) || "pas d'analyse visuelle") : (echecBaseline ? "baseline : cas non exploitable" : null),
       baseline: {
         mismatchCount: mismBase.length, mismatchList: mismBase,
         seuilMismatch: kw(mismBase, ["seuil","monument"]),
@@ -6250,10 +6258,13 @@ function computeBriefCompletComparison(runComplet, runBaseline){
         profondeurMismatch: kw(mismComplet, ["plan ","profondeur","arrière-plan","premier plan","flou"]),
         transmissionCheck: cComplet.result?.diagnostics?.transmissionCheck || null,
       },
-      delta: mismComplet.length - mismBase.length,
+      delta: (echecComplet || echecBaseline) ? null : mismComplet.length - mismBase.length,
     };
   });
-  const comp = rows.filter(r=> r.trouveDansBaseline);
+  /* "comp" = cas réellement exploitables des DEUX côtés. Les échecs techniques ne comptent
+     JAMAIS dans ameliores/stables/degrades, quelle que soit leur cause. */
+  const comp = rows.filter(r=> r.trouveDansBaseline && !r.echecTechnique);
+  const echecs = rows.filter(r=> r.echecTechnique);
   const ameliores = comp.filter(r=> r.delta<0).length;
   const stables = comp.filter(r=> r.delta===0).length;
   const degrades = comp.filter(r=> r.delta>0).length;
@@ -6262,8 +6273,9 @@ function computeBriefCompletComparison(runComplet, runBaseline){
   const profBaseCount = comp.filter(r=> r.baseline.profondeurMismatch).length;
   const profCorrige = comp.filter(r=> r.baseline.profondeurMismatch && !r.briefComplet.profondeurMismatch).length;
   const transmissionOk = comp.filter(r=> r.briefComplet.transmissionCheck && r.briefComplet.transmissionCheck.plansVisuelsTransmis).length;
-  const verdict = comp.length===0 ? "non concluant — baseline introuvable ou aucun cas commun"
-    : transmissionOk < comp.length ? "invalide — plansVisuels non transmis sur au moins un cas (vérifier avant d'interpréter)"
+  const verdict = echecs.length > 0 ? `non concluant — ${echecs.length}/${rows.length} cas en échec technique, exclus du calcul (voir echecs). Relancer pour obtenir un échantillon complet.`
+    : comp.length===0 ? "non concluant — baseline introuvable ou aucun cas commun"
+    : transmissionOk < comp.length ? "invalide — plansVisuels non transmis sur au moins un cas exploitable (vérifier avant d'interpréter)"
     : ameliores > degrades && ameliores >= Math.ceil(comp.length*0.5) ? "amélioration nette"
     : ameliores > degrades ? "amélioration partielle"
     : ameliores === degrades ? "gain faible ou nul"
@@ -6271,12 +6283,12 @@ function computeBriefCompletComparison(runComplet, runBaseline){
   return {
     generatedAt: new Date().toISOString(),
     runCompletId: runComplet.runId, runBaselineId: runBaseline.runId,
-    nbCasComparables: comp.length, nbCasTotal: rows.length,
+    nbCasComparables: comp.length, nbCasTotal: rows.length, nbCasEchecTechnique: echecs.length,
     transmissionConfirmeeSur: `${transmissionOk}/${comp.length}`,
     ameliores, stables, degrades,
     seuilMonumentalCorrigeSur: `${seuilCorrige}/${seuilBaseCount}`,
     profondeurCorrigeeSur: `${profCorrige}/${profBaseCount}`,
-    verdict, rows,
+    verdict, rows, echecs,
   };
 }
 
@@ -7743,35 +7755,47 @@ function renderBriefCompletComparison(zone, comparison){
     "amélioration nette":"var(--green)", "amélioration partielle":"var(--green)",
     "gain faible ou nul":"var(--muted2)", "dégradation":"var(--red)",
   };
-  const couleur = couleurs[comparison.verdict] || "var(--red)";
+  const estNonConcluant = comparison.verdict.startsWith("non concluant") || comparison.verdict.startsWith("invalide");
+  const couleur = estNonConcluant ? "var(--muted2)" : (couleurs[comparison.verdict] || "var(--red)");
   const card = el("div",{class:"card", style:`border-left:4px solid ${couleur};margin-top:10px;`});
   card.appendChild(el("p",{class:"label"},"Comparaison automatique — experience2_brief_complet"));
   card.appendChild(el("p",{style:`font-size:16px;font-weight:700;color:${couleur};margin-top:4px;`}, comparison.verdict.toUpperCase()));
   card.appendChild(el("p",{style:"font-size:12px;color:var(--muted2);margin-top:2px;"},
-    `Baseline : ${comparison.runBaselineId} · Expérience : ${comparison.runCompletId} · ${comparison.nbCasComparables}/${comparison.nbCasTotal} cas comparables`));
-  card.appendChild(el("p",{style:"font-size:13px;margin-top:8px;"},
-    `Transmission plansVisuels confirmée sur ${comparison.transmissionConfirmeeSur} cas.`));
-  card.appendChild(el("p",{style:"font-size:13px;"},
-    `briefMismatch : ${comparison.ameliores} amélioré(s) · ${comparison.stables} stable(s) · ${comparison.degrades} dégradé(s).`));
-  card.appendChild(el("p",{style:"font-size:13px;"},
-    `Seuil monumental corrigé sur ${comparison.seuilMonumentalCorrigeSur} cas où il manquait dans la baseline.`));
-  card.appendChild(el("p",{style:"font-size:13px;"},
-    `Profondeur / plans corrigée sur ${comparison.profondeurCorrigeeSur} cas où elle manquait dans la baseline.`));
+    `Baseline : ${comparison.runBaselineId} · Expérience : ${comparison.runCompletId} · ${comparison.nbCasComparables}/${comparison.nbCasTotal} cas exploitables`));
+  if(comparison.nbCasEchecTechnique>0){
+    card.appendChild(el("p",{style:"font-size:13px;color:var(--red);margin-top:6px;font-weight:600;"},
+      `${comparison.nbCasEchecTechnique} cas en échec technique — EXCLUS du calcul (jamais comptés comme "0 mismatch").`));
+  }
+  if(comparison.nbCasComparables>0){
+    card.appendChild(el("p",{style:"font-size:13px;margin-top:8px;"},
+      `Transmission plansVisuels confirmée sur ${comparison.transmissionConfirmeeSur} cas exploitables.`));
+    card.appendChild(el("p",{style:"font-size:13px;"},
+      `briefMismatch (sur cas exploitables uniquement) : ${comparison.ameliores} amélioré(s) · ${comparison.stables} stable(s) · ${comparison.degrades} dégradé(s).`));
+    card.appendChild(el("p",{style:"font-size:13px;"},
+      `Seuil monumental corrigé sur ${comparison.seuilMonumentalCorrigeSur} cas où il manquait dans la baseline.`));
+    card.appendChild(el("p",{style:"font-size:13px;"},
+      `Profondeur / plans corrigée sur ${comparison.profondeurCorrigeeSur} cas où elle manquait dans la baseline.`));
+  }
 
-  const detHead = el("p",{class:"label", style:"margin-top:10px;"},"Détail par cas");
+  if(comparison.echecs.length){
+    const echecHead = el("p",{class:"label", style:"margin-top:10px;color:var(--red);"},"Cas en échec technique (exclus)");
+    card.appendChild(echecHead);
+    comparison.echecs.forEach(r=>{
+      card.appendChild(el("p",{style:"font-size:12px;border-bottom:1px solid var(--border);padding:4px 0;"},
+        `${r.prestation} × ${r.platform} — ${r.echecDetail}`));
+    });
+  }
+
+  const detHead = el("p",{class:"label", style:"margin-top:10px;"},"Détail des cas exploitables");
   card.appendChild(detHead);
-  comparison.rows.forEach(r=>{
+  comparison.rows.filter(r=> !r.echecTechnique && r.trouveDansBaseline).forEach(r=>{
     const rowCard = el("div",{style:"border-bottom:1px solid var(--border);padding:6px 0;"});
     rowCard.appendChild(el("p",{style:"font-size:13px;font-weight:600;"}, `${r.prestation} × ${r.platform}`));
-    if(!r.trouveDansBaseline){
-      rowCard.appendChild(el("p",{style:"font-size:12px;color:var(--muted2);"}, "Pas de cas correspondant dans la baseline — ignoré du calcul."));
-    } else {
-      rowCard.appendChild(el("p",{style:"font-size:12px;"}, `briefMismatch : ${r.baseline.mismatchCount} → ${r.briefComplet.mismatchCount} (${r.delta<=0?"":"+"}${r.delta})`));
-      rowCard.appendChild(el("p",{style:"font-size:11px;color:var(--muted2);"},
-        `Transmission : plansVisuels ${r.briefComplet.transmissionCheck?.plansVisuelsTransmis?"✓":"✗"} · ideeVisuelle ${r.briefComplet.transmissionCheck?.ideeVisuelleTransmise?"✓":"✗"} · niveauLuminosite ${r.briefComplet.transmissionCheck?.niveauLuminositeTransmis?"✓":"✗"}`));
-      if(r.briefComplet.mismatchList.length){
-        rowCard.appendChild(el("p",{style:"font-size:11px;color:var(--muted2);margin-top:2px;"}, "Mismatch restants (brief_complet) : "+r.briefComplet.mismatchList.join(" · ")));
-      }
+    rowCard.appendChild(el("p",{style:"font-size:12px;"}, `briefMismatch : ${r.baseline.mismatchCount} → ${r.briefComplet.mismatchCount} (${r.delta<=0?"":"+"}${r.delta})`));
+    rowCard.appendChild(el("p",{style:"font-size:11px;color:var(--muted2);"},
+      `Transmission : plansVisuels ${r.briefComplet.transmissionCheck?.plansVisuelsTransmis?"✓":"✗"} · ideeVisuelle ${r.briefComplet.transmissionCheck?.ideeVisuelleTransmise?"✓":"✗"} · niveauLuminosite ${r.briefComplet.transmissionCheck?.niveauLuminositeTransmis?"✓":"✗"}`));
+    if(r.briefComplet.mismatchList.length){
+      rowCard.appendChild(el("p",{style:"font-size:11px;color:var(--muted2);margin-top:2px;"}, "Mismatch restants (brief_complet) : "+r.briefComplet.mismatchList.join(" · ")));
     }
     card.appendChild(rowCard);
   });
