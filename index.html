@@ -2369,6 +2369,119 @@ function computeCompletTransmissionFlags(exportable){
   };
 }
 
+/* ============================================================
+   EXPÉRIENCE experience2_priorites (variantes A et B) — NE JAMAIS APPELER DEPUIS LA PRODUCTION.
+   Hypothèse testée : le simple REGROUPEMENT visuel des champs déjà transmis (aucune donnée
+   nouvelle, aucun mot changé) en deux blocs OBLIGATOIRE / CONTEXTE change-t-il le comportement
+   du modèle (variante A) ? Et si non, une unique phrase de règle de priorité le fait-elle
+   (variante B) ? Les 5 champs "OBLIGATOIRE" ne sont PAS un jugement arbitraire : ce sont
+   exactement les 5 champs déjà considérés comme critiques par narrativeMissingElements()
+   (L2375) — une hiérarchie qui existe déjà dans le moteur, simplement rendue explicite ici.
+   AUCUN champ n'est ajouté ou retiré par rapport à extractExportableBriefFields (donc
+   plansVisuels reste absent — cette piste a été testée et invalidée séparément). */
+function extractExportableBriefFieldsGroupe(brief){
+  const carac = String(brief.caracteristiquePrestationVisible||"").trim();
+  const caracUtile = carac && !/^aucune prestation précise\.?$/i.test(carac);
+  const obligatoire = {
+    sujetPrincipal: brief.sujetPrincipal,
+    symbolePrincipal: brief.symbolePrincipal,
+    emotion: brief.emotion,
+    pointDeTransformation: brief.pointDeTransformation,
+    ...(caracUtile ? { caracteristiquePrestationVisible: carac } : {}),
+  };
+  const contexte = {
+    typeCreation: brief.typeCreation,
+    ideeVisuelle: brief.ideeVisuelle,
+    action: brief.action,
+    decor: brief.decor,
+    cadrage: brief.cadrage,
+    pointDeVue: brief.pointDeVue,
+    lumiere: brief.lumiere,
+    niveauLuminosite: brief.niveauLuminosite,
+    elementOr: brief.elementOr,
+  };
+  return { obligatoire, contexte };
+}
+
+/* Copie intégrale de rewriteBriefAsNarrative. Seule différence : présentation du brief en deux
+   blocs étiquetés (voir extractExportableBriefFieldsGroupe). variante==="B" ajoute UNE phrase de
+   règle de priorité, en plus, jamais en remplacement — variante "A" n'ajoute STRICTEMENT rien.
+   narrativeMissingElements reste inchangée, appliquée sur les mêmes 5 champs "obligatoire".
+   NE JAMAIS APPELER DEPUIS LA PRODUCTION. */
+async function rewriteBriefAsNarrativeGroupe(brief, variante){
+  const groupe = extractExportableBriefFieldsGroupe(brief);
+  const exportableFlat = { ...groupe.obligatoire, ...groupe.contexte };
+  const reglePriorite = "\n\nRÈGLE DE PRIORITÉ : les éléments du groupe OBLIGATOIRE doivent toujours être présents dans l'image. Si un compromis est nécessaire, réduis le CONTEXTE avant de sacrifier un élément OBLIGATOIRE.";
+  const systemPrompt = DA_WRITER_SYSTEM_PROMPT;
+  const basePrompt = `Brief structuré à transformer en note de direction artistique. Les champs sont organisés en deux groupes :\nOBLIGATOIRE :\n${JSON.stringify(groupe.obligatoire, null, 2)}\n\nCONTEXTE :\n${JSON.stringify(groupe.contexte, null, 2)}`;
+  const userPrompt = basePrompt + (variante==="B" ? reglePriorite : "");
+  const instructionPrioriteIncluse = variante==="B";
+
+  const callOnce = async (extraInstruction)=>{
+    const res = await fetch("/.netlify/functions/generate-text", {
+      method:"POST", headers:{ "Content-Type":"application/json" },
+      body: JSON.stringify({
+        kind: "openai-compatible", model: DA_WRITER_MODEL, baseUrl: "https://api.openai.com/v1",
+        systemPrompt, userPrompt: extraInstruction ? `${userPrompt}\n\n${extraInstruction}` : userPrompt,
+        reasoning_effort: "minimal",
+      }),
+    });
+    const contentType = res.headers.get("content-type")||"";
+    if(!contentType.includes("application/json")) throw new Error(`Rédacteur DA (priorites ${variante}) : réponse non-JSON (statut ${res.status}).`);
+    const data = await res.json();
+    if(!res.ok || data.error) throw new Error(data.error || `Rédacteur DA (priorites ${variante}) : erreur ${res.status}`);
+    return { text: String(data.text||"").trim(), usage: data.usage || null };
+  };
+
+  const sumUsage = (a,b)=> (!a && !b) ? null : ({ promptTokens: (a?.prompt_tokens??a?.promptTokens??0)+(b?.prompt_tokens??b?.promptTokens??0), completionTokens: (a?.completion_tokens??a?.completionTokens??0)+(b?.completion_tokens??b?.completionTokens??0), model: DA_WRITER_MODEL });
+  let call1 = await callOnce();
+  let text = call1.text; let usageAcc = call1.usage;
+  let missing = narrativeMissingElements(text, exportableFlat);
+  const tooLong = text.split(/\s+/).length > DA_WRITER_MAX_WORDS;
+  if(missing.length || tooLong){
+    const correction = `CORRECTION OBLIGATOIRE : ta précédente version ${tooLong?`dépassait ${DA_WRITER_MAX_WORDS} mots`:""}${tooLong&&missing.length?" et ":""}${missing.length?`omettait ces éléments du brief : ${missing.join(", ")}`:""}. Réécris la note en respectant strictement toutes les règles, en 180 à 250 mots, sans rien inventer.`;
+    const call2 = await callOnce(correction);
+    text = call2.text; usageAcc = sumUsage(usageAcc, call2.usage) || usageAcc;
+    missing = narrativeMissingElements(text, exportableFlat);
+    if(missing.length) throw new Error(`Éléments du brief absents après relance : ${missing.join(", ")}`);
+    if(text.split(/\s+/).length > DA_WRITER_MAX_WORDS) throw new Error(`Texte trop long après relance (> ${DA_WRITER_MAX_WORDS} mots)`);
+  }
+  return {
+    text,
+    usage: usageAcc ? { promptTokens: usageAcc.prompt_tokens ?? usageAcc.promptTokens ?? null, completionTokens: usageAcc.completion_tokens ?? usageAcc.completionTokens ?? null, model: DA_WRITER_MODEL } : null,
+    instrumentation: { variante, regroupementApplique: true, instructionPrioriteIncluse },
+  };
+}
+
+/* Copie intégrale de serializeBriefToPromptFallback, présentation en deux blocs (repli, en cas
+   d'échec du Rédacteur). NE JAMAIS APPELER DEPUIS LA PRODUCTION. */
+function serializeBriefToPromptFallbackGroupe(brief, platform, aspectKey, isCampaign, variante){
+  const s = v => { const t = String(v||"").trim(); return t ? (/[.!?…]$/.test(t) ? t : t+".") : ""; };
+  const groupe = extractExportableBriefFieldsGroupe(brief);
+  const g = { ...groupe.obligatoire, ...groupe.contexte };
+  const ligneObligatoire = [
+    ["Sujet", g.sujetPrincipal],
+    ["Symbole central relié au sujet par un unique axe de lumière dorée", g.symbolePrincipal],
+    ["Instant unique de la scène", g.pointDeTransformation],
+    ...(g.caracteristiquePrestationVisible ? [["Cause visible du symbole", g.caracteristiquePrestationVisible]] : []),
+    ["Émotion", g.emotion],
+  ].filter(([,v])=> String(v||"").trim()).map(([k,v])=> `${k} : ${s(v)}`).join(" ");
+  const ligneContexte = [
+    ["Action", g.action], ["Décor", g.decor],
+    ["Cadrage", [g.cadrage, g.pointDeVue].filter(Boolean).join(", ")],
+    ["Lumière", [g.lumiere, g.elementOr].filter(Boolean).join(" ")],
+    ["Niveau de luminosité", g.niveauLuminosite],
+  ].filter(([,v])=> String(v||"").trim()).map(([k,v])=> `${k} : ${s(v)}`).join(" ");
+  const reglePriorite = variante==="B" ? " RÈGLE DE PRIORITÉ : les éléments obligatoires ci-dessus priment toujours sur le contexte ci-dessous." : "";
+  const corps = `OBLIGATOIRE — ${ligneObligatoire}${reglePriorite}\n\nCONTEXTE — ${ligneContexte}`;
+  const prompt = cleanPrompt(`${buildPromptHeader(brief, platform, aspectKey, isCampaign)}
+
+${corps}
+
+${buildFixedGuardrailBlocks(brief, platform)}`);
+  return { prompt, instrumentation: { variante, regroupementApplique: true, instructionPrioriteIncluse: variante==="B" } };
+}
+
 /* Contrôle de fidélité déterministe : pour chaque élément critique, au moins un mot significatif
    (≥5 caractères, normalisé) doit survivre dans le texte du Rédacteur. Retourne la liste des
    éléments manquants (vide = texte fidèle). Réutilise la normalisation éprouvée des prestations. */
@@ -2817,6 +2930,31 @@ function localFallbackBrief(mission, prestation, platform, topic, allowed, typeC
 ============================================================ */
 async function buildFinalImagePrompt(brief, platform, aspectKey, isCampaign, opts){
   const blockingError = !!(opts && opts.blockingError);
+  /* EXPÉRIENCE experience2_priorites (A/B) — branche additive, jamais empruntée par la production.
+     "priorites_A" : regroupement visuel seul, 0 instruction ajoutée.
+     "priorites_B" : même regroupement + une unique phrase de règle de priorité. */
+  if(opts && (opts.experimentalMode === "priorites_A" || opts.experimentalMode === "priorites_B") && !blockingError){
+    const variante = opts.experimentalMode === "priorites_B" ? "B" : "A";
+    if(USE_DA_WRITER){
+      try{
+        const narrative = await rewriteBriefAsNarrativeGroupe(brief, variante);
+        return {
+          prompt: cleanPrompt(`${buildPromptHeader(brief, platform, aspectKey, isCampaign)}
+
+${narrative.text}
+
+${buildFixedGuardrailBlocks(brief, platform)}`),
+          daWriterUsed: true, daWriterFallbackReason: null, redacteurUsage: narrative.usage || null,
+          instrumentation: narrative.instrumentation,
+        };
+      }catch(err){
+        const fb = serializeBriefToPromptFallbackGroupe(brief, platform, aspectKey, isCampaign, variante);
+        return { prompt: fb.prompt, daWriterUsed: false, daWriterFallbackReason: String(err.message||err), instrumentation: fb.instrumentation };
+      }
+    }
+    const fb = serializeBriefToPromptFallbackGroupe(brief, platform, aspectKey, isCampaign, variante);
+    return { prompt: fb.prompt, daWriterUsed: false, daWriterFallbackReason: null, instrumentation: fb.instrumentation };
+  }
   /* EXPÉRIENCE experience2_brief_complet — branche additive, jamais empruntée par la production
      (aucun appelant de production ne fixe opts.experimentalMode). Les branches USE_DA_WRITER /
      repli ci-dessous restent strictement inchangées et inatteignables depuis cette branche. */
@@ -2914,6 +3052,7 @@ async function prepareCreativeBrief(inputs){
   const daWriterUsed = built.daWriterUsed;
   const daWriterFallbackReason = built.daWriterFallbackReason;
   const transmissionCheck = built.transmissionCheck || null; // EXPÉRIENCE brief_complet uniquement — null en production
+  const instrumentation = built.instrumentation || null; // EXPÉRIENCE priorites A/B uniquement — null en production
   /* usage : tokens RÉELS remontés par le serveur (null si le provider ne les expose pas) —
      jamais confondus avec une estimation. */
   const usage = Object.freeze({ planner: plannerUsage || null, redacteur: built.redacteurUsage || null });
@@ -2930,7 +3069,7 @@ async function prepareCreativeBrief(inputs){
   return {
     phase: "prepared", inputs, allowed, exclusions, brief, briefCorrected, plannerError,
     usedLocalBriefFallback, referenceSelections, referenceError, imagePrompt, steps, blockingError,
-    daWriterUsed, daWriterFallbackReason, usage, transmissionCheck,
+    daWriterUsed, daWriterFallbackReason, usage, transmissionCheck, instrumentation,
     paquetOrchestrateur, validatorReport,
   };
 }
@@ -6573,6 +6712,98 @@ registerBenchExecutor({
   },
 });
 
+/* ============================================================
+   EXPÉRIENCE experience2_priorites (A/B) — factory d'executor bench, pour éviter de dupliquer
+   deux fois ~90 lignes de câblage bench identique (imageMode, polling, coûts, artifacts...).
+   Ce n'est PAS une fonction de production ni de génération : c'est uniquement l'emballage bench,
+   à faible risque à factoriser. La seule variable entre A et B est experimentalMode. */
+function makePrioritesExecutor(variante){
+  const experimentalMode = variante==="B" ? "priorites_B" : "priorites_A";
+  return {
+    id: `creative-image-sdz-priorites-${variante.toLowerCase()}`,
+    label: `Moteur créatif SDZ (image) — expérience priorités ${variante}`,
+    estimateCost(testCase){ return 0.005; },
+    async execute(testCase, ctx){
+      const startedAt = new Date().toISOString(); const t0 = Date.now();
+      const p = testCase.params;
+      const imageMode = ctx && (ctx.mode==="standard" || ctx.mode==="complet");
+      try{
+        const prepared = await prepareCreativeBrief({
+          mission: p.mission, platform: p.platform, prestation: p.prestation, topic: p.topic,
+          aspectKey: p.aspectKey, size: p.size, isCampaign: false,
+          registres: [...(p.registres||[])], benchNeutralHistory: true,
+          experimentalMode,
+        });
+        let phaseB = null, finalized = null, imageId = null, imageCostUsd = null;
+        if(imageMode && !prepared.blockingError){
+          const pending = ctx && ctx.slotState && ctx.slotState.pendingJobId;
+          if(pending){
+            try{
+              const resumed = await pollImageJob(pending, ctx.onStatus||null, null);
+              phaseB = { ...prepared, ...resumed, logoSentAsReference: false, phase:"completed", ok:true, analysis:null, analysisError:"non ré-analysé (job repris)", content:null, textError:null };
+            }catch(e){ /* job perdu/expiré : on relance normalement */ }
+          }
+          if(!phaseB){
+            const preparedWithHook = { ...prepared, onImageJobCreated: (jobId)=>{ if(ctx && ctx.savePartial) ctx.savePartial({ pendingJobId: jobId }); } };
+            phaseB = await confirmAndGenerateImage(preparedWithHook, ctx && ctx.onStatus || null, null);
+          }
+          if(ctx && ctx.savePartial) await ctx.savePartial({ pendingJobId: null });
+          finalized = await finalizeGeneratedImage(phaseB);
+          imageId = `${(ctx&&ctx.runId)||"run"}_${testCase.caseId}`;
+          const blob = await (await fetch(finalized.dataUrl)).blob();
+          await ctx.storage.saveCaseImage(imageId, blob);
+          imageCostUsd = computeMeasuredImageCost(phaseB.imageUsage, "gpt-image-1");
+        }
+        const vr = prepared.validatorReport || {};
+        const u = prepared.usage || {};
+        const plannerCost = computeMeasuredTextCost(u.planner);
+        const redacteurCost = computeMeasuredTextCost(u.redacteur);
+        const textCostUsd = (plannerCost==null && redacteurCost==null) ? null : +( (plannerCost||0) + (redacteurCost||0) ).toFixed(6);
+        const promptTokens = (u.planner?.promptTokens||0) + (u.redacteur?.promptTokens||0);
+        const completionTokens = (u.planner?.completionTokens||0) + (u.redacteur?.completionTokens||0);
+        return {
+          resultSchemaVersion: 2,
+          caseId: testCase.caseId, status: prepared.blockingError ? "erreur" : "ok",
+          startedAt, durationMs: Date.now()-t0,
+          inputs: JSON.parse(JSON.stringify(testCase.params)),
+          outputs: { imagePrompt: prepared.imagePrompt, imageId, texteGenere: phaseB ? (phaseB.content||null) : null },
+          metrics: {
+            promptTokens: (u.planner||u.redacteur) ? promptTokens : null,
+            completionTokens: (u.planner||u.redacteur) ? completionTokens : null,
+            textCostUsd, imageCostUsd,
+            totalCostUsd: (textCostUsd==null && imageCostUsd==null) ? null : +(((textCostUsd||0)+(imageCostUsd||0)).toFixed(6)),
+            costEstimated: 0.005, priceTableVersion: BENCH_PRICE_TABLE.version,
+            promptLength: (prepared.imagePrompt||"").length,
+            validatorContradictions: (vr.contradictions||[]).length,
+            validatorDoublons: (vr.doublons||[]).length,
+            validatorDecisionsAbsentes: (vr.decisionsAbsentes||[]).length,
+            daWriterFallback: prepared.daWriterUsed ? 0 : 1,
+          },
+          artifacts: { brief: prepared.brief, moduleIds: (prepared.steps && prepared.steps.moduleIds) || null,
+                       archetypesAutorises: (prepared.steps && prepared.steps.allowed) || null },
+          diagnostics: {
+            daWriterUsed: !!prepared.daWriterUsed, daWriterFallbackReason: prepared.daWriterFallbackReason || null,
+            usedLocalBriefFallback: !!prepared.usedLocalBriefFallback, plannerError: prepared.plannerError || null,
+            validator: { contradictions: vr.contradictions||[], doublons: vr.doublons||[], decisionsAbsentes: vr.decisionsAbsentes||[], preparationT3: (vr.preparationT3||[]).length, longueur: vr.longueur||0 },
+            orchestrateur: prepared.paquetOrchestrateur ? prepared.paquetOrchestrateur.rapportFusion : null,
+            usage: u,
+            image: phaseB ? { usedReference: !!phaseB.usedReference, referenceFallbackReason: phaseB.referenceFallbackReason||null, logoInScene: finalized ? finalized.logoInScene : null, logoApplied: finalized ? finalized.logoApplied : null, analysis: phaseB.analysis||null, analysisError: phaseB.analysisError||null, imageUsage: phaseB.imageUsage||null } : null,
+            instrumentation: prepared.instrumentation || null,
+          },
+          errors: prepared.blockingError ? [prepared.blockingError] : [],
+        };
+      }catch(err){
+        return { resultSchemaVersion: 2, caseId: testCase.caseId, status:"erreur", startedAt, durationMs: Date.now()-t0,
+          inputs: JSON.parse(JSON.stringify(testCase.params)), outputs: null,
+          metrics: { totalCostUsd: null, costEstimated: 0 }, artifacts: null, diagnostics: null,
+          errors: [String(err.message||err)] };
+      }
+    },
+  };
+}
+registerBenchExecutor(makePrioritesExecutor("A"));
+registerBenchExecutor(makePrioritesExecutor("B"));
+
 /* ---- Métadonnées d'environnement : distinguer, des mois plus tard, une différence de code
    d'une différence de modèle, de provider ou d'environnement. */
 function collectBenchEnvironment(){
@@ -7813,6 +8044,118 @@ function renderBriefCompletComparison(zone, comparison){
   zone.appendChild(card);
 }
 
+/* ============================================================
+   EXPÉRIENCE experience2_priorites (A/B) — comparaison automatique, même discipline que
+   computeBriefCompletComparison : les cas en échec technique sont EXCLUS du calcul, jamais
+   comptés comme "0 mismatch". Preuve de transmission : regroupementApplique (A et B) et
+   instructionPrioriteIncluse (B uniquement). */
+function computePrioritesComparison(runExp, runBaseline){
+  const kw = (list, words) => (list||[]).some(m => words.some(w=> String(m||"").toLowerCase().includes(w)));
+  const byId = new Map((runBaseline.cases||[]).map(c=> [c.result && c.result.caseId, c]));
+  const rows = (runExp.cases||[]).map(cExp=>{
+    const id = cExp.result && cExp.result.caseId;
+    const cBase = byId.get(id);
+    const labels = cExp.testCase.labels;
+    const analyseExp = cExp.result?.diagnostics?.image?.analysis || null;
+    const analyseBase = cBase?.result?.diagnostics?.image?.analysis || null;
+    const echecExp = !cExp.result || cExp.result.status!=="ok" || !analyseExp;
+    const echecBaseline = !cBase || !cBase.result || cBase.result.status!=="ok" || !analyseBase;
+    const mismExp = (analyseExp && analyseExp.briefMismatch) || [];
+    const mismBase = (analyseBase && analyseBase.briefMismatch) || [];
+    return {
+      caseId: id, prestation: labels.prestation, platform: labels.platform,
+      trouveDansBaseline: !!cBase, echecTechnique: echecExp || echecBaseline,
+      echecDetail: echecExp ? "expérience : "+((cExp.result && cExp.result.errors && cExp.result.errors[0]) || "pas d'analyse visuelle") : (echecBaseline ? "baseline : cas non exploitable" : null),
+      baseline: {
+        mismatchCount: mismBase.length, mismatchList: mismBase,
+        seuilMismatch: kw(mismBase, ["seuil","monument"]),
+        profondeurMismatch: kw(mismBase, ["plan ","profondeur","arrière-plan","premier plan","flou"]),
+      },
+      experience: {
+        mismatchCount: mismExp.length, mismatchList: mismExp,
+        seuilMismatch: kw(mismExp, ["seuil","monument"]),
+        profondeurMismatch: kw(mismExp, ["plan ","profondeur","arrière-plan","premier plan","flou"]),
+        instrumentation: cExp.result?.diagnostics?.instrumentation || null,
+      },
+      delta: (echecExp || echecBaseline) ? null : mismExp.length - mismBase.length,
+    };
+  });
+  const comp = rows.filter(r=> r.trouveDansBaseline && !r.echecTechnique);
+  const echecs = rows.filter(r=> r.echecTechnique);
+  const ameliores = comp.filter(r=> r.delta<0).length;
+  const stables = comp.filter(r=> r.delta===0).length;
+  const degrades = comp.filter(r=> r.delta>0).length;
+  const seuilBaseCount = comp.filter(r=> r.baseline.seuilMismatch).length;
+  const seuilCorrige = comp.filter(r=> r.baseline.seuilMismatch && !r.experience.seuilMismatch).length;
+  const profBaseCount = comp.filter(r=> r.baseline.profondeurMismatch).length;
+  const profCorrige = comp.filter(r=> r.baseline.profondeurMismatch && !r.experience.profondeurMismatch).length;
+  const variante = comp.length ? (comp.find(r=> r.experience.instrumentation)?.experience.instrumentation?.variante || "?") : "?";
+  const regroupementOk = comp.filter(r=> r.experience.instrumentation && r.experience.instrumentation.regroupementApplique).length;
+  const instructionOk = comp.filter(r=> r.experience.instrumentation && r.experience.instrumentation.instructionPrioriteIncluse).length;
+  const verdict = echecs.length > 0 ? `non concluant — ${echecs.length}/${rows.length} cas en échec technique, exclus du calcul. Relancer pour obtenir un échantillon complet.`
+    : comp.length===0 ? "non concluant — baseline introuvable ou aucun cas commun"
+    : regroupementOk < comp.length ? "invalide — regroupement non appliqué sur au moins un cas exploitable (vérifier avant d'interpréter)"
+    : ameliores > degrades && ameliores >= Math.ceil(comp.length*0.5) ? "amélioration nette"
+    : ameliores > degrades ? "amélioration partielle"
+    : ameliores === degrades ? "gain faible ou nul"
+    : "dégradation";
+  return {
+    generatedAt: new Date().toISOString(), variante,
+    runExpId: runExp.runId, runBaselineId: runBaseline.runId,
+    nbCasComparables: comp.length, nbCasTotal: rows.length, nbCasEchecTechnique: echecs.length,
+    regroupementConfirmeSur: `${regroupementOk}/${comp.length}`,
+    instructionConfirmeeSur: variante==="B" ? `${instructionOk}/${comp.length}` : "n/a (variante A, aucune instruction)",
+    ameliores, stables, degrades,
+    seuilMonumentalCorrigeSur: `${seuilCorrige}/${seuilBaseCount}`,
+    profondeurCorrigeeSur: `${profCorrige}/${profBaseCount}`,
+    verdict, rows, echecs,
+  };
+}
+
+function renderPrioritesComparison(zone, comparison){
+  zone.innerHTML = "";
+  const estNonConcluant = comparison.verdict.startsWith("non concluant") || comparison.verdict.startsWith("invalide");
+  const couleurs = { "amélioration nette":"var(--green)", "amélioration partielle":"var(--green)", "gain faible ou nul":"var(--muted2)", "dégradation":"var(--red)" };
+  const couleur = estNonConcluant ? "var(--muted2)" : (couleurs[comparison.verdict] || "var(--red)");
+  const card = el("div",{class:"card", style:`border-left:4px solid ${couleur};margin-top:10px;`});
+  card.appendChild(el("p",{class:"label"},`Comparaison automatique — experience2_priorites (variante ${comparison.variante})`));
+  card.appendChild(el("p",{style:`font-size:16px;font-weight:700;color:${couleur};margin-top:4px;`}, comparison.verdict.toUpperCase()));
+  card.appendChild(el("p",{style:"font-size:12px;color:var(--muted2);margin-top:2px;"},
+    `Baseline : ${comparison.runBaselineId} · Expérience : ${comparison.runExpId} · ${comparison.nbCasComparables}/${comparison.nbCasTotal} cas exploitables`));
+  if(comparison.nbCasEchecTechnique>0){
+    card.appendChild(el("p",{style:"font-size:13px;color:var(--red);margin-top:6px;font-weight:600;"},
+      `${comparison.nbCasEchecTechnique} cas en échec technique — EXCLUS du calcul.`));
+  }
+  if(comparison.nbCasComparables>0){
+    card.appendChild(el("p",{style:"font-size:13px;margin-top:8px;"}, `Regroupement confirmé sur ${comparison.regroupementConfirmeSur} cas · Règle de priorité confirmée : ${comparison.instructionConfirmeeSur}`));
+    card.appendChild(el("p",{style:"font-size:13px;"}, `briefMismatch : ${comparison.ameliores} amélioré(s) · ${comparison.stables} stable(s) · ${comparison.degrades} dégradé(s).`));
+    card.appendChild(el("p",{style:"font-size:13px;"}, `Seuil monumental corrigé sur ${comparison.seuilMonumentalCorrigeSur} cas.`));
+    card.appendChild(el("p",{style:"font-size:13px;"}, `Profondeur / plans corrigée sur ${comparison.profondeurCorrigeeSur} cas.`));
+  }
+  if(comparison.echecs.length){
+    card.appendChild(el("p",{class:"label", style:"margin-top:10px;color:var(--red);"},"Cas en échec technique (exclus)"));
+    comparison.echecs.forEach(r=> card.appendChild(el("p",{style:"font-size:12px;border-bottom:1px solid var(--border);padding:4px 0;"}, `${r.prestation} × ${r.platform} — ${r.echecDetail}`)));
+  }
+  card.appendChild(el("p",{class:"label", style:"margin-top:10px;"},"Détail des cas exploitables"));
+  comparison.rows.filter(r=> !r.echecTechnique && r.trouveDansBaseline).forEach(r=>{
+    const rowCard = el("div",{style:"border-bottom:1px solid var(--border);padding:6px 0;"});
+    rowCard.appendChild(el("p",{style:"font-size:13px;font-weight:600;"}, `${r.prestation} × ${r.platform}`));
+    rowCard.appendChild(el("p",{style:"font-size:12px;"}, `briefMismatch : ${r.baseline.mismatchCount} → ${r.experience.mismatchCount} (${r.delta<=0?"":"+"}${r.delta})`));
+    if(r.experience.mismatchList.length) rowCard.appendChild(el("p",{style:"font-size:11px;color:var(--muted2);margin-top:2px;"}, "Mismatch restants : "+r.experience.mismatchList.join(" · ")));
+    card.appendChild(rowCard);
+  });
+  const dlBtn = el("button",{class:"btn-ghost", style:"margin-top:8px;", onclick:()=>{
+    const blob = new Blob([JSON.stringify(comparison, null, 1)], { type:"application/json" });
+    const a = document.createElement("a");
+    a.href = URL.createObjectURL(blob);
+    a.download = `comparaison-priorites-${comparison.variante}-${comparison.runExpId}.json`;
+    a.click();
+    setTimeout(()=> URL.revokeObjectURL(a.href), 5000);
+  }}, "Télécharger le rapport comparatif (JSON)");
+  card.appendChild(dlBtn);
+  zone.appendChild(card);
+}
+
 function buildSettingsTab(){
   const frag = el("div",{});
 
@@ -7823,6 +8166,8 @@ function buildSettingsTab(){
     el("option",{value:"smoke"},"Smoke — matrice complète, Phase A seule (~20-40 min, centimes)"),
     el("option",{value:"standard"},"Standard — 4 prestations × 3 plateformes, images (~15-25 min, ~1-3 $)"),
     el("option",{value:"standard_brief_complet"},"Standard — expérience brief_complet (mêmes 12 cas, plansVisuels réintégré)"),
+    el("option",{value:"standard_priorites_a"},"Standard — expérience priorités A (regroupement seul, 0 instruction)"),
+    el("option",{value:"standard_priorites_b"},"Standard — expérience priorités B (regroupement + règle de priorité)"),
     el("option",{value:"complet"},"Complet — matrice entière, images (GOLDEN RUN, ~2-3 h, ~8-20 $)"),
   ]);
   frag.appendChild(benchModeSel);
@@ -7856,11 +8201,13 @@ function buildSettingsTab(){
       const mode = benchModeSel.value;
       const suite = mode==="standard" ? { ...buildSmokeSuite(STANDARD_PRESET), suiteId:"standard_"+BENCH_TOPIC_BANK.version, mode:"standard", label:"Standard — "+STANDARD_PRESET.prestations.length+"×"+STANDARD_PRESET.plateformes.length }
         : mode==="standard_brief_complet" ? { ...buildSmokeSuite({ ...STANDARD_PRESET, executorId:"creative-image-sdz-brief-complet" }), suiteId:"standard-brief-complet_"+BENCH_TOPIC_BANK.version, mode:"standard", label:"Standard — expérience brief_complet" }
+        : mode==="standard_priorites_a" ? { ...buildSmokeSuite({ ...STANDARD_PRESET, executorId:"creative-image-sdz-priorites-a" }), suiteId:"standard-priorites-a_"+BENCH_TOPIC_BANK.version, mode:"standard", label:"Standard — expérience priorités A" }
+        : mode==="standard_priorites_b" ? { ...buildSmokeSuite({ ...STANDARD_PRESET, executorId:"creative-image-sdz-priorites-b" }), suiteId:"standard-priorites-b_"+BENCH_TOPIC_BANK.version, mode:"standard", label:"Standard — expérience priorités B" }
         : mode==="complet" ? { ...buildSmokeSuite(), suiteId:"complet_"+BENCH_TOPIC_BANK.version, mode:"complet", label:"Complet (Golden Run)" }
         : buildSmokeSuite();
       if(!resumeRunId && mode!=="smoke"){
         const estImage = suite.cases.length * 0.17; // qualité par défaut + analyse + contenu, ordre de grandeur
-        const modeLabel = mode==="complet" ? "GOLDEN RUN — matrice entière" : mode==="standard_brief_complet" ? "Run Standard — expérience brief_complet" : "Run Standard";
+        const modeLabel = mode==="complet" ? "GOLDEN RUN — matrice entière" : mode==="standard_brief_complet" ? "Run Standard — expérience brief_complet" : mode==="standard_priorites_a" ? "Run Standard — expérience priorités A" : mode==="standard_priorites_b" ? "Run Standard — expérience priorités B" : "Run Standard";
         if(!confirm(`${modeLabel} : ${suite.cases.length} générations d'images réelles.\nCoût estimé : ~${estImage.toFixed(2)} $ (mesuré précisément pendant le run).\nDurée : ${mode==="complet" ? "~2-3 h" : "~15-25 min"} — l'écran restera allumé (Wake Lock).\nLancer ?`)){ benchBtn.disabled=false; benchResumeBtn.disabled=false; return; }
       }
       const run = await runBenchSuite(suite, {
@@ -7879,10 +8226,11 @@ function buildSettingsTab(){
         const replis = run.cases.filter(c=>c.result && c.result.diagnostics && !c.result.diagnostics.daWriterUsed).length;
         const coutTxt = run.costMeasuredCases>0 ? `${run.costMeasuredTotal.toFixed(4)} $ mesurés (${run.costMeasuredCases}/${run.cases.length} cas)` : `~${run.costEstimatedTotal.toFixed(4)} $ estimés (aucun usage remonté)`;
         benchStatus.textContent = `✓ Run ${run.runId} terminé : ${ok} ok · ${err} erreur(s) · ${replis} repli(s) Rédacteur · ${(run.durationTotal/1000/60).toFixed(1)} min · ${coutTxt}. Run archivé — écran complet en B4.`;
-        /* EXPÉRIENCE experience2_brief_complet — comparaison automatique avec la baseline Standard.
-           Recherche la baseline la plus récente de suiteId "standard_"+version parmi les runs
-           archivés (mode==="standard", status==="terminé"). N'affecte aucun autre mode. */
-        if(mode==="standard_brief_complet"){
+        /* EXPÉRIENCE experience2_brief_complet / experience2_priorites — comparaison automatique
+           avec la baseline Standard. Recherche la baseline la plus récente de suiteId
+           "standard_"+version parmi les runs archivés (mode==="standard", status==="terminé").
+           N'affecte aucun autre mode. */
+        if(mode==="standard_brief_complet" || mode==="standard_priorites_a" || mode==="standard_priorites_b"){
           try{
             const storageForCompare = benchStorage();
             const candidats = (await storageForCompare.listRuns()).filter(r=> r.mode==="standard" && r.status==="terminé" && r.runId!==run.runId);
@@ -7892,8 +8240,11 @@ function buildSettingsTab(){
               if(full && full.suiteId==="standard_"+BENCH_TOPIC_BANK.version){ baseline = full; break; }
             }
             if(baseline){
-              const comparison = computeBriefCompletComparison(run, baseline);
-              renderBriefCompletComparison(benchCompareZone, comparison);
+              if(mode==="standard_brief_complet"){
+                renderBriefCompletComparison(benchCompareZone, computeBriefCompletComparison(run, baseline));
+              } else {
+                renderPrioritesComparison(benchCompareZone, computePrioritesComparison(run, baseline));
+              }
             } else {
               benchCompareZone.innerHTML = "";
               benchCompareZone.appendChild(el("p",{style:"font-size:12px;color:var(--muted2);margin-top:8px;"},
