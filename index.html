@@ -192,7 +192,7 @@ const PLATFORM_NOTE = {
   "Facebook": "Utilise exactement la même image qu'Instagram (4:5) — aucune génération distincte. Aucun texte dans l'image.",
   "Google Business": "Aucun texte sur l'image (recommandation Google) — le texte porte tout le SEO.",
   "Article Blog Wix": "Image de couverture avec un texte court façon fiche explicative, élégant et sobre — jamais de faux logo, badge ou icône générés par l'IA.",
-  "Story": "Format vertical plein écran, 4 à 5 phrases fortes disposées avec des tailles de police variées (hiérarchie visuelle, jamais uniforme) et le logo en bas, centré — publiée simultanément sur Instagram et Facebook.",
+  "Story": "Format vertical plein écran. Une accroche forte et une courte sous-ligne sont composées par Canvas avec une hiérarchie typographique nette ; le vrai logo SDZ est ajouté séparément. Aucun élément de l'interface Instagram ne fait partie du visuel.",
 };
 const TEXT_STRUCTURE = {
   "Instagram": "Réponds avec :\n1) Légende structurée : accroche, développement, bénéfice, CTA\n2) Maximum 5 hashtags\n3) Une suggestion d'alt text (accessibilité)",
@@ -955,12 +955,24 @@ async function compositeBrandSignature(baseDataUrl, platform, options){
       ctx.shadowColor = "rgba(0,0,0,0.7)";
       ctx.shadowBlur = 8;
       ctx.fillStyle = "#F5F4EF"; // blanc cassé de la charte SDZ
-      ctx.font = `700 ${titleFontSize}px Georgia, 'Times New Roman', serif`;
-      const lines = wrapText(ctx, headline.toUpperCase(), maxWidth);
-      const lineHeight = titleFontSize * 1.25;
-      const totalHeight = lines.length * lineHeight;
-      const startY = (canvas.height * (zone.y/100)) - totalHeight/2 + lineHeight/2;
-      lines.forEach((line,i)=>{ ctx.fillText(line, canvas.width/2, startY + i*lineHeight); });
+      const storyParts = platform==="Story" ? headline.split("|").map(x=>x.trim()).filter(Boolean) : [];
+      if(storyParts.length>1){
+        const title = storyParts[0].toUpperCase();
+        const subtitle = storyParts.slice(1).join(" ").toUpperCase();
+        const centerY = canvas.height * (zone.y/100);
+        ctx.font = `700 ${Math.round(titleFontSize*1.25)}px Georgia, 'Times New Roman', serif`;
+        wrapText(ctx, title, maxWidth).forEach((line,i)=> ctx.fillText(line, canvas.width/2, centerY + i*titleFontSize*1.45));
+        ctx.fillStyle = "#C9A227";
+        ctx.font = `500 ${Math.round(titleFontSize*0.64)}px Georgia, 'Times New Roman', serif`;
+        ctx.fillText(subtitle, canvas.width/2, centerY + titleFontSize*2.1);
+      }else{
+        ctx.font = `700 ${titleFontSize}px Georgia, 'Times New Roman', serif`;
+        const lines = wrapText(ctx, headline.toUpperCase(), maxWidth);
+        const lineHeight = titleFontSize * 1.25;
+        const totalHeight = lines.length * lineHeight;
+        const startY = (canvas.height * (zone.y/100)) - totalHeight/2 + lineHeight/2;
+        lines.forEach((line,i)=>{ ctx.fillText(line, canvas.width/2, startY + i*lineHeight); });
+      }
       ctx.shadowBlur = 0;
     }
 
@@ -1015,23 +1027,17 @@ async function normalizeToPlatformFormat(dataUrl, platform){
 
 /* true si cette plateforme/ce réglage exige le vrai logo sur l'image (Story : toujours ; sinon selon la DA). */
 function logoRequiredFor(platform){
-  return platform==="Story" || state.da.presenceLogo;
+  /* Chaque visuel publié porte la signature SDZ officielle, ajoutée après génération. */
+  return PLATFORMS.includes(platform);
 }
 
 /* ---------- Logo comme véritable image de référence pour les générations API compatibles ---------- */
 let _brandRefUrlCache = null; // ne recalcule/re-télécharge jamais deux fois dans la même session
 function getBrandReferenceImages(){
-  if(_brandRefUrlCache) return _brandRefUrlCache;
-  /* PROTOTYPE LOGO-RÉFÉRENCE (réactivation) : cette fonction avait été volontairement neutralisée
-     (risque de faux médaillons dérivés du logo). Un test externe concluant (logo officiel en
-     référence + prompt court) constitue une contre-preuve : on réactive pour mesurer.
-     Le logo n'est transmis que s'il est marqué actif dans la Bibliothèque ET déjà synchronisé
-     vers son URL publique stable (syncOfficialLogoToServer). Critère d'évaluation du test :
-     surveiller la réapparition de faux médaillons/variantes du logo dans les images. */
-  const logoAsset = state.images.find(i=>i.assetType==="logo");
-  const urls = (logoAsset && state.logoPublicUrl) ? [state.logoPublicUrl] : [];
-  _brandRefUrlCache = urls;
-  return urls;
+  /* Le logo est une signature, pas une référence créative. Le transmettre au modèle produisait
+     des zèbres, sceaux et médaillons inventés. Canvas est désormais l'unique source. */
+  _brandRefUrlCache = [];
+  return _brandRefUrlCache;
 }
 function resetBrandReferenceCache(){ _brandRefUrlCache = null; }
 /* Images de la Bibliothèque explicitement marquées comme référence visuelle validée
@@ -2046,8 +2052,10 @@ Tu raisonnes STRICTEMENT dans cet ordre, chaque champ étant une conséquence du
 7. archetypeEmotionnel — tu CLASSES le moment que tu viens d'imaginer dans un archétype fermé, tu n'en inventes jamais un nouveau. Choisis-le PARMI les options fournies, jamais en dehors.
 8. miseEnScene (sujet, action, cadrage, point de vue) — le cadrage et le point de vue doivent être choisis PARMI l'ensemble associé à l'archétype retenu à l'étape 7, jamais librement.
 9. decor — doit correspondre aux scènes compatibles de l'archétype retenu.
-10. lumiere, elementOr, niveauLuminosite — doivent correspondre à la signature lumineuse propre à l'archétype retenu. N'utilise JAMAIS un connecteur ou un dispositif universel identique quel que soit l'archétype : chaque archétype a sa propre lumière.
+10. lumiere, elementOr, niveauLuminosite — doivent correspondre à la signature lumineuse propre à l'archétype retenu. N'utilise JAMAIS un connecteur ou un dispositif universel identique quel que soit l'archétype : chaque archétype a sa propre lumière. Le noir sert d'écrin à un sujet lisible ; il ne doit jamais produire une image sous-exposée, lugubre ou étouffante.
 11. symbolePrincipal — vocabulaire MASTER_UNIVERS_SDZ imposé (fourni plus bas), justifié comme conséquence du conflit, pas seulement de la prestation.
+
+REGISTRE ÉMOTIONNEL SDZ : spectaculaire, héroïque, premium, ascendant et transformateur. La tension, l'ombre ou la fragmentation peuvent apparaître dans un plan secondaire comme l'état que le sujet dépasse ; elles ne doivent jamais dominer le visage, le soin ni l'issue de l'image. L'instant principal montre la lumière, la puissance ou l'élan qui reprennent le dessus. Interdits absolus : horreur, terreur, menace, désespoir sans issue, personnage encapuchonné menaçant, visage central mutilé, corps captif, crypte, rituel, sorcellerie, astrologie, signes zodiacaux, faux sceau, faux logo, faux emblème de zèbre. Une géométrie abstraite dorée reste permise si elle ne ressemble à aucun symbole religieux ou ésotérique réel.
 
 Tu ne rédiges jamais de texte final : tu conçois une scène concrète, précise et jouable par un modèle de génération d'image. Réponds uniquement selon le schéma structuré demandé.`;
 }
@@ -2062,7 +2070,7 @@ function buildCreativePlannerUserPromptV2(allowed, exclusions, mission, prestati
   const prestationDocumentee = !!(info && !info.generic && info.block);
   const typeCreationInstructions = typeCreationImpose === "affiche_fantastique"
     ? `Type de création imposé : affiche_fantastique — tu ne choisis pas ce type, applique-le tel quel dans "typeCreation".
-Construis un photomontage cinématographique hyperréaliste à plusieurs plans, une atmosphère mythologique mature et spectaculaire. Noir dominant, or noble et lumineux. Jamais une fantasy enfantine, une illustration plate ou un rendu de spa générique.`
+Construis un photomontage cinématographique hyperréaliste à plusieurs plans, héroïque, mature et spectaculaire. Noir profond comme écrin, sujet parfaitement lisible, or métallique noble et lumineux. L'or n'est jamais orange, ambré, couleur feu ou incendie. L'issue visuelle est ascendante et désirable, jamais lugubre.`
     : `Type de création imposé : luxe_silencieux — tu ne choisis pas ce type, applique-le tel quel dans "typeCreation".
 Photographie éditoriale premium, sobre, réaliste et intime.`;
   const consignePrestation = prestationDocumentee
@@ -2082,7 +2090,15 @@ ${socle}
 
 CONSIGNE OBLIGATOIRE SUR LA PRESTATION :
 ${consignePrestation}
+- Le geste, la zone du corps ou le matériel distinctif doit être visible au premier regard : une image générique de portail, silhouette ou méditation ne suffit jamais.
 - Reste éditorial, premium et jamais démonstratif ou didactique.
+
+${platform==="Story" ? `DIRECTION VISUELLE DE RÉFÉRENCE — STORIES SDZ :
+- composition verticale 9:16 dense et éditoriale, sujet héroïque central, profondeur en plusieurs plans, énergie dorée ascendante ;
+- contraste noir/or spectaculaire mais visage, geste et matériel restent lisibles ;
+- grande zone calme réservée au titre et à la signature officielle ajoutés ensuite par Canvas ;
+- ne reproduis aucun élément d'interface Instagram : barre de story, avatar, date, boutons, réactions, vignettes ou navigation ;
+- ne génère aucun texte, aucun logo, aucun zèbre décoratif et aucun symbole de marque : ils seront ajoutés proprement après génération.` : ""}
 
 Archétypes émotionnels autorisés (choisis-en un seul, exactement tel quel dans "archetypeEmotionnel") — chacun est une identité complète, pas une simple catégorie :
 ${allowed.map(a=>`- ${a.id} (${a.label}) : émotion "${a.emotion||""}", dramaturgie "${a.dramaturgie||""}", rythme "${a.rythme||""}", sensation "${a.sensation||""}" — scènes : ${a.scenesCompatibles.join(" / ")} — cadrages possibles : ${a.cadrages.join(", ")} — lumières possibles : ${a.lumieres.join(", ")} — interdits : ${a.interdits.join(", ")} — scène de soin : ${a.presenceSoin}`).join("\n")}
@@ -2097,6 +2113,8 @@ ${universBlock}` : ""}
 
 Éléments à ne surtout pas répéter (déjà utilisés très récemment sur cette plateforme) :
 ${exclusions.length ? exclusions.map(e=>`- ${e}`).join("\n") : "(aucun historique récent)"}
+
+${platform==="Story" ? `Pour "texteImage", fournis obligatoirement une accroche de 2 à 5 mots puis une sous-ligne de 3 à 7 mots, séparées par le caractère |. Réserve "zoneTexte" dans le tiers supérieur ou inférieur selon la scène.` : `Pour "texteImage", reste sobre et conforme aux règles de la plateforme.`}
 
 Conçois une scène originale et précise respectant l'identité noir & or de SDZ (or noble, jamais orangé ; le noir comme espace, jamais comme sous-exposition).`);
 }
@@ -2335,10 +2353,14 @@ function validateAndFixBriefV2(brief, allowed, exclusions, typeCreationImpose, p
   fixed.compositionInterdite = [...new Set([...fixed.compositionInterdite, ...exclusions])];
   if(fixed.typeCreation !== typeCreationImpose){ fixed.typeCreation = typeCreationImpose; corrected = true; }
 
-  // 1. Interdits absolus (impactEmotionnelRecherche) — jamais réparé automatiquement, comme la
-  //    caractéristique de prestation en V1 : un échec ici bloque, il n'est pas fabriqué.
+  // 1. Interdits absolus : correction locale déterministe pour ne pas condamner tout un item
+  //    de campagne sur un seul mot générique ("harmonie" avait bloqué Abhyanga au run 2).
   const impactNorm = normalizeForContainmentCheck(fixed.impactEmotionnelRecherche);
   const violationInterdite = VOCABULAIRE_INTERDIT_ABSOLU.find(mot => impactNorm.includes(normalizeForContainmentCheck(mot)));
+  if(violationInterdite){
+    fixed.impactEmotionnelRecherche = "renaissance lumineuse";
+    corrected = true;
+  }
 
   // 2. Ancrage réel — même contrôle que caracteristiqueSourcePrestation en V1, champ renommé.
   const info = getSelectedPrestationInfo(prestation);
@@ -2346,9 +2368,7 @@ function validateAndFixBriefV2(brief, allowed, exclusions, typeCreationImpose, p
   let blockingError = null;
   let aucuneRaisonDetre = false;
 
-  if(violationInterdite){
-    blockingError = `Vocabulaire interdit dans "impactEmotionnelRecherche" : "${violationInterdite}" ne peut jamais être le moteur créatif de départ (toléré uniquement comme conséquence d'un conflit posé, jamais comme intention).`;
-  } else if(!prestationDocumentee){
+  if(!prestationDocumentee){
     if(!fixed.ancrageReel) fixed.ancrageReel = "aucune prestation précise";
   } else {
     const carac = (fixed.ancrageReel || "").trim();
@@ -2957,16 +2977,17 @@ function buildPromptHeader(brief, platform, aspectKey, isCampaign){
 }
 function buildFixedGuardrailBlocks(brief, platform){
   const wantsRealLogo = logoRequiredFor(platform);
-  const usingLogoReference = wantsRealLogo && !!state.logoPublicUrl && !!state.images.find(i=>i.assetType==="logo");
   const soinPhrase = brief.presenceSoin==="aucune" ? "Aucune scène de soin n'est visible."
     : brief.presenceSoin==="suggeree" ? "La sensation du soin est suggérée, jamais son déroulé technique."
     : "Une scène de soin peut être visible si elle reste éditoriale et premium, jamais clinique.";
-  const logoPhrase = usingLogoReference
-    ? "Le logo fourni en référence est le logo officiel de la marque : utilise-le tel quel, sans jamais le redessiner, le déformer ni en inventer des variantes, médaillons ou emblèmes dérivés. Il doit être immédiatement identifiable, intégré naturellement comme un élément architectural majeur de la scène (gravure monumentale, emblème sculpté, portail, sceau architectural...), suffisamment grand pour être perçu immédiatement, sans jamais dominer la composition."
-    : wantsRealLogo ? "Aucun logo dessiné : une zone sobre en bas de l'image reste dégagée pour son ajout ultérieur. Interdiction stricte de générer un faux logo, une tête de zèbre stylisée en médaillon, un monogramme ou un emblème."
+  const logoPhrase = wantsRealLogo
+    ? "Aucun logo dessiné : une zone sobre reste dégagée pour l'ajout ultérieur de la signature officielle par Canvas. Interdiction stricte de générer un zèbre décoratif, un faux logo, une tête de zèbre en médaillon, un sceau, un monogramme ou un emblème."
     : "Aucun logo, médaillon ou monogramme inventé.";
   const eviter = [String(brief.negativePrompt||"").trim(), (brief.compositionInterdite||[]).join(", ")].filter(Boolean).join(" ; ");
-  return `${CHARTE_SDZ_SYNTHESE} ${soinPhrase} Aucun texte n'est incrusté dans l'image ; le tiers inférieur reste visuellement calme, prêt à recevoir un texte ajouté ensuite. ${logoPhrase}${eviter ? ` À éviter absolument : ${eviter}.` : ""}
+  const storyGuard = platform==="Story"
+    ? "Story 9:16 : composition dense, héroïque et ascendante, mais sans barre Instagram, avatar, date, boutons, réactions, vignettes ni navigation."
+    : "";
+  return `${CHARTE_SDZ_SYNTHESE} ${soinPhrase} Noir profond comme écrin, jamais comme sous-exposition. Sujet, geste et matériel lisibles au premier regard. Or métallique noble, jamais orange, ambre, feu ou incendie. Énergie ascendante et désirable. L'ombre ou la fragmentation ne peuvent exister qu'en opposition secondaire clairement dépassée par le sujet ; jamais horreur, menace, désespoir sans issue, personnage encapuchonné menaçant, visage central mutilé, crypte, rituel, sorcellerie, astrologie ou signes zodiacaux. Aucun texte n'est incrusté dans l'image ; une zone visuellement calme reste prête à recevoir le texte ajouté ensuite. ${storyGuard} ${logoPhrase}${eviter ? ` À éviter absolument : ${eviter}.` : ""}
 
 ${SAFETY_GUARDRAIL}`;
 }
@@ -3167,6 +3188,7 @@ function buildBrandVoiceSocle(mission, platform){
   return text;
 }
 function buildContentFromBriefUserPrompt(brief, analysis, platform, mission){
+  analysis = analysis || { visibleSubjects:[], visibleAction:"", visibleSetting:"", visibleObjects:[], lighting:"", briefMismatch:[] };
   const brandVoice = buildBrandVoiceSocle(mission, platform);
   return cleanPrompt(`Rédige le contenu texte final pour ${platform}, mission "${mission||"non précisée"}".
 
@@ -3187,10 +3209,11 @@ Analyse de l'image RÉELLEMENT obtenue (fonde l'alt text UNIQUEMENT sur ceci, ja
 ${(analysis.briefMismatch||[]).length ? `- Écarts constatés avec le brief : ${analysis.briefMismatch.join(", ")}` : ""}
 
 La légende (caption) peut s'appuyer sur le brief et sur l'univers de marque ci-dessus. L'alt text doit décrire fidèlement uniquement ce qui est listé comme visible ci-dessus — jamais un élément absent (pas de bon cadeau, huile ou accessoire non constaté). Maximum 5 hashtags pertinents (Instagram et Facebook).
+${platform==="Instagram" ? `RÈGLE INSTAGRAM : termine par le site officiel présent dans les connaissances puis « Réservez votre prestation ! ». N'invente jamais d'URL.` : ""}
+${platform==="Google Business" ? `RÈGLE GOOGLE BUSINESS : la caption doit faire 100 à 150 mots et inclure naturellement l'adresse, le téléphone et le site officiel présents dans les connaissances. Aucun hashtag. N'invente aucune coordonnée.` : ""}
 
 CHAMP imageHeadline (accroche incrustée sur l'image par post-traitement, Instagram et Facebook uniquement) :
-- Par DÉFAUT, renvoie une chaîne vide "". L'image sans texte est le choix normal (environ 7 publications sur 10).
-- Ne renseigne ce champ QUE si une phrase renforce clairement le concept créatif de cette image précise (environ 3 publications sur 10).
+- Sur Instagram et Facebook, ce champ est OBLIGATOIRE : une accroche forte qui renforce le concept créatif de cette image précise.
 - Il est INDÉPENDANT de la légende : ne reprends jamais sa première phrase.
 - Contraintes strictes quand il est rempli : 4 à 9 mots, 1 ligne (2 exceptionnellement), pas de point final, pas d'emoji, pas de hashtag, pas de CTA, lisible en moins de 2 secondes.
 - Sur Google Business, Story et Article Blog Wix : toujours "".`);
@@ -3210,6 +3233,10 @@ async function generateContentFromBrief(brief, analysis, platform, mission){
   let content;
   try{ content = JSON.parse(data.text); } catch(e){ throw new Error("Sortie non exploitable."); }
   if(Array.isArray(content.hashtags)) content.hashtags = content.hashtags.slice(0,5);
+  if((platform==="Instagram" || platform==="Facebook") && !String(content.imageHeadline||"").trim()){
+    const source = String(brief.texteImage || brief.messageCentral || "Révélez votre énergie").replace(/\|/g," ").trim();
+    content.imageHeadline = source.split(/\s+/).slice(0,9).join(" ");
+  }
   return content;
 }
 
@@ -3361,6 +3388,7 @@ function mapBriefV2ToV1Shape(briefV2){
   const ms = briefV2.miseEnScene || {};
   return {
     caracteristiqueSourcePrestation: briefV2.ancrageReel,
+    ideeVisuelle: briefV2.momentCinematographique,
     pointDeTransformation: briefV2.momentCinematographique,
     archetypeNarratif: briefV2.archetypeEmotionnel,
     sujetPrincipal: ms.sujetPrincipal, action: ms.action, cadrage: ms.cadrage, pointDeVue: ms.pointDeVue,
@@ -3378,7 +3406,7 @@ function mapBriefV2ToV1Shape(briefV2){
 async function prepareCreativeBrief(inputs){
   const { mission, platform, prestation, topic, aspectKey, isCampaign, registres } = inputs;
   const steps = {};
-  const plannerVersion = inputs.plannerVersion || "v1"; // additif : absent partout en production aujourd'hui
+  const plannerVersion = inputs.plannerVersion || "v2";
 
   // typeCreation figé ICI, depuis la copie des registres transmise dans inputs (jamais depuis
   // state.registres directement) : le flux préparé reste indépendant de l'état courant de l'interface.
@@ -3484,13 +3512,19 @@ async function prepareCreativeBrief(inputs){
    l'exécuteur du Banc n'écrit rien. Une seule implémentation du post-traitement pour les deux. */
 async function finalizeGeneratedImage(flow){
   const platform = flow.inputs.platform;
-  const logoInScene = !!(flow.logoSentAsReference && flow.usedReference);
+  /* Une référence utilisée ne prouve jamais que le logo officiel est présent et exact.
+     Seule la signature ajoutée par Canvas est considérée comme valide. */
+  const logoInScene = false;
   /* 1) format officiel de la plateforme */
   let dataUrl = await normalizeToPlatformFormat(flow.dataUrl, platform);
   /* 2) accroche : uniquement là où la spec V1.0 l'autorise (Instagram/Facebook), uniquement si le
         Planner a jugé utile de la remplir. Le texte vient du contenu généré, jamais de GPT-image. */
-  const headline = (PLATFORM_OVERLAY[platform]==="accroche" && flow.content && typeof flow.content.imageHeadline==="string")
+  const contentHeadline = flow.content && typeof flow.content.imageHeadline==="string"
     ? flow.content.imageHeadline.trim() : "";
+  const storyHeadline = platform==="Story" && flow.brief && typeof flow.brief.texteImage==="string"
+    ? (flow.brief.texteImage.trim() || `${String(flow.brief.messageCentral||"RÉVÉLEZ-VOUS").split(/\s+/).slice(0,5).join(" ")} | UNE EXPÉRIENCE TRANSFORMATRICE`) : "";
+  const headline = PLATFORM_OVERLAY[platform]==="accroche" ? contentHeadline
+    : PLATFORM_OVERLAY[platform]==="fort" ? storyHeadline : "";
   /* 3) logo : appliqué sauf s'il est déjà dans la scène. Un seul appel, même fonction pour les
         deux besoins — aucune duplication, aucun chemin parallèle. */
   const needLogo = logoRequiredFor(platform) && !logoInScene;
@@ -3512,12 +3546,9 @@ async function applyHeadlineToItem(item){
   if(!item || !item.imageDataUrl || item.headlineApplied) return false;
   const headline = item.contentData && typeof item.contentData.imageHeadline==="string" ? item.contentData.imageHeadline.trim() : "";
   if(!headline || PLATFORM_OVERLAY[item.platform]!=="accroche") return false;
-  const finalized = await finalizeGeneratedImage({
-    inputs:{ platform:item.platform }, dataUrl:item.imageDataUrl,
-    logoSentAsReference:true, usedReference:true, content:item.contentData,
-  });
-  if(!finalized.headlineApplied) return false;
-  item.imageDataUrl = finalized.dataUrl; item.headlineApplied = true;
+  const composited = await compositeBrandSignature(item.imageDataUrl, item.platform, { headline, withLogo:false });
+  if(!composited.applied) return false;
+  item.imageDataUrl = composited.dataUrl; item.headlineApplied = true;
   /* Facebook réutilise EXACTEMENT l'image Instagram : la copie est mise à jour au même instant. */
   if(item.platform==="Instagram"){
     state.scheduled.filter(p=> p.campaignId===item.campaignId && p.platform==="Facebook" && p.reusedFrom==="Instagram")
@@ -3996,10 +4027,22 @@ async function generateCampaignPosts(topic, missionKey, onProgress){
       platform: item.platform, mission: missionKey, topic,
       imagePrompt: prepared.imagePrompt,
       creativeBrief: prepared.brief || null,
+      plannerVersion: prepared.plannerVersion,
+      blockingError: prepared.blockingError || null,
+      plannerError: prepared.plannerError || null,
+      referenceSelectionIds: (prepared.referenceSelections||[]).map(r=>r.id),
+      preparedDiagnostics: {
+        briefCorrected: !!prepared.briefCorrected,
+        usedLocalBriefFallback: !!prepared.usedLocalBriefFallback,
+        daWriterUsed: !!prepared.daWriterUsed,
+        daWriterFallbackReason: prepared.daWriterFallbackReason || null,
+        validatorReport: prepared.validatorReport || null,
+      },
       textPrompt: isStory ? null : buildTextPromptFull(item.platform, topic, missionKey),
       textFinal: isStory ? null : "", imageDataUrl: null,
       schedulable: item.platform !== "Article Blog Wix" && item.platform !== "Story",
-      scheduledAt: null, status: "brouillon", createdAt: Date.now(), sentAt: null, error: null,
+      scheduledAt: null, status: prepared.blockingError ? "bloqué" : "brouillon",
+      createdAt: Date.now(), sentAt: null, error: prepared.blockingError || null,
     });
   }
   return posts;
@@ -5930,6 +5973,10 @@ function buildCalendarCard(item, inCampaign){
         if(activeCancelToken) activeCancelToken.cancelled = true;
       });
       imgApiBtn.addEventListener("click", async ()=>{
+        if(item.blockingError){
+          imgApiStatus.textContent = "Génération bloquée : " + item.blockingError;
+          return;
+        }
         if(!confirm("Lancer la génération d'image via OpenAI ? Ceci consomme du crédit API.")) return;
         imgApiBtn.disabled = true; // évite une double génération pour cette même déclinaison
         imgCancelBtn.style.display = "inline-block";
@@ -5956,18 +6003,35 @@ function buildCalendarCard(item, inCampaign){
             renderMain();
             return;
           }
-          const siblingImage = getCampaignSiblingImage(item.campaignId, item.id);
-          const generationResult = await callProviderImage(item.imagePrompt, size, siblingImage ? [siblingImage] : undefined, (label)=>{ imgApiStatus.textContent = label; }, cancelToken);
-          const { usedReference, referenceFallbackReason } = generationResult;
+          const referenceSelections = (item.referenceSelectionIds||[]).map(id=>{
+            const img = state.images.find(x=>x.id===id);
+            return img ? { id:img.id, dataUrl:img.dataUrl, metadata:img.referenceMeta||null } : null;
+          }).filter(Boolean);
+          const phaseB = await confirmAndGenerateImage({
+            phase:"prepared",
+            inputs:{ mission:item.mission, platform:item.platform, prestation:state.prestationName,
+              topic:item.topic, size, aspectKey:PLATFORM_ASPECT[item.platform], isCampaign:true },
+            brief:item.creativeBrief, imagePrompt:item.imagePrompt, referenceSelections,
+          }, (label)=>{ imgApiStatus.textContent = label; }, cancelToken);
+          if(!phaseB.ok) throw new Error(phaseB.error || "Échec de la génération");
+          const { usedReference, referenceFallbackReason } = phaseB;
           /* Post-traitement : MÊME fonction que la génération unitaire (format officiel, accroche,
              logo) — aucun code dupliqué, aucun chemin parallèle. */
           const finalizedItem = await finalizeGeneratedImage({
-            inputs:{ platform:item.platform }, dataUrl: generationResult.dataUrl,
-            logoSentAsReference:false, usedReference, content: item.contentData || null,
+            inputs:{ platform:item.platform }, dataUrl: phaseB.dataUrl,
+            logoSentAsReference:false, usedReference, content: phaseB.content || item.contentData || null,
+            brief:item.creativeBrief,
           });
           let dataUrl = finalizedItem.dataUrl;
           const logoApplied = finalizedItem.logoApplied;
           item.imageDataUrl = dataUrl; item.logoApplied = logoApplied; item.usedReference = usedReference; item.referenceFallbackReason = referenceFallbackReason;
+          item.analysis = phaseB.analysis || null; item.analysisError = phaseB.analysisError || null;
+          item.contentData = phaseB.content || item.contentData || null; item.textError = phaseB.textError || null;
+          if(item.contentData && item.platform!=="Story"){
+            const hashtagsText = (item.contentData.hashtags||[]).map(x=>x.startsWith("#")?x:"#"+x).slice(0,5).join(" ");
+            item.textFinal = [item.contentData.caption||"", hashtagsText].filter(Boolean).join("\n\n");
+            item.altText = item.contentData.altText || "";
+          }
           item.headlineApplied = !!finalizedItem.headlineApplied; // texte déjà présent : accroche posée dès la génération
           const saved = LS.set("vf-scheduled", state.scheduled);
           logToLab({ provider:"OpenAI", model:"gpt-image-1-mini", type:"image", prompt:item.imagePrompt, promptHash:hashPrompt(item.imagePrompt), cost:null, durationMs:Date.now()-t0, status:"accepted" });
@@ -6904,14 +6968,14 @@ function computeRunExplanation(run, refRun){
 /* ---- Banque officielle de sujets, VERSIONNÉE — référence du Golden Set.
    Comparer deux runs exige la même version (sinon "non comparables"). */
 const BENCH_TOPIC_BANK = {
-  version: "1.0.0",
+  version: "1.1.0",
   parPrestation: {
-    "Massage Ayurvédique Abhyanga": { id:"t-abhyanga-1", mission:"decouvrir_soin", sujet:"lâcher prise" },
-    "Reiki": { id:"t-reiki-1", mission:"decouvrir_soin", sujet:"retrouver son énergie" },
-    "Réflexologie plantaire": { id:"t-reflexo-1", mission:"decouvrir_soin", sujet:"relancer la circulation, alléger les jambes" },
-    "PSiO": { id:"t-psio-1", mission:"decouvrir_soin", sujet:"apaiser le mental, mieux dormir" },
+    "Massage Ayurvédique Abhyanga": { id:"t-abhyanga-1", mission:"Faire découvrir un soin", sujet:"lâcher prise" },
+    "Reiki": { id:"t-reiki-1", mission:"Faire découvrir un soin", sujet:"retrouver son énergie" },
+    "Réflexologie plantaire thaïlandaise": { id:"t-reflexo-1", mission:"Faire découvrir un soin", sujet:"relancer la circulation, alléger les jambes" },
+    "Luminothérapie PSIO®": { id:"t-psio-1", mission:"Faire découvrir un soin", sujet:"apaiser le mental, mieux dormir" },
   },
-  defaut: { id:"t-defaut-1", mission:"decouvrir_soin", sujet:"un moment pour soi, une vraie pause" },
+  defaut: { id:"t-defaut-1", mission:"Faire découvrir un soin", sujet:"un moment pour soi, une vraie pause" },
 };
 
 /* Construit une TestSuite Smoke : matrice DYNAMIQUE prestations × plateformes (aucune valeur en dur —
