@@ -2150,6 +2150,7 @@ ${consignePrestation}
 - Dans "miseEnScene.action", décris uniquement l'usage réel de la prestation, une posture ou un geste humain crédible. N'y place jamais un effet visuel, des particules, une lumière, une transformation ou un symbole.
 - L'effet fantastique amplifie la prestation réelle ; il ne la remplace jamais. Le sujet reste naturel, habillé, crédible et intact.
 - Reste éditorial, premium et jamais démonstratif ou didactique.
+${prestation==="Luminothérapie PSIO®" ? `- CAS PSIO® : la personne est déjà confortablement installée, les yeux fermés, avec les lunettes correctement portées et lisibles sur le visage. Elle n'est jamais debout, en attente de commencer, ni en train de tenir les lunettes à la main. Aucun casque VR, halo circulaire, auréole, faisceau ajouté ou geste secondaire inventé.` : ""}
 
 ${platform==="Story" ? `DIRECTION VISUELLE DE RÉFÉRENCE — STORIES SDZ :
 - composition verticale 9:16 dense et éditoriale, sujet héroïque central, profondeur en plusieurs plans, énergie dorée ascendante ;
@@ -2447,16 +2448,46 @@ function ensureStoryHeadline(texteImage, prestation){
 }
 function getServiceVisualMoment(prestation){
   if(prestation==="Luminothérapie PSIO®"){
-    return "l'instant où les lunettes PSiO® deviennent le point d'ancrage lumineux de la scène";
+    return "l'instant calme où les lunettes PSiO® portées sur le visage deviennent le centre visuel";
   }
   return "l'instant où le geste ou le matériel distinctif de la prestation devient clairement lisible";
 }
 function getServiceHeroAction(prestation){
   if(prestation==="Luminothérapie PSIO®"){
-    return "vivre la séance les yeux fermés, lunettes PSiO® bien visibles, posture relâchée et visage naturel";
+    return "rester confortablement installé, les yeux fermés pendant la séance, lunettes PSiO® bien visibles";
   }
   return "recevoir ou utiliser la prestation, avec son geste ou son matériel distinctif clairement visible";
 }
+function getServiceHeroSubject(prestation){
+  if(prestation==="Luminothérapie PSIO®"){
+    return "une personne adulte confortablement installée, portant les lunettes PSiO® correctement ajustées sur le visage";
+  }
+  return "";
+}
+function getServiceGoldAccent(prestation){
+  if(prestation==="Luminothérapie PSIO®"){
+    return "reflets d'or métallique noble sur le visage et le vêtement, sans recolorer les lunettes PSiO® officielles blanches et bleues";
+  }
+  return "";
+}
+function getServiceVisibleCharacteristic(prestation){
+  if(prestation==="Luminothérapie PSIO®"){
+    return "lunettes PSiO® officielles blanches et bleues, correctement portées sur le visage et lisibles au premier regard";
+  }
+  return "";
+}
+const PSIO_COMPOSITION_INTERDITE = [
+  "personne debout pendant la séance",
+  "personne en attente de commencer",
+  "lunettes PSiO® tenues à la main",
+  "lunettes assimilées à un casque VR",
+  "autres lunettes ou casque que le modèle PSiO® officiel fourni en référence",
+  "monture PSiO® noire, dorée ou recolorée",
+  "forme, proportions ou commandes des lunettes PSiO® modifiées",
+  "halo circulaire ou auréole autour de la tête",
+  "faisceau lumineux ajouté",
+  "main ou geste secondaire inventé",
+];
 function pointDeVueRabatLeSujet(value){
   const norm = normalizeForContainmentCheck(value);
   return /\b(?:vue du dessus|angle superieur)\b/.test(norm)
@@ -2497,10 +2528,28 @@ function validateAndFixBriefV2(brief, allowed, exclusions, typeCreationImpose, p
   // désormais la prestation réelle au centre et n'impose aucun symbole de substitution.
   if(typeCreationImpose==="affiche_fantastique"){
     fixed.compositionInterdite = [...new Set([...fixed.compositionInterdite, ...V2_MOTIFS_EN_PAUSE])];
+    const isPsio = prestation==="Luminothérapie PSIO®";
     const symboleNorm = normalizeForContainmentCheck(fixed.symbolePrincipal);
     if(symboleNorm && symboleNorm!=="aucun"){
       fixed.symbolePrincipal = "aucun";
       corrected = true;
+    }
+    fixed.miseEnScene = fixed.miseEnScene || {};
+    if(isPsio){
+      const sujetPsio = getServiceHeroSubject(prestation);
+      const actionPsio = getServiceHeroAction(prestation);
+      const momentPsio = getServiceVisualMoment(prestation);
+      const orPsio = getServiceGoldAccent(prestation);
+      const caracteristiquePsio = getServiceVisibleCharacteristic(prestation);
+      fixed.compositionInterdite = [...new Set([...fixed.compositionInterdite, ...PSIO_COMPOSITION_INTERDITE])];
+      if(fixed.miseEnScene.sujetPrincipal!==sujetPsio){ fixed.miseEnScene.sujetPrincipal = sujetPsio; corrected = true; }
+      if(fixed.miseEnScene.action!==actionPsio){ fixed.miseEnScene.action = actionPsio; corrected = true; }
+      if(fixed.momentCinematographique!==momentPsio){ fixed.momentCinematographique = momentPsio; corrected = true; }
+      if(fixed.elementOr!==orPsio){ fixed.elementOr = orPsio; corrected = true; }
+      if(fixed.caracteristiquePrestationVisible!==caracteristiquePsio){
+        fixed.caracteristiquePrestationVisible = caracteristiquePsio;
+        corrected = true;
+      }
     }
     if(contientMotifV2EnPause(fixed.decor)){
       fixed.decor = "espace noir profond abstrait, composé en plusieurs plans autour du sujet, du geste et du matériel distinctif";
@@ -2519,7 +2568,6 @@ function validateAndFixBriefV2(brief, allowed, exclusions, typeCreationImpose, p
       fixed.momentCinematographique = getServiceVisualMoment(prestation);
       corrected = true;
     }
-    fixed.miseEnScene = fixed.miseEnScene || {};
     if(contientMotifV2EnPause(fixed.miseEnScene.action)
       || /particul|debris|débris|etincell|étincell|effet visuel|transformation physique/i.test(String(fixed.miseEnScene.action||""))){
       fixed.miseEnScene.action = getServiceHeroAction(prestation);
@@ -3085,6 +3133,7 @@ RÈGLES ABSOLUES — tu reformules, tu n'inventes JAMAIS :
 - Raconte UN seul instant : la scène est figée à l'instant de transformation indiqué — jamais une séquence d'états (pas de "d'abord... puis...").
 - Une seule lumière dominante, une seule ambiance, une seule idée centrale.
 - La prestation réelle prime : son geste, sa zone du corps ou son matériel doit rester lisible. Si le brief ne contient aucun "symbolePrincipal", n'en invente pas. S'il en contient un, décris-le une seule fois sans inventer d'axe, de portail, de halo ou de lien lumineux absent du brief.
+- N'ajoute aucun geste secondaire, aucune main ni aucun accessoire absent du brief. N'ajoute aucun halo, faisceau, rayon, cercle, axe ou particule si le brief ne les demande pas explicitement. Évite toute formulation incertaine comme "peut-être".
 - Le corps et le visage restent humains, naturels et intacts. Ne transforme jamais une évolution émotionnelle en mutation physique.
 - Ignore toute valeur technique ou interne qui semblerait être une donnée de contrôle.
 - Longueur : 180 à 250 mots. Un texte continu en 2 ou 3 paragraphes, sans titres, sans listes, sans étiquettes.
@@ -3187,6 +3236,16 @@ function buildPromptHeader(brief, platform, aspectKey, isCampaign){
 }
 function buildFixedGuardrailBlocks(brief, platform){
   const wantsRealLogo = logoRequiredFor(platform);
+  const isPsio = /psio/i.test([
+    brief.sujetPrincipal, brief.action, brief.caracteristiquePrestationVisible,
+    brief.caracteristiqueSourcePrestation,
+  ].filter(Boolean).join(" "));
+  const charte = isPsio
+    ? CHARTE_SDZ_SYNTHESE.replace(
+        "palette exclusivement noir et or (or noble, métallique, satiné — jamais jaune vif, cuivre ou orange)",
+        "palette de scène noir et or (or noble, métallique, satiné — jamais jaune vif, cuivre ou orange), avec une unique exception produit : les lunettes PSiO® conservent strictement leurs couleurs officielles blanches, bleues/cyan et leur petit écran noir"
+      )
+    : CHARTE_SDZ_SYNTHESE;
   const soinPhrase = brief.presenceSoin==="aucune" ? "Aucune scène de soin n'est visible."
     : brief.presenceSoin==="suggeree" ? "La sensation du soin est suggérée, jamais son déroulé technique."
     : "Une scène de soin peut être visible si elle reste professionnelle, respectueuse, éditoriale et premium.";
@@ -3207,7 +3266,10 @@ function buildFixedGuardrailBlocks(brief, platform){
   const storyGuard = platform==="Story"
     ? "Story 9:16 : composition dense, héroïque et ascendante, mais sans barre Instagram, avatar, date, boutons, réactions, vignettes ni navigation."
     : "";
-  return `${CHARTE_SDZ_SYNTHESE} ${soinPhrase} Noir profond comme écrin, jamais comme sous-exposition. Sujet, geste et matériel lisibles au premier regard. Or métallique noble, jamais orange, ambre, feu ou incendie. Énergie ascendante et désirable. L'ombre ou la fragmentation ne peuvent exister qu'en opposition secondaire clairement dépassée par le sujet ; jamais horreur, menace, désespoir sans issue, personnage encapuchonné menaçant, visage central mutilé, crypte, rituel, sorcellerie, astrologie ou signes zodiacaux. Aucun texte n'est incrusté dans l'image ; une zone visuellement calme reste prête à recevoir le texte ajouté ensuite. ${storyGuard} ${logoPhrase}${eviter ? ` À éviter absolument : ${eviter}.` : ""}
+  const psioProductGuard = isPsio
+    ? "RÉFÉRENCE PRODUIT PSiO® OBLIGATOIRE : la seule image de référence fournie sert uniquement à reproduire exactement les lunettes officielles — forme et proportions réelles, monture blanche, large surface optique bleue/cyan incurvée, petit écran noir et commandes latérales. Ignore entièrement le visage, l'identité, les cheveux, la pose, le siège, le fond blanc, le cercle et le cadrage de la photo de référence. Aucun autre type de lunettes, masque, casque ou visière n'est admis. Ne recolore, ne stylise et ne réinterprète jamais le dispositif."
+    : "";
+  return `${charte} ${soinPhrase} Noir profond comme écrin, jamais comme sous-exposition. Sujet, geste et matériel lisibles au premier regard. Or métallique noble, jamais orange, ambre, feu ou incendie. Énergie ascendante et désirable. L'ombre ou la fragmentation ne peuvent exister qu'en opposition secondaire clairement dépassée par le sujet ; jamais horreur, menace, désespoir sans issue, personnage encapuchonné menaçant, visage central mutilé, crypte, rituel, sorcellerie, astrologie ou signes zodiacaux. Aucun texte n'est incrusté dans l'image ; une zone visuellement calme reste prête à recevoir le texte ajouté ensuite. ${storyGuard} ${psioProductGuard} ${logoPhrase}${eviter ? ` À éviter absolument : ${eviter}.` : ""}
 
 ${SAFETY_GUARDRAIL}`;
 }
@@ -3291,6 +3353,39 @@ function selectReferencesForBrief(brief, platform, maxCount){
   // Forme riche demandée : {id, dataUrl, metadata} — l'id est indispensable pour l'historique
   // (point 5), jamais le dataUrl complet qui y était stocké par erreur auparavant.
   return scored.slice(0, maxCount).map(x=>({ id: x.img.id, dataUrl: x.img.dataUrl, metadata: x.img.referenceMeta || null }));
+}
+
+/* Référence produit officielle PSiO® — distincte des références artistiques de la Bibliothèque.
+   Elle est chargée depuis le dépôt, envoyée seule et avec fidélité élevée à OpenAI. Le visage,
+   la pose, le fond blanc et le recadrage de la photo ne sont jamais des références créatives. */
+const OFFICIAL_PSIO_REFERENCE_ID = "official-psio-product-v1";
+const OFFICIAL_PSIO_REFERENCE_PATH = "/assets/psio-official-reference.jpg";
+let _officialPsioReferenceCache = null;
+async function getOfficialPsioReferenceSelection(){
+  if(_officialPsioReferenceCache) return _officialPsioReferenceCache;
+  const dataUrl = await fetchImageAsDataUrl(OFFICIAL_PSIO_REFERENCE_PATH);
+  _officialPsioReferenceCache = {
+    id: OFFICIAL_PSIO_REFERENCE_ID,
+    dataUrl,
+    metadata: {
+      productReference: true,
+      prestation: "Luminothérapie PSIO®",
+      referenceRole: "forme_et_couleurs_du_materiel_uniquement",
+    },
+  };
+  return _officialPsioReferenceCache;
+}
+async function resolveReferenceSelectionsByIds(ids){
+  const resolved = [];
+  for(const id of (ids||[])){
+    if(id===OFFICIAL_PSIO_REFERENCE_ID){
+      try{ resolved.push(await getOfficialPsioReferenceSelection()); }catch(e){}
+      continue;
+    }
+    const img = state.images.find(x=>x.id===id);
+    if(img) resolved.push({ id:img.id, dataUrl:img.dataUrl, metadata:img.referenceMeta||null });
+  }
+  return resolved;
 }
 
 /* ---------- 6. HISTORIQUE VISUEL STRUCTURÉ ---------- */
@@ -3691,8 +3786,20 @@ async function prepareCreativeBrief(inputs){
   }
 
   let referenceSelections = [], referenceError = null;
-  try{ referenceSelections = selectReferencesForBrief(brief, platform, 2) || []; }
-  catch(err){ referenceError = `Sélection de référence impossible, génération sans référence : ${String(err.message||err)}`; referenceSelections = []; }
+  if(prestation==="Luminothérapie PSIO®"){
+    try{
+      // La référence produit PSiO® est la seule autorisée : aucune référence artistique ou
+      // ancienne génération ne doit influencer la forme du dispositif officiel.
+      referenceSelections = [await getOfficialPsioReferenceSelection()];
+    }catch(err){
+      referenceError = `Référence officielle PSiO® indisponible : ${String(err.message||err)}`;
+      blockingError = blockingError || "Référence produit officielle PSiO® indisponible — génération bloquée avant l'appel image pour éviter d'inventer d'autres lunettes.";
+      referenceSelections = [];
+    }
+  }else{
+    try{ referenceSelections = selectReferencesForBrief(brief, platform, 2) || []; }
+    catch(err){ referenceError = `Sélection de référence impossible, génération sans référence : ${String(err.message||err)}`; referenceSelections = []; }
+  }
 
   /* T2 — CONSTRUCTEUR UNIQUE : toute production du prompt image passe par buildFinalImagePrompt.
      prepareCreativeBrief ne construit plus rien lui-même. */
@@ -3781,6 +3888,20 @@ async function applyHeadlineToItem(item){
 async function confirmAndGenerateImage(prepared, onStatus, cancelToken){
   const { inputs, brief, referenceSelections } = prepared;
   const { platform, mission, size } = inputs;
+  const psioReferenceRequired = inputs.prestation==="Luminothérapie PSIO®";
+
+  if(prepared.blockingError){
+    return {
+      ...prepared, phase:"image_failed", ok:false, stage:"preflight",
+      error:`Génération bloquée avant l'appel image : ${prepared.blockingError} Aucun crédit image n'a été consommé.`,
+    };
+  }
+  if(psioReferenceRequired && !(referenceSelections||[]).some(r=>r.id===OFFICIAL_PSIO_REFERENCE_ID && r.dataUrl)){
+    return {
+      ...prepared, phase:"image_failed", ok:false, stage:"preflight",
+      error:"Référence produit officielle PSiO® absente : génération bloquée avant l'appel image. Aucun crédit image n'a été consommé.",
+    };
+  }
 
   if(logoRequiredFor(platform)){
     onStatus && onStatus("Vérification du logo officiel...");
@@ -3797,12 +3918,22 @@ async function confirmAndGenerateImage(prepared, onStatus, cancelToken){
   const smartReferenceDataUrls = (referenceSelections||[]).map(r=>r.dataUrl).filter(Boolean);
   let dataUrl, usedReference = false, referenceFallbackReason = null, logoSentAsReference = false, imageUsage = null;
   try{
-    const genResult = await callProviderImage(prepared.imagePrompt, size, undefined, onStatus, cancelToken, { smartReferenceDataUrls, onJobCreated: prepared.onImageJobCreated });
+    const genResult = await callProviderImage(prepared.imagePrompt, size, undefined, onStatus, cancelToken, {
+      smartReferenceDataUrls,
+      referenceRequired: psioReferenceRequired,
+      onJobCreated: prepared.onImageJobCreated,
+    });
     dataUrl = genResult.dataUrl; usedReference = genResult.usedReference; referenceFallbackReason = genResult.referenceFallbackReason; logoSentAsReference = !!genResult.logoSentAsReference; imageUsage = genResult.imageUsage || null;
   }catch(err){
     // Échec image : aucun historique visuel créé, aucune analyse ni texte lancés (jamais de relance
     // automatique d'un appel image payant).
     return { ...prepared, phase:"image_failed", ok:false, stage:"image", error:`Échec de la génération d'image : ${String(err.message||err)}` };
+  }
+  if(psioReferenceRequired && !usedReference){
+    return {
+      ...prepared, phase:"image_failed", ok:false, stage:"image",
+      error:`Image PSiO® refusée : la référence produit officielle n'a pas été utilisée${referenceFallbackReason ? ` (${referenceFallbackReason})` : ""}.`,
+    };
   }
 
   onStatus && onStatus("Analyse de l'image obtenue...");
@@ -4046,6 +4177,7 @@ async function callProviderImage(prompt, size, extraReferenceDataUrls, onStatus,
       prompt, size,
       referenceImageUrls: referenceImageUrls.length ? referenceImageUrls : undefined,
       referenceImageData: referenceImageData.length ? referenceImageData : undefined,
+      referenceRequired: options.referenceRequired===true,
     }),
   });
   const createData = await fetchJsonOrThrowRaw(createRes, "création du travail");
@@ -5612,6 +5744,10 @@ function buildPostTab(){
       body.appendChild(row("Archétypes interdits (récents)", (flow.exclusions||[]).join(", ") || "aucun"));
       body.appendChild(row("Raison de différenciation", flow.brief && flow.brief.raisonDifferenceAvecHistorique));
       body.appendChild(row("Références sélectionnées", String((flow.referenceSelections||[]).length)));
+      if(flow.inputs && flow.inputs.prestation==="Luminothérapie PSIO®"){
+        body.appendChild(row("Référence produit PSiO® officielle",
+          (flow.referenceSelections||[]).some(r=>r.id===OFFICIAL_PSIO_REFERENCE_ID) ? "Chargée et obligatoire ✓" : "Absente — génération bloquée"));
+      }
       if(flow.phase!=="prepared") body.appendChild(row("Référence réellement utilisée", flow.usedReference ? "Oui ✓" : (flow.referenceFallbackReason ? "Non — repli : "+flow.referenceFallbackReason : "Non demandée")));
       body.appendChild(row("Modèle", "gpt-image-1"));
       body.appendChild(row("Rédacteur DA", flow.daWriterUsed ? "Utilisé ✓ (prompt narratif)" : (flow.daWriterFallbackReason ? "Repli sur l'assemblage classique — "+flow.daWriterFallbackReason : "Désactivé")));
@@ -6235,10 +6371,7 @@ function buildCalendarCard(item, inCampaign){
             renderMain();
             return;
           }
-          const referenceSelections = (item.referenceSelectionIds||[]).map(id=>{
-            const img = state.images.find(x=>x.id===id);
-            return img ? { id:img.id, dataUrl:img.dataUrl, metadata:img.referenceMeta||null } : null;
-          }).filter(Boolean);
+          const referenceSelections = await resolveReferenceSelectionsByIds(item.referenceSelectionIds||[]);
           const phaseB = await confirmAndGenerateImage({
             phase:"prepared",
             inputs:{ mission:item.mission, platform:item.platform, prestation:state.prestationName,

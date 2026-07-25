@@ -89,6 +89,7 @@ exports.handler = async (event) => {
     return { statusCode: 400, body: JSON.stringify({ error: "Corps de requête invalide" }) };
   }
   const { prompt, size, model, referenceImageUrls, referenceImageData } = payload;
+  const referenceRequired = payload.referenceRequired === true;
 
   try {
     const key = process.env.OPENAI_API_KEY;
@@ -103,7 +104,10 @@ exports.handler = async (event) => {
         data = await generateWithReferenceImages({ key, prompt, size, model, referenceImageUrls, referenceImageData });
         usedReference = true;
       } catch (refErr) {
-        // dégradation propre : on retombe sur la génération standard, jamais d'échec côté utilisateur
+        if(referenceRequired){
+          throw new Error(`Référence produit obligatoire non utilisée : ${String(refErr.message || refErr)}`);
+        }
+        // Dégradation propre pour les références artistiques facultatives uniquement.
         data = await generateStandard({ key, prompt, size, model });
       }
     } else {

@@ -165,6 +165,7 @@ exports.handler = async (event) => {
       return { statusCode: 200, body: JSON.stringify({ ok: false, error: "Entrée introuvable" }) };
     }
     const { prompt, size, model, referenceImageUrls, referenceImageData } = input;
+    const referenceRequired = input.referenceRequired === true;
 
     const key = process.env.OPENAI_API_KEY;
     if (!key) {
@@ -183,9 +184,11 @@ exports.handler = async (event) => {
           data = await generateWithReferenceImages({ key, prompt, size, model, referenceImageUrls, referenceImageData });
           usedReference = true;
         } catch (refErr) {
-          // dégradation propre : on retombe sur la génération standard, mais on garde la raison
-          // exacte pour que le client sache que l'image B n'est pas valide pour un comparatif A/B
           referenceFallbackReason = String(refErr.message || refErr);
+          if(referenceRequired){
+            throw new Error(`Référence produit obligatoire non utilisée : ${referenceFallbackReason}`);
+          }
+          // Dégradation propre pour les références artistiques facultatives uniquement.
           data = await generateStandard({ key, prompt, size, model });
           usedReference = false;
         }
