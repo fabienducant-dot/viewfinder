@@ -2147,12 +2147,14 @@ ${socle}
 CONSIGNE OBLIGATOIRE SUR LA PRESTATION :
 ${consignePrestation}
 - Le geste, la zone du corps ou le matériel distinctif est le héros visuel et doit être visible au premier regard : une image générique de portail, silhouette, méditation ou lumière abstraite ne suffit jamais.
+- Dans "miseEnScene.action", décris uniquement l'usage réel de la prestation, une posture ou un geste humain crédible. N'y place jamais un effet visuel, des particules, une lumière, une transformation ou un symbole.
 - L'effet fantastique amplifie la prestation réelle ; il ne la remplace jamais. Le sujet reste naturel, habillé, crédible et intact.
 - Reste éditorial, premium et jamais démonstratif ou didactique.
 
 ${platform==="Story" ? `DIRECTION VISUELLE DE RÉFÉRENCE — STORIES SDZ :
 - composition verticale 9:16 dense et éditoriale, sujet héroïque central, profondeur en plusieurs plans, énergie dorée ascendante ;
-- contraste noir/or spectaculaire mais visage, geste et matériel restent lisibles ;
+- contraste noir/or spectaculaire, niveau lumineux et éclatant : le noir reste un écrin détaillé, jamais une sous-exposition ;
+- point de vue à hauteur du regard ou en légère contre-plongée valorisante ; aucune vue plongeante qui rapetisse le sujet ;
 - grande zone calme réservée au titre et à la signature officielle ajoutés ensuite par Canvas ;
 - ne reproduis aucun élément d'interface Instagram : barre de story, avatar, date, boutons, réactions, vignettes ou navigation ;
 - ne génère aucun texte, aucun logo, aucun zèbre décoratif et aucun symbole de marque : ils seront ajoutés proprement après génération ;
@@ -2406,10 +2408,14 @@ const STORY_PRESTATION_LABELS = {
   "Massage dos/zone":"MASSAGE CIBLÉ",
   "Prestations en entreprise":"BIEN-ÊTRE EN ENTREPRISE",
 };
+const STORY_PRESTATION_SUBLINES = {
+  "Luminothérapie PSIO®":"LUMIÈRE ET SON, ÉVASION SENSORIELLE",
+};
 const STORY_HEADLINES_TROP_GENERIQUES = [
   "deconnexion parfaite","immersion dans l instant","revelez vous","renaitre",
   "renaissance","experience transformatrice","nouvel espace interieur",
   "retrouvez votre energie","liberez vous","harmonie interieure",
+  "deconnectez vous des ressentis quotidiens",
 ];
 function getStoryPrestationLabel(prestation){
   if(STORY_PRESTATION_LABELS[prestation]) return STORY_PRESTATION_LABELS[prestation];
@@ -2426,6 +2432,8 @@ function getStoryDiscoveryLine(prestation){
 }
 function ensureStoryHeadline(texteImage, prestation){
   const label = getStoryPrestationLabel(prestation);
+  const canonicalSubtitle = STORY_PRESTATION_SUBLINES[prestation];
+  if(canonicalSubtitle) return `${label} | ${canonicalSubtitle}`;
   const parts = String(texteImage||"").split("|").map(x=>x.trim()).filter(Boolean);
   let subtitle = parts.slice(1).join(" ").trim();
   const subtitleNorm = normalizeForContainmentCheck(subtitle);
@@ -2436,6 +2444,23 @@ function ensureStoryHeadline(texteImage, prestation){
     subtitle = getStoryDiscoveryLine(prestation);
   }
   return `${label} | ${subtitle}`;
+}
+function getServiceVisualMoment(prestation){
+  if(prestation==="Luminothérapie PSIO®"){
+    return "l'instant où les lunettes PSiO® deviennent le point d'ancrage lumineux de la scène";
+  }
+  return "l'instant où le geste ou le matériel distinctif de la prestation devient clairement lisible";
+}
+function getServiceHeroAction(prestation){
+  if(prestation==="Luminothérapie PSIO®"){
+    return "vivre la séance les yeux fermés, lunettes PSiO® bien visibles, posture relâchée et visage naturel";
+  }
+  return "recevoir ou utiliser la prestation, avec son geste ou son matériel distinctif clairement visible";
+}
+function pointDeVueRabatLeSujet(value){
+  const norm = normalizeForContainmentCheck(value);
+  return /\b(?:vue du dessus|angle superieur)\b/.test(norm)
+    || (/\bplong(?:e|ee|ant)\b/.test(norm) && !/\bcontre plonge/.test(norm));
 }
 
 function validateAndFixBriefV2(brief, allowed, exclusions, typeCreationImpose, prestation, platform){
@@ -2471,7 +2496,6 @@ function validateAndFixBriefV2(brief, allowed, exclusions, typeCreationImpose, p
   // Pause déterministe des automatismes observés pendant les runs officiels. Le brief V2 place
   // désormais la prestation réelle au centre et n'impose aucun symbole de substitution.
   if(typeCreationImpose==="affiche_fantastique"){
-    const motifInterdits = V2_MOTIFS_EN_PAUSE.join(", ");
     fixed.compositionInterdite = [...new Set([...fixed.compositionInterdite, ...V2_MOTIFS_EN_PAUSE])];
     const symboleNorm = normalizeForContainmentCheck(fixed.symbolePrincipal);
     if(symboleNorm && symboleNorm!=="aucun"){
@@ -2492,10 +2516,29 @@ function validateAndFixBriefV2(brief, allowed, exclusions, typeCreationImpose, p
       corrected = true;
     }
     if(contientMotifV2EnPause(fixed.momentCinematographique)){
-      fixed.momentCinematographique = "l'instant précis où le geste ou le matériel réel de la prestation devient le centre lumineux et lisible de la scène";
+      fixed.momentCinematographique = getServiceVisualMoment(prestation);
       corrected = true;
     }
-    const negative = [String(fixed.negativePrompt||"").trim(), motifInterdits,
+    fixed.miseEnScene = fixed.miseEnScene || {};
+    if(contientMotifV2EnPause(fixed.miseEnScene.action)
+      || /particul|debris|débris|etincell|étincell|effet visuel|transformation physique/i.test(String(fixed.miseEnScene.action||""))){
+      fixed.miseEnScene.action = getServiceHeroAction(prestation);
+      corrected = true;
+    }
+    if(/^une adulte\b/i.test(String(fixed.miseEnScene.sujetPrincipal||""))){
+      fixed.miseEnScene.sujetPrincipal = String(fixed.miseEnScene.sujetPrincipal)
+        .replace(/^une adulte\b/i, "une personne adulte");
+      corrected = true;
+    }
+    if(platform==="Story" && pointDeVueRabatLeSujet(fixed.miseEnScene.pointDeVue)){
+      fixed.miseEnScene.pointDeVue = "angle trois-quarts à hauteur du regard, posture valorisante";
+      corrected = true;
+    }
+    if(platform==="Story" && fixed.niveauLuminosite!=="lumineux_eclatant"){
+      fixed.niveauLuminosite = "lumineux_eclatant";
+      corrected = true;
+    }
+    const negative = [String(fixed.negativePrompt||"").trim(),
       "mutation physique, transfiguration du visage, corps fragmenté, ambiance d'horreur, symboles occultes, faux logo, zèbre décoratif"]
       .filter(Boolean).join(", ");
     if(negative !== fixed.negativePrompt){ fixed.negativePrompt = negative; corrected = true; }
@@ -3146,11 +3189,21 @@ function buildFixedGuardrailBlocks(brief, platform){
   const wantsRealLogo = logoRequiredFor(platform);
   const soinPhrase = brief.presenceSoin==="aucune" ? "Aucune scène de soin n'est visible."
     : brief.presenceSoin==="suggeree" ? "La sensation du soin est suggérée, jamais son déroulé technique."
-    : "Une scène de soin peut être visible si elle reste éditoriale et premium, jamais clinique.";
+    : "Une scène de soin peut être visible si elle reste professionnelle, respectueuse, éditoriale et premium.";
   const logoPhrase = wantsRealLogo
     ? "Aucun logo dessiné : une zone sobre reste dégagée pour l'ajout ultérieur de la signature officielle par Canvas. Interdiction stricte de générer un zèbre décoratif, un faux logo, une tête de zèbre en médaillon, un sceau, un monogramme ou un emblème."
     : "Aucun logo, médaillon ou monogramme inventé.";
-  const eviter = [String(brief.negativePrompt||"").trim(), (brief.compositionInterdite||[]).join(", ")].filter(Boolean).join(" ; ");
+  const negativeItems = String(brief.negativePrompt||"")
+    .split(/\s*[,;]\s*/).map(x=>x.trim()).filter(Boolean);
+  const compositionItems = (brief.compositionInterdite||[])
+    .map(x=>String(x||"").trim()).filter(Boolean);
+  const exclusionsVues = new Set();
+  const eviter = [...negativeItems, ...compositionItems].filter(item=>{
+    const key = normalizeForContainmentCheck(item);
+    if(!key || exclusionsVues.has(key)) return false;
+    exclusionsVues.add(key);
+    return true;
+  }).join(", ");
   const storyGuard = platform==="Story"
     ? "Story 9:16 : composition dense, héroïque et ascendante, mais sans barre Instagram, avatar, date, boutons, réactions, vignettes ni navigation."
     : "";
