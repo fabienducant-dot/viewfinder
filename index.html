@@ -5246,7 +5246,7 @@ function buildPostTab(){
   }
 
   /* ---------- MOTEUR CRÉATIF — action principale, en deux phases ----------
-     Phase A (gratuite, aucun appel image) : diversité déterministe, Creative Planner, validation
+     Phase A (aucun appel image, coût texte minime) : diversité déterministe, Creative Planner, validation
      locale, sélection des références, prompt image compact — tout ça est affiché dans le Prompt
      Inspector AVANT toute confirmation. Phase B (payante) ne part qu'après un clic explicite sur
      "Confirmer et générer l'image". Volontairement indépendant de state.imagePrompt (qui n'est
@@ -5256,7 +5256,7 @@ function buildPostTab(){
   const creativeEngineAvailable = !!(state.apiProviders.find(p=>p.kind==="openai-compatible" && (p.baseUrl||"").includes("api.openai.com")) || DEFAULT_OPENAI_PROVIDER);
   if(creativeEngineAvailable){
     const imgApiStatus = el("p",{style:"font-size:12px;color:var(--muted2);min-height:16px;margin:4px 0 8px;"},"");
-    const prepareBtn = el("button",{class:"btn-primary", style:"margin-bottom:10px;"}, [svgIcon(ICONS.sparkles,14), el("span",{},"Préparer la création (gratuit)")]);
+    const prepareBtn = el("button",{class:"btn-primary", style:"margin-bottom:10px;"}, [svgIcon(ICONS.sparkles,14), el("span",{},"Préparer la création (sans image)")]);
     const confirmBtn = el("button",{class:"btn-secondary", style:"margin:0 0 10px 8px;display:none;"}, [svgIcon(ICONS.wand,14), el("span",{},"Confirmer et générer l'image")]);
     const imgCancelBtn = el("button",{class:"btn-secondary", style:"margin:0 0 10px 8px;display:none;"}, "Annuler le suivi");
     const regenTextBtn = el("button",{class:"btn-secondary", style:"margin:0 0 10px 8px;display:none;"}, "Régénérer uniquement le texte");
@@ -5374,7 +5374,7 @@ function buildPostTab(){
 
       const body = el("div",{class:"card", style:"margin-top:8px;font-size:12px;"});
       const row = (label,val)=> el("div",{style:"padding:4px 0;border-bottom:1px solid var(--border);"}, [el("span",{style:"color:var(--muted2);"}, label+" : "), el("span",{}, val||"—")]);
-      row.call && body.appendChild(row("Phase", flow.phase==="prepared" ? "A — préparée, en attente de confirmation (aucun crédit consommé)" : flow.phase==="image_failed" ? "B — échec avant obtention de l'image" : "B — terminée"));
+      row.call && body.appendChild(row("Phase", flow.phase==="prepared" ? "A — préparée, en attente de confirmation (aucune image générée ; coût texte minime)" : flow.phase==="image_failed" ? "B — échec avant obtention de l'image" : "B — terminée"));
       body.appendChild(row("Type de création (figé)", flow.brief && flow.brief.typeCreation));
       body.appendChild(row("Archétype choisi", flow.brief && flow.brief.archetypeNarratif));
       body.appendChild(row("Archétypes interdits (récents)", (flow.exclusions||[]).join(", ") || "aucun"));
@@ -5433,7 +5433,7 @@ function buildPostTab(){
         state.lastCreativeFlow = prepared;
         imgApiStatus.textContent = prepared.plannerError
           ? `Brief préparé (avec repli local — voir Inspector) ✓ Relis le prompt avant de confirmer.`
-          : "Brief préparé ✓ — relis le Creative Brief et le prompt ci-dessous avant de confirmer (aucun crédit consommé pour l'instant).";
+          : "Brief préparé ✓ — relis le Creative Brief et le prompt ci-dessous avant de confirmer (aucune image générée ; coût texte minime).";
         renderCreativeInspector();
       }catch(err){ imgApiStatus.textContent = `Échec de la préparation : ${err.message||err}`; }
       prepareBtn.disabled = false;
