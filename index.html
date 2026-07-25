@@ -1580,6 +1580,7 @@ function keywordVariantBlock(style, aspectKey){
    jamais générique/clinique). */
 const ARCHETYPE_CATALOG = [
   { id:"transformation_interieure", label:"Transformation intérieure",
+    emotion:"apaisement gagné", dramaturgie:"passage progressif de la tension au relâchement", rythme:"lent, continu", sensation:"chaleur qui regagne le corps",
     scenesCompatibles:["passage d'un état de tension à un état d'apaisement, visible sur l'expression ou la posture"],
     missionsCompatibles:["Faire découvrir un soin","Humaniser le cabinet","Promouvoir une prestation"],
     prestationsCompatibles:["toutes"], cadrages:["plan serré","gros plan visage ou mains"],
@@ -1587,84 +1588,98 @@ const ARCHETYPE_CATALOG = [
     interdits:["scène de soin technique explicite, geste médical"], presenceSoin:"suggeree",
     referenceFamily:"intime" },
   { id:"passage_portail", label:"Passage / portail",
+    emotion:"seuil franchi", dramaturgie:"traversée d'un espace vers un autre", rythme:"suspendu, juste avant le pas", sensation:"souffle retenu",
     scenesCompatibles:["seuil, porte, ouverture architecturale traversée ou sur le point de l'être"],
     missionsCompatibles:["Annoncer une actualité","Vendre des bons cadeaux","Créer une campagne complète"],
     prestationsCompatibles:["toutes"], cadrages:["grand angle","profondeur de champ marquée"],
     lumieres:["grande source naturelle traversant l'ouverture"], interdits:["absence totale de profondeur, sujet plaqué sur un fond plat"],
     presenceSoin:"aucune", referenceFamily:"monumental" },
   { id:"transmission_cadeau", label:"Transmission / cadeau",
+    emotion:"attention offerte", dramaturgie:"un geste qui scelle une intention", rythme:"bref, précis", sensation:"contact furtif, chaleur d'un objet",
     scenesCompatibles:["objet tendu, offert ou reçu, échange main à main"],
     missionsCompatibles:["Vendre des bons cadeaux","Fidéliser"],
     prestationsCompatibles:["Offre Sylver","Offre Gold","toutes"], cadrages:["plan rapproché sur les mains ou l'objet"],
     lumieres:["reflet doré ponctuel et net sur l'objet transmis"], interdits:["visage entier montré en gros plan"],
     presenceSoin:"aucune", referenceFamily:"intime" },
   { id:"liberation", label:"Libération",
+    emotion:"délivrance", dramaturgie:"un poids qui se dénoue", rythme:"ample, ascendant", sensation:"légèreté soudaine",
     scenesCompatibles:["corps qui se déploie, tension relâchée, mouvement d'ouverture"],
     missionsCompatibles:["Faire découvrir un soin","Humaniser le cabinet"],
     prestationsCompatibles:["toutes"], cadrages:["plan moyen ou large", "ligne diagonale"],
     lumieres:["contre-jour", "grande source naturelle"], interdits:["pose figée et statique de studio"],
     presenceSoin:"suggeree", referenceFamily:"intime" },
   { id:"reconnexion_corps", label:"Reconnexion au corps",
+    emotion:"présence retrouvée à soi", dramaturgie:"le corps redevient perceptible", rythme:"lent, focalisé", sensation:"chaleur localisée, texture de peau",
     scenesCompatibles:["détail corporel (mains, nuque, dos, pieds) sans geste de soin technique complet"],
     missionsCompatibles:["Faire découvrir un soin","Promouvoir une prestation"],
     prestationsCompatibles:["toutes"], cadrages:["macro", "détail rapproché"],
     lumieres:["lumière sculptée localisée sur la zone de détail"], interdits:["table de massage visible dans son ensemble"],
     presenceSoin:"suggeree", referenceFamily:"intime" },
   { id:"contemplation", label:"Contemplation",
+    emotion:"recueillement", dramaturgie:"un regard qui s'arrête sur l'immensité", rythme:"immobile", sensation:"silence, vastitude",
     scenesCompatibles:["sujet seul, regard vers un horizon ou un espace, immobilité pensive"],
     missionsCompatibles:["Humaniser le cabinet","Annoncer une actualité"],
     prestationsCompatibles:["toutes"], cadrages:["plan large, sujet petit dans le cadre"],
     lumieres:["grande source naturelle"], interdits:["action physique visible"],
     presenceSoin:"aucune", referenceFamily:"monumental" },
   { id:"mouvement", label:"Mouvement",
+    emotion:"élan retrouvé", dramaturgie:"une énergie qui reprend son cours", rythme:"vif, fluide", sensation:"air en mouvement, tissu qui vole",
     scenesCompatibles:["geste ample, tissu ou élément en mouvement, dynamisme"],
     missionsCompatibles:["Annoncer une actualité","Créer une campagne complète"],
     prestationsCompatibles:["toutes"], cadrages:["plan moyen","ligne diagonale"],
     lumieres:["lumière dirigée avec léger flou de mouvement"], interdits:["immobilité totale du sujet"],
     presenceSoin:"aucune", referenceFamily:"intime" },
   { id:"architecture", label:"Architecture",
+    emotion:"assurance tranquille", dramaturgie:"un lieu qui affirme sa permanence", rythme:"statique, imposant", sensation:"masse, échelle",
     scenesCompatibles:["lieu ou espace bâti mis en scène pour lui-même, sans présence humaine au premier plan"],
     missionsCompatibles:["Rassurer les nouveaux clients","Humaniser le cabinet","Améliorer le SEO"],
     prestationsCompatibles:["toutes"], cadrages:["cadrage large, géométrie du lieu"],
     lumieres:["grande source architecturale (ouverture, verrière)"], interdits:["sujet humain au premier plan"],
     presenceSoin:"aucune", referenceFamily:"monumental" },
   { id:"detail_sensoriel", label:"Détail sensoriel",
+    emotion:"attention pure", dramaturgie:"un fragment qui dit tout du reste", rythme:"suspendu, très proche", sensation:"texture, grain, reflet",
     scenesCompatibles:["texture, matière, goutte, grain de peau, tissu — registre purement sensoriel"],
     missionsCompatibles:["Promouvoir une prestation","Améliorer le SEO"],
     prestationsCompatibles:["toutes"], cadrages:["macro"],
     lumieres:["reflet ponctuel"], interdits:["présence humaine entière dans le cadre"],
     presenceSoin:"aucune", referenceFamily:"intime" },
   { id:"rencontre_humaine", label:"Rencontre humaine",
+    emotion:"accueil sincère", dramaturgie:"deux présences qui se rejoignent", rythme:"doux, mesuré", sensation:"chaleur d'une présence proche",
     scenesCompatibles:["échange, accueil, deux présences suggérées sans geste clinique"],
     missionsCompatibles:["Humaniser le cabinet","Rassurer les nouveaux clients"],
     prestationsCompatibles:["toutes"], cadrages:["plan moyen, deux présences"],
     lumieres:["lumière douce dirigée"], interdits:["geste de soin technique direct entre les deux personnes"],
     presenceSoin:"aucune", referenceFamily:"intime" },
   { id:"paysage_monumental", label:"Paysage monumental",
+    emotion:"humilité face à l'immense", dramaturgie:"une silhouette absorbée par l'échelle du lieu", rythme:"lent, très large", sensation:"vertige d'échelle",
     scenesCompatibles:["échelle humaine réduite face à un espace immense"],
     missionsCompatibles:["Annoncer une actualité","Créer une campagne complète"],
     prestationsCompatibles:["toutes"], cadrages:["très large, sujet petit dans le cadre"],
     lumieres:["grande source naturelle"], interdits:["gros plan sur un détail"],
     presenceSoin:"aucune", referenceFamily:"monumental" },
   { id:"instant_apres_soin", label:"Instant après le soin",
+    emotion:"apaisement accompli", dramaturgie:"la trace visible d'un soin déjà terminé", rythme:"calme, posé", sensation:"détente du visage, respiration ample",
     scenesCompatibles:["état d'apaisement une fois le soin terminé — jamais le soin en train de se dérouler"],
     missionsCompatibles:["Faire découvrir un soin","Promouvoir une prestation"],
     prestationsCompatibles:["toutes"], cadrages:["plan rapproché, posture ou visage détendu"],
     lumieres:["lumière douce"], interdits:["scène de soin en cours de déroulement"],
     presenceSoin:"suggeree", referenceFamily:"intime" },
   { id:"cabinet_reel", label:"Cabinet réel",
+    emotion:"confiance rassurante", dramaturgie:"un lieu qui prouve sa réalité", rythme:"stable, sans emphase", sensation:"clarté, netteté",
     scenesCompatibles:["lieu réel du cabinet, crédible et rassurant"],
     missionsCompatibles:["Rassurer les nouveaux clients","Améliorer le SEO"],
     prestationsCompatibles:["toutes"], cadrages:["plan moyen à large, architecture intérieure"],
     lumieres:["lumière naturelle abondante, moins spectaculaire"], interdits:["mise en scène trop théâtrale pour ce contexte rassurant"],
     presenceSoin:"aucune", referenceFamily:"reel" },
   { id:"geste_caracteristique", label:"Geste caractéristique",
+    emotion:"reconnaissance immédiate", dramaturgie:"un geste qui identifie la prestation en un instant", rythme:"bref, ciblé", sensation:"précision du geste",
     scenesCompatibles:["un geste emblématique de la prestation, jamais son déroulé technique complet"],
     missionsCompatibles:["Faire découvrir un soin","Promouvoir une prestation"],
     prestationsCompatibles:["toutes"], cadrages:["plan rapproché sur le geste"],
     lumieres:["lumière sculptée"], interdits:["geste médical ou clinique"],
     presenceSoin:"visible_editoriale", referenceFamily:"intime" },
   { id:"symbole_sdz", label:"Symbole SDZ",
+    emotion:"signature de marque", dramaturgie:"un objet qui incarne SDZ à lui seul", rythme:"statique, frontal", sensation:"netteté, brillance",
     scenesCompatibles:["objet ou motif symbolique de la marque mis en scène seul, sans présence humaine"],
     missionsCompatibles:["Annoncer une actualité","Vendre des bons cadeaux","Créer une campagne complète"],
     prestationsCompatibles:["toutes"], cadrages:["plan serré sur le symbole"],
@@ -1679,6 +1694,7 @@ const ARCHETYPE_CATALOG = [
    visible — d'où ce catalogue distinct, jamais mélangé avec le premier dans une même sélection. */
 const ARCHETYPE_CATALOG_FANTASTIQUE = [
   { id:"renaissance_monumentale", label:"Renaissance monumentale",
+    emotion:"renaissance", dramaturgie:"une présence monumentale qui atteste d'une renaissance en cours", rythme:"ascendant, grandiose", sensation:"vertige, embrasement doré",
     scenesCompatibles:["sujet transformé face à une présence monumentale (phénix, statue, architecture géante) qui incarne la renaissance en cours"],
     missionsCompatibles:["toutes"], prestationsCompatibles:["toutes"],
     cadrages:["vertical d'affiche de film","très large, sujet petit face au symbole monumental"],
@@ -1686,6 +1702,7 @@ const ARCHETYPE_CATALOG_FANTASTIQUE = [
     interdits:["fantasy enfantine","illustration plate","rendu 3D lisse"],
     presenceSoin:"suggeree", referenceFamily:"monumental" },
   { id:"passage_symbolique", label:"Passage symbolique",
+    emotion:"passage", dramaturgie:"un seuil ou un cercle qui marque un changement d'état", rythme:"suspendu, juste au seuil", sensation:"souffle, vertige du passage",
     scenesCompatibles:["seuil, éclipse ou cercle de lumière marquant le passage d'un état à un autre"],
     missionsCompatibles:["toutes"], prestationsCompatibles:["toutes"],
     cadrages:["vertical d'affiche de film","cadrage centré sur le seuil ou le cercle"],
@@ -1693,6 +1710,7 @@ const ARCHETYPE_CATALOG_FANTASTIQUE = [
     interdits:["fantasy enfantine","illustration plate","décor sans profondeur"],
     presenceSoin:"aucune", referenceFamily:"monumental" },
   { id:"dualite_interieure", label:"Dualité intérieure",
+    emotion:"tension résolue entre deux vérités", dramaturgie:"une façade qui se fissure pour révéler autre chose", rythme:"contrasté, en tension", sensation:"clair-obscur tranché",
     scenesCompatibles:["masque fissuré, reflet ou double exposition opposant une façade et une vérité intérieure"],
     missionsCompatibles:["toutes"], prestationsCompatibles:["toutes"],
     cadrages:["plan rapproché à mi-corps, composition verticale d'affiche"],
@@ -1700,6 +1718,7 @@ const ARCHETYPE_CATALOG_FANTASTIQUE = [
     interdits:["fantasy enfantine","symétrie parfaite sans tension"],
     presenceSoin:"suggeree", referenceFamily:"intime" },
   { id:"liberation_matiere", label:"Libération de la matière",
+    emotion:"libération", dramaturgie:"une matière qui se défait de sa contrainte", rythme:"éclatant, en expansion", sensation:"poussière dorée, éclats",
     scenesCompatibles:["chaînes, argent ou matière contraignante qui se rompt ou se dissout vers la lumière ou la nature"],
     missionsCompatibles:["toutes"], prestationsCompatibles:["toutes"],
     cadrages:["vertical d'affiche de film","plan large montrant l'ampleur de la libération"],
@@ -1707,6 +1726,7 @@ const ARCHETYPE_CATALOG_FANTASTIQUE = [
     interdits:["fantasy enfantine","illustration plate","rendu 3D lisse"],
     presenceSoin:"visible_editoriale", referenceFamily:"monumental" },
   { id:"gardien_sdz", label:"Gardien SDZ",
+    emotion:"protection silencieuse", dramaturgie:"une présence veille sans intervenir", rythme:"immobile, imposant", sensation:"poids, permanence",
     scenesCompatibles:["un véritable animal zèbre réaliste, en tant que gardien symbolique et singularité de la marque — jamais une forme de logo ou d'insigne"],
     missionsCompatibles:["toutes"], prestationsCompatibles:["toutes"],
     cadrages:["vertical d'affiche de film","plan large intégrant le décor monumental"],
@@ -1930,6 +1950,157 @@ const CREATIVE_BRIEF_SCHEMA = {
       "symbolePrincipal","oppositionVisuelle","pointDeTransformation","zoneTexte","zoneLogo"],
   },
 };
+/* ============================================================
+   CREATIVE PLANNER V2 — voir CREATIVE_PLANNER_V2_SPEC.md (verrouillé) et
+   CREATIVE_PLANNER_V2_IMPLEMENTATION.md pour le contrat complet.
+   Additif : n'existe qu'à côté de CREATIVE_BRIEF_SCHEMA, jamais à sa place.
+   Activé uniquement via prepareCreativeBrief({..., plannerVersion:"v2"}) — absent
+   de tout appel de production ("Créer un post") tant que la bascule n'est pas décidée.
+============================================================ */
+
+/* Vocabulaire à deux niveaux (spec §2). Interdits absolus : jamais comme moteur créatif
+   de impactEmotionnelRecherche, à aucun niveau. Tolérés : uniquement comme CONSÉQUENCE
+   d'un conflit déjà posé, jamais comme point de départ. */
+const VOCABULAIRE_INTERDIT_ABSOLU = ["spa","zen","relaxation","massage relaxant","harmonie","bien-être","bien etre","détente","detente"];
+const VOCABULAIRE_TOLERE_CONSEQUENCE = ["paix retrouvée","paix retrouvee","soulagement","silence retrouvé","silence retrouve","apaisement profond"];
+
+/* Univers fermé des archétypes émotionnels (fusion des deux catalogues existants,
+   voir §2 de l'implémentation — les catalogues eux-mêmes ne sont PAS fusionnés en un
+   seul tableau : cette liste ne sert qu'à contraindre l'enum du schéma V2). */
+const ARCHETYPE_EMOTIONNEL_IDS = [
+  ...ARCHETYPE_CATALOG.map(a=>a.id),
+  ...ARCHETYPE_CATALOG_FANTASTIQUE.map(a=>a.id),
+];
+
+const CREATIVE_BRIEF_SCHEMA_V2 = {
+  name: "creative_brief_v2",
+  strict: true,
+  schema: {
+    type: "object",
+    additionalProperties: false,
+    properties: {
+      ancrageReel: { type:"string" },
+      raisonDetre: { type:"string" },
+      impactEmotionnelRecherche: { type:"string" },
+      transformation: {
+        type:"object", additionalProperties:false,
+        properties: {
+          presente: { type:"boolean" },
+          avant: { type:"string" }, apres: { type:"string" },
+        },
+        required: ["presente","avant","apres"],
+      },
+      conflit: { type:"string" },
+      momentCinematographique: { type:"string" },
+      archetypeEmotionnel: { type:"string", enum: ARCHETYPE_EMOTIONNEL_IDS },
+      miseEnScene: {
+        type:"object", additionalProperties:false,
+        properties: {
+          sujetPrincipal: { type:"string" }, action: { type:"string" },
+          cadrage: { type:"string" }, pointDeVue: { type:"string" },
+        },
+        required: ["sujetPrincipal","action","cadrage","pointDeVue"],
+      },
+      decor: { type:"string" },
+      lumiere: { type:"string" }, elementOr: { type:"string" },
+      niveauLuminosite: { type:"string", enum:["sombre_dominant","equilibre","lumineux_eclatant"] },
+      symbolePrincipal: { type:"string" },
+      /* Champs de compatibilité — voir spec §1.13, liste verrouillée, ne pas étendre. */
+      caracteristiquePrestationVisible: { type:"string" },
+      typeCreation: { type:"string", enum:["luxe_silencieux","affiche_fantastique"] },
+      presenceSoin: { type:"string", enum:["aucune","suggeree","visible_editoriale"] },
+      compositionInterdite: { type:"array", items:{ type:"string" } },
+      negativePrompt: { type:"string" },
+      referenceFamily: { type:"string", enum:["intime","monumental","reel"] },
+      texteImage: { type:"string" },
+      zoneTexte: { type:"string" }, zoneLogo: { type:"string" },
+      messageCentral: { type:"string" },
+    },
+    required: ["ancrageReel","raisonDetre","impactEmotionnelRecherche","transformation","conflit",
+      "momentCinematographique","archetypeEmotionnel","miseEnScene","decor","lumiere","elementOr",
+      "niveauLuminosite","symbolePrincipal","caracteristiquePrestationVisible","typeCreation",
+      "presenceSoin","compositionInterdite","negativePrompt","referenceFamily","texteImage",
+      "zoneTexte","zoneLogo","messageCentral"],
+  },
+};
+
+/* ---------- CREATIVE PLANNER V2 — system prompt et user prompt ----------
+   Voisins fonctionnels de buildCreativePlannerSystemPrompt/buildCreativePlannerUserPrompt (V1),
+   jamais appelés depuis la production tant que prepareCreativeBrief ne reçoit pas
+   plannerVersion:"v2". Réutilisent tels quels : buildCompactMasterImageSocle, buildUniversSDZBlock,
+   buildPrestationFicheBlock, getSelectedPrestationInfo, cleanPrompt. */
+function buildCreativePlannerSystemPromptV2(){
+  return `Tu es le directeur artistique interne de La Santé des Zèbres (SDZ).
+
+PRINCIPE FONDATEUR : tu ne construis jamais une image à partir d'éléments visuels. Tu construis d'abord une intention émotionnelle, puis tu en déduis une mise en scène. Le décor, le cadrage, la lumière, le symbole ne sont JAMAIS choisis indépendamment — ce sont des conséquences de ce qui les précède dans ton raisonnement.
+
+Tu raisonnes STRICTEMENT dans cet ordre, chaque champ étant une conséquence du précédent, jamais un choix parallèle ou indépendant :
+1. ancrageReel — le fait réel de la prestation, non négociable.
+2. raisonDetre — pourquoi cette image mérite-t-elle d'exister ? Pourquoi quelqu'un s'arrêterait dessus dans son fil ? Si tu ne peux pas y répondre avec spécificité (pas une généralité applicable à n'importe quelle prestation de bien-être), ne continue pas sur une généralité : cherche ce qui est vraiment spécifique à CETTE prestation.
+3. impactEmotionnelRecherche — ce que le spectateur doit ressentir avant même de comprendre la scène. Vocabulaire guide : révélation, immensité, vertige, mystère, renaissance, passage, destin, silence, attente, interrogation, promesse, découverte, confrontation, paix retrouvée.
+   INTERDIT ABSOLU, jamais comme point de départ, quelle que soit la formulation : ${VOCABULAIRE_INTERDIT_ABSOLU.join(", ")}.
+   TOLÉRÉ UNIQUEMENT COMME CONSÉQUENCE d'un conflit déjà posé (jamais comme intention de départ) : ${VOCABULAIRE_TOLERE_CONSEQUENCE.join(", ")}.
+4. transformation — un avant/après n'est nécessaire que si la scène le justifie réellement. Une image qui montre une promesse, un mystère, une attente, une invitation, une révélation ou une présence n'a besoin d'AUCUNE transformation explicite : mets alors presente=false, avant="" et apres="". C'est un état normal et attendu, pas une exception — vise environ 30 à 40% des cas.
+5. conflit — la résistance ou la tension, présente même sans transformation explicite (une interrogation ou une attente porte déjà sa propre tension). Doit découler de l'ancrage réel, jamais d'un répertoire générique de problèmes humains.
+6. momentCinematographique — si ce film n'avait qu'une seule image d'affiche, laquelle ? Ce n'est pas "quel plan filmer", c'est "quel instant unique mérite d'exister". Doit se rattacher explicitement au conflit que tu viens de poser.
+7. archetypeEmotionnel — tu CLASSES le moment que tu viens d'imaginer dans un archétype fermé, tu n'en inventes jamais un nouveau. Choisis-le PARMI les options fournies, jamais en dehors.
+8. miseEnScene (sujet, action, cadrage, point de vue) — le cadrage et le point de vue doivent être choisis PARMI l'ensemble associé à l'archétype retenu à l'étape 7, jamais librement.
+9. decor — doit correspondre aux scènes compatibles de l'archétype retenu.
+10. lumiere, elementOr, niveauLuminosite — doivent correspondre à la signature lumineuse propre à l'archétype retenu. N'utilise JAMAIS un connecteur ou un dispositif universel identique quel que soit l'archétype : chaque archétype a sa propre lumière.
+11. symbolePrincipal — vocabulaire MASTER_UNIVERS_SDZ imposé (fourni plus bas), justifié comme conséquence du conflit, pas seulement de la prestation.
+
+Tu ne rédiges jamais de texte final : tu conçois une scène concrète, précise et jouable par un modèle de génération d'image. Réponds uniquement selon le schéma structuré demandé.`;
+}
+
+function buildCreativePlannerUserPromptV2(allowed, exclusions, mission, prestation, platform, topic, typeCreationImpose, registres, trace){
+  const socleResult = buildCompactMasterImageSocle(registres);
+  const socle = socleResult.text;
+  if(trace) trace.moduleIds = socleResult.ids;
+  const universBlock = buildUniversSDZBlock(allowed);
+  const prestationBlock = buildPrestationFicheBlock(prestation);
+  const info = getSelectedPrestationInfo(prestation);
+  const prestationDocumentee = !!(info && !info.generic && info.block);
+  const typeCreationInstructions = typeCreationImpose === "affiche_fantastique"
+    ? `Type de création imposé : affiche_fantastique — tu ne choisis pas ce type, applique-le tel quel dans "typeCreation".
+Construis un photomontage cinématographique hyperréaliste à plusieurs plans, une atmosphère mythologique mature et spectaculaire. Noir dominant, or noble et lumineux. Jamais une fantasy enfantine, une illustration plate ou un rendu de spa générique.`
+    : `Type de création imposé : luxe_silencieux — tu ne choisis pas ce type, applique-le tel quel dans "typeCreation".
+Photographie éditoriale premium, sobre, réaliste et intime.`;
+  const consignePrestation = prestationDocumentee
+    ? `- La scène doit refléter au moins une caractéristique réelle et distinctive de cette prestation — geste, matière, position, matériel ou déroulé identifiable.
+- Ne jamais inventer une technique, un accessoire, une position ou un bénéfice absent de cette fiche.
+- Pour "ancrageReel" : si la fiche comporte une "Caractéristique citable", RECOPIE-LA MOT POUR MOT, sans rien ajouter ni retirer. Sinon, recopie une expression réellement présente dans Description ou Déroulé de la séance, sans fusionner deux passages et sans changer un seul mot. Ne paraphrase jamais, n'invente jamais.`
+    : `- Aucune prestation précise et documentée n'est sélectionnée : "ancrageReel" doit rester une valeur sobre comme "aucune prestation précise" — n'invente aucun détail technique de soin.`;
+  return cleanPrompt(`Mission : ${mission||"non précisée"}
+${prestationBlock}
+Plateforme : ${platform}
+Sujet demandé par l'utilisateur : ${topic}
+
+${typeCreationInstructions}
+
+Principes visuels indispensables de la marque SDZ (à respecter impérativement) :
+${socle}
+
+CONSIGNE OBLIGATOIRE SUR LA PRESTATION :
+${consignePrestation}
+- Reste éditorial, premium et jamais démonstratif ou didactique.
+
+Archétypes émotionnels autorisés (choisis-en un seul, exactement tel quel dans "archetypeEmotionnel") — chacun est une identité complète, pas une simple catégorie :
+${allowed.map(a=>`- ${a.id} (${a.label}) : émotion "${a.emotion||""}", dramaturgie "${a.dramaturgie||""}", rythme "${a.rythme||""}", sensation "${a.sensation||""}" — scènes : ${a.scenesCompatibles.join(" / ")} — cadrages possibles : ${a.cadrages.join(", ")} — lumières possibles : ${a.lumieres.join(", ")} — interdits : ${a.interdits.join(", ")} — scène de soin : ${a.presenceSoin}`).join("\n")}
+${universBlock ? `
+RÈGLE OFFICIELLE MASTER_UNIVERS_SDZ (à respecter impérativement) :
+- Un seul élément de la liste ci-dessous est autorisé, choisi parmi ceux proposés.
+- Cet élément ne peut jamais préexister à la scène : il apparaît uniquement parce que le conflit posé se résout ou se manifeste visuellement.
+- Il constitue la manifestation visuelle du conflit et de la transformation éventuelle — jamais un décor, jamais une décoration.
+
+Vocabulaire symbolique SDZ imposé pour "symbolePrincipal" — n'utilise RIEN d'autre, quelle que soit l'origine géographique ou culturelle évoquée par la prestation (aucun monument réel, aucune figure religieuse, aucune référence culturelle existante) :
+${universBlock}` : ""}
+
+Éléments à ne surtout pas répéter (déjà utilisés très récemment sur cette plateforme) :
+${exclusions.length ? exclusions.map(e=>`- ${e}`).join("\n") : "(aucun historique récent)"}
+
+Conçois une scène originale et précise respectant l'identité noir & or de SDZ (or noble, jamais orangé ; le noir comme espace, jamais comme sous-exposition).`);
+}
+
 function buildCreativePlannerSystemPrompt(){
   return "Tu es le directeur artistique interne de La Santé des Zèbres (SDZ). Tu ne rédiges jamais de texte final : tu conçois UNE scène concrète, précise et jouable par un modèle de génération d'image, à partir des options qui te sont données. Tu choisis toujours ton archétype et ta scène PARMI les options fournies, jamais en dehors. Réponds uniquement selon le schéma structuré demandé.";
 }
@@ -2116,6 +2287,175 @@ function caracVientDeLaFiche(caracNorm, ficheSourceNorm){
   return false;
 }
 
+/* ---------- CREATIVE PLANNER V2 — validation, dérivation, repli, génération ----------
+   Point de clarification par rapport à IMPLEMENTATION.md §3.2 : comme validateAndFixBrief (V1)
+   le montre ci-dessous, le Planner actuel n'a JAMAIS de boucle de relance LLM à ce niveau — les
+   échecs sont soit corrigés silencieusement en code (archétype hors liste, typeCreation forcé),
+   soit bloquants sans tentative de réparation automatique (caracteristiqueSourcePrestation).
+   validateAndFixBriefV2 suit STRICTEMENT ce même principe déjà en place, plutôt que d'introduire
+   un nouvel appel LLM correctif qui n'existe nulle part ailleurs dans le Planner. */
+
+/* Composition déterministe du champ "emotion" exposé en aval (spec §3.3) — aucun appel LLM,
+   simple lecture de la chaîne déjà validée. */
+function deriveEmotionFromChaine(briefV2){
+  const parts = [briefV2.impactEmotionnelRecherche];
+  if(briefV2.transformation && briefV2.transformation.presente && briefV2.transformation.apres){
+    parts.push(briefV2.transformation.apres);
+  }
+  return parts.filter(Boolean).join(" — ");
+}
+
+function validateAndFixBriefV2(brief, allowed, exclusions, typeCreationImpose, prestation){
+  const allowedIds = allowed.map(a=>a.id);
+  const fixed = { ...brief };
+  let corrected = false;
+
+  // 5. Confinement archétype — correction silencieuse, même mécanique que l'archétype narratif V1.
+  if(!allowedIds.includes(fixed.archetypeEmotionnel)){
+    fixed.archetypeEmotionnel = allowedIds[0];
+    corrected = true;
+  }
+  const archetypeRetenu = allowed.find(a=>a.id===fixed.archetypeEmotionnel) || allowed[0];
+  if(archetypeRetenu){
+    fixed.miseEnScene = fixed.miseEnScene || {};
+    if(archetypeRetenu.cadrages && archetypeRetenu.cadrages.length && !archetypeRetenu.cadrages.includes(fixed.miseEnScene.cadrage)){
+      fixed.miseEnScene.cadrage = archetypeRetenu.cadrages[0]; corrected = true;
+    }
+    if(archetypeRetenu.lumieres && archetypeRetenu.lumieres.length && !archetypeRetenu.lumieres.includes(fixed.lumiere)){
+      fixed.lumiere = archetypeRetenu.lumieres[0]; corrected = true;
+    }
+  }
+
+  const collides = exclusions.some(ex => ex && fixed.decor && fixed.decor.toLowerCase().includes(String(ex).toLowerCase().slice(0,20)));
+  if(collides){
+    fixed.decor = `${fixed.decor} — variante imposée localement : un décor concrètement différent des générations récentes est requis.`;
+    corrected = true;
+  }
+  if(!Array.isArray(fixed.compositionInterdite)) fixed.compositionInterdite = [];
+  fixed.compositionInterdite = [...new Set([...fixed.compositionInterdite, ...exclusions])];
+  if(fixed.typeCreation !== typeCreationImpose){ fixed.typeCreation = typeCreationImpose; corrected = true; }
+
+  // 1. Interdits absolus (impactEmotionnelRecherche) — jamais réparé automatiquement, comme la
+  //    caractéristique de prestation en V1 : un échec ici bloque, il n'est pas fabriqué.
+  const impactNorm = normalizeForContainmentCheck(fixed.impactEmotionnelRecherche);
+  const violationInterdite = VOCABULAIRE_INTERDIT_ABSOLU.find(mot => impactNorm.includes(normalizeForContainmentCheck(mot)));
+
+  // 2. Ancrage réel — même contrôle que caracteristiqueSourcePrestation en V1, champ renommé.
+  const info = getSelectedPrestationInfo(prestation);
+  const prestationDocumentee = !!(info && !info.generic && info.block);
+  let blockingError = null;
+  let aucuneRaisonDetre = false;
+
+  if(violationInterdite){
+    blockingError = `Vocabulaire interdit dans "impactEmotionnelRecherche" : "${violationInterdite}" ne peut jamais être le moteur créatif de départ (toléré uniquement comme conséquence d'un conflit posé, jamais comme intention).`;
+  } else if(!prestationDocumentee){
+    if(!fixed.ancrageReel) fixed.ancrageReel = "aucune prestation précise";
+  } else {
+    const carac = (fixed.ancrageReel || "").trim();
+    const caracNorm = normalizeForContainmentCheck(carac);
+    const ficheSource = `${(info.fiche && info.fiche["caractéristique citable"]) || ""} ${(info.fiche && info.fiche["description"]) || ""} ${(info.fiche && info.fiche["déroulé de la séance"]) || ""}`;
+    const ficheSourceNorm = normalizeForContainmentCheck(ficheSource);
+    if(!carac){
+      blockingError = `Ancrage réel manquant — le Planner V2 n'a fourni aucune valeur pour "ancrageReel".`;
+    } else if(caracVientDeLaFiche(caracNorm, ficheSourceNorm)){
+      blockingError = null;
+    } else if(GENERIC_CARACTERISTIQUE_FORBIDDEN.some(mot => caracNorm.includes(mot))){
+      blockingError = `Ancrage réel trop générique : "${carac}" — formule générique introuvable dans la fiche de "${prestation}".`;
+    } else {
+      blockingError = `Ancrage réel non vérifiable dans la fiche : "${carac}" n'a pas été retrouvé dans "${prestation}".`;
+    }
+  }
+
+  // 3. raisonDetre — marqueur distinct de blockingError (spec §3bis), jamais fondu dans les mêmes
+  //    statistiques qu'un échec réseau ou un échec d'ancrage. Non bloquant pour la génération
+  //    d'image (elle continue), mais tracé séparément pour audit.
+  const raisonNorm = normalizeForContainmentCheck(fixed.raisonDetre);
+  const ancrageNorm = normalizeForContainmentCheck(fixed.ancrageReel);
+  if(!raisonNorm || (ancrageNorm && raisonNorm === ancrageNorm)){
+    aucuneRaisonDetre = true;
+  }
+
+  // 4. Filiation conflit → momentCinematographique — diagnostic non bloquant (pas de boucle de
+  //    relance LLM au niveau Planner, voir note en tête de section). Tracé pour audit uniquement.
+  const conflitNorm = normalizeForContainmentCheck(fixed.conflit);
+  const momentNorm = normalizeForContainmentCheck(fixed.momentCinematographique);
+  const motsConflit = conflitNorm.split(" ").filter(w=>w.length>=5);
+  const filiationFaible = motsConflit.length>0 && !motsConflit.some(w=>momentNorm.includes(w));
+
+  return { brief: fixed, corrected, blockingError, aucuneRaisonDetre, filiationConflitMomentFaible: !!filiationFaible };
+}
+
+function localFallbackBriefV2(mission, prestation, platform, topic, allowed, typeCreationImpose){
+  const a = allowed[0] || {};
+  return {
+    ancrageReel: "", // volontairement vide : déclenche le même blockingError qu'en V1 pour une prestation documentée
+    raisonDetre: "",
+    impactEmotionnelRecherche: "silence",
+    transformation: { presente: false, avant: "", apres: "" },
+    conflit: "attente",
+    momentCinematographique: "instant suspendu, sans mouvement",
+    archetypeEmotionnel: a.id || "contemplation",
+    miseEnScene: { sujetPrincipal: "sujet non précisé", action: "immobilité", cadrage: (a.cadrages&&a.cadrages[0])||"plan moyen", pointDeVue: "frontal" },
+    decor: "espace sombre et épuré",
+    lumiere: (a.lumieres&&a.lumieres[0])||"lumière douce unique",
+    elementOr: "reflet discret",
+    niveauLuminosite: "sombre_dominant",
+    symbolePrincipal: "aucun",
+    caracteristiquePrestationVisible: "",
+    typeCreation: typeCreationImpose,
+    presenceSoin: "aucune",
+    compositionInterdite: [],
+    negativePrompt: "",
+    referenceFamily: a.referenceFamily || "intime",
+    texteImage: "",
+    zoneTexte: "", zoneLogo: "",
+    messageCentral: "",
+  };
+}
+
+/* Relance réseau UNIQUE, distincte de tout contrôle de contenu — voir note en tête de section.
+   Ne couvre que l'échec brut de la requête (ex. "Failed to fetch"), jamais un contenu invalide. */
+async function generateCreativeBriefV2(mission, prestation, platform, topic, typeCreationImpose, registres, recentEntriesOverride, trace){
+  const allowed = computeAllowedArchetypes(mission, prestation, platform, typeCreationImpose, recentEntriesOverride||null);
+  const exclusions = computeRecentCompositionExclusions(platform, recentEntriesOverride||null);
+  const systemPrompt = buildCreativePlannerSystemPromptV2();
+  const userPrompt = buildCreativePlannerUserPromptV2(allowed, exclusions, mission, prestation, platform, topic, typeCreationImpose, registres, trace);
+  const provider = state.apiProviders.find(p=>p.id===state.selectedProviderId) || DEFAULT_OPENAI_PROVIDER;
+
+  const callOnce = async ()=>{
+    const res = await fetch("/.netlify/functions/generate-text", {
+      method:"POST", headers:{ "Content-Type":"application/json" },
+      body: JSON.stringify({ kind: provider.kind, model: provider.model, baseUrl: provider.baseUrl, systemPrompt, userPrompt, responseSchema: CREATIVE_BRIEF_SCHEMA_V2 }),
+    });
+    const contentType = res.headers.get("content-type")||"";
+    if(!contentType.includes("application/json")) throw new Error(`Réponse non-JSON du Creative Planner V2 (statut ${res.status}).`);
+    const data = await res.json();
+    if(!res.ok || data.error) throw new Error(data.error || `Erreur ${res.status}`);
+    return data;
+  };
+
+  let data, plannerNetworkRetryUsed = false;
+  try{
+    data = await callOnce();
+  }catch(err){
+    const estUneErreurReseau = /failed to fetch|network|timeout/i.test(String(err.message||err));
+    if(!estUneErreurReseau) throw err;
+    plannerNetworkRetryUsed = true;
+    data = await callOnce(); // si la seconde tentative échoue aussi, l'erreur remonte telle quelle
+  }
+
+  let rawBrief;
+  try{ rawBrief = JSON.parse(data.text); }
+  catch(e){
+    console.error("[Creative Planner V2] JSON.parse a échoué — contenu brut reçu :", data.text);
+    throw new Error(`Creative Planner V2 — erreur JSON.parse :\n${e.message}\n\nRéponse brute :\n${String(data.text||"").slice(0,1500)}`);
+  }
+  const { brief, corrected, blockingError, aucuneRaisonDetre, filiationConflitMomentFaible } = validateAndFixBriefV2(rawBrief, allowed, exclusions, typeCreationImpose, prestation);
+  const usage = data.usage ? { promptTokens: data.usage.prompt_tokens ?? null, completionTokens: data.usage.completion_tokens ?? null, model: provider.model } : null;
+  return { brief, corrected, blockingError, aucuneRaisonDetre, filiationConflitMomentFaible, allowed, exclusions, usage, plannerNetworkRetryUsed };
+}
+
+/* ---------- CREATIVE PLANNER V1 (inchangé ci-dessous) ---------- */
 function validateAndFixBrief(brief, allowed, exclusions, typeCreationImpose, prestation){
   const allowedIds = allowed.map(a=>a.id);
   const fixed = { ...brief };
@@ -3012,9 +3352,33 @@ ${buildFixedGuardrailBlocks(brief, platform)}`),
   return { prompt: serializeBriefToPromptFallback(brief, platform, aspectKey, isCampaign), daWriterUsed: false, daWriterFallbackReason: null };
 }
 
+/* ---------- CREATIVE PLANNER V2 — fonction charnière ----------
+   Traduit un brief V2 (validé par validateAndFixBriefV2) vers la forme exacte attendue par tout
+   le reste du pipeline (extractExportableBriefFields, serializeBriefToPromptFallback,
+   buildOrchestratorPacket, validateAssembledPrompt...). C'est la SEULE fonction qui a besoin de
+   connaître à la fois les noms V2 et les noms V1 — voir IMPLEMENTATION.md §3.5/§4. */
+function mapBriefV2ToV1Shape(briefV2){
+  const ms = briefV2.miseEnScene || {};
+  return {
+    caracteristiqueSourcePrestation: briefV2.ancrageReel,
+    pointDeTransformation: briefV2.momentCinematographique,
+    archetypeNarratif: briefV2.archetypeEmotionnel,
+    sujetPrincipal: ms.sujetPrincipal, action: ms.action, cadrage: ms.cadrage, pointDeVue: ms.pointDeVue,
+    emotion: deriveEmotionFromChaine(briefV2),
+    decor: briefV2.decor, lumiere: briefV2.lumiere, elementOr: briefV2.elementOr,
+    niveauLuminosite: briefV2.niveauLuminosite, symbolePrincipal: briefV2.symbolePrincipal,
+    caracteristiquePrestationVisible: briefV2.caracteristiquePrestationVisible,
+    typeCreation: briefV2.typeCreation, presenceSoin: briefV2.presenceSoin,
+    compositionInterdite: briefV2.compositionInterdite, negativePrompt: briefV2.negativePrompt,
+    referenceFamily: briefV2.referenceFamily, texteImage: briefV2.texteImage,
+    zoneTexte: briefV2.zoneTexte, zoneLogo: briefV2.zoneLogo, messageCentral: briefV2.messageCentral,
+  };
+}
+
 async function prepareCreativeBrief(inputs){
   const { mission, platform, prestation, topic, aspectKey, isCampaign, registres } = inputs;
   const steps = {};
+  const plannerVersion = inputs.plannerVersion || "v1"; // additif : absent partout en production aujourd'hui
 
   // typeCreation figé ICI, depuis la copie des registres transmise dans inputs (jamais depuis
   // state.registres directement) : le flux préparé reste indépendant de l'état courant de l'interface.
@@ -3032,19 +3396,40 @@ async function prepareCreativeBrief(inputs){
   steps.moduleIds = null; // renseigné après l'appel du Planner
 
   let brief, briefCorrected = false, plannerError = null, usedLocalBriefFallback = false, blockingError = null, plannerUsage = null;
-  try{
-    const plannerResult = await generateCreativeBrief(mission, prestation, platform, topic, typeCreationImpose, registres, neutralHist, moduleTrace);
-    brief = plannerResult.brief; briefCorrected = plannerResult.corrected; blockingError = plannerResult.blockingError;
-    plannerUsage = plannerResult.usage || null;
-    steps.moduleIds = moduleTrace.moduleIds || null;
-  }catch(err){
-    plannerError = `Échec du Creative Planner : ${String(err.message||err)}`;
-    brief = localFallbackBrief(mission, prestation, platform, topic, allowed, typeCreationImpose);
-    usedLocalBriefFallback = true;
+  let aucuneRaisonDetre = false, filiationConflitMomentFaible = false, plannerNetworkRetryUsed = false;
+
+  if(plannerVersion === "v2"){
+    try{
+      const plannerResult = await generateCreativeBriefV2(mission, prestation, platform, topic, typeCreationImpose, registres, neutralHist, moduleTrace);
+      briefCorrected = plannerResult.corrected; blockingError = plannerResult.blockingError;
+      aucuneRaisonDetre = !!plannerResult.aucuneRaisonDetre;
+      filiationConflitMomentFaible = !!plannerResult.filiationConflitMomentFaible;
+      plannerNetworkRetryUsed = !!plannerResult.plannerNetworkRetryUsed;
+      plannerUsage = plannerResult.usage || null;
+      steps.moduleIds = moduleTrace.moduleIds || null;
+      brief = mapBriefV2ToV1Shape(plannerResult.brief);
+    }catch(err){
+      plannerError = `Échec du Creative Planner V2 : ${String(err.message||err)}`;
+      brief = mapBriefV2ToV1Shape(localFallbackBriefV2(mission, prestation, platform, topic, allowed, typeCreationImpose));
+      usedLocalBriefFallback = true;
+    }
+  } else {
+    try{
+      const plannerResult = await generateCreativeBrief(mission, prestation, platform, topic, typeCreationImpose, registres, neutralHist, moduleTrace);
+      brief = plannerResult.brief; briefCorrected = plannerResult.corrected; blockingError = plannerResult.blockingError;
+      plannerUsage = plannerResult.usage || null;
+      steps.moduleIds = moduleTrace.moduleIds || null;
+    }catch(err){
+      plannerError = `Échec du Creative Planner : ${String(err.message||err)}`;
+      brief = localFallbackBrief(mission, prestation, platform, topic, allowed, typeCreationImpose);
+      usedLocalBriefFallback = true;
+    }
   }
   if(!brief || !brief.archetypeNarratif){
     plannerError = plannerError || "Brief invalide : archétype manquant.";
-    brief = localFallbackBrief(mission, prestation, platform, topic, allowed, typeCreationImpose);
+    brief = plannerVersion==="v2"
+      ? mapBriefV2ToV1Shape(localFallbackBriefV2(mission, prestation, platform, topic, allowed, typeCreationImpose))
+      : localFallbackBrief(mission, prestation, platform, topic, allowed, typeCreationImpose);
     usedLocalBriefFallback = true;
   }
   if(usedLocalBriefFallback){
@@ -3086,6 +3471,7 @@ async function prepareCreativeBrief(inputs){
     usedLocalBriefFallback, referenceSelections, referenceError, imagePrompt, steps, blockingError,
     daWriterUsed, daWriterFallbackReason, usage, transmissionCheck, instrumentation,
     paquetOrchestrateur, validatorReport,
+    plannerVersion, aucuneRaisonDetre, filiationConflitMomentFaible, plannerNetworkRetryUsed, // EXPÉRIENCE Planner V2 — null/false en V1
   };
 }
 
@@ -6822,6 +7208,98 @@ registerBenchExecutor(makePrioritesExecutor("A"));
 registerBenchExecutor(makePrioritesExecutor("B"));
 registerBenchExecutor(makePrioritesExecutor("D1"));
 
+/* ============================================================
+   CREATIVE PLANNER V2 — executor bench dédié. Voir CREATIVE_PLANNER_V2_SPEC.md et
+   CREATIVE_PLANNER_V2_IMPLEMENTATION.md §6. Copie du modèle des executors expérimentaux
+   ci-dessus, seule différence : plannerVersion:"v2" au lieu de experimentalMode, et
+   exposition des diagnostics propres à V2 (aucuneRaisonDetre, filiationConflitMomentFaible,
+   plannerNetworkRetryUsed) — jamais fondus avec daWriterFallback ou un autre compteur existant. */
+registerBenchExecutor({
+  id: "creative-image-sdz-planner-v2",
+  label: "Moteur créatif SDZ (image) — Creative Planner V2",
+  estimateCost(testCase){ return 0.005; },
+  async execute(testCase, ctx){
+    const startedAt = new Date().toISOString(); const t0 = Date.now();
+    const p = testCase.params;
+    const imageMode = ctx && (ctx.mode==="standard" || ctx.mode==="complet");
+    try{
+      const prepared = await prepareCreativeBrief({
+        mission: p.mission, platform: p.platform, prestation: p.prestation, topic: p.topic,
+        aspectKey: p.aspectKey, size: p.size, isCampaign: false,
+        registres: [...(p.registres||[])], benchNeutralHistory: true,
+        plannerVersion: "v2",
+      });
+      let phaseB = null, finalized = null, imageId = null, imageCostUsd = null;
+      if(imageMode && !prepared.blockingError){
+        const pending = ctx && ctx.slotState && ctx.slotState.pendingJobId;
+        if(pending){
+          try{
+            const resumed = await pollImageJob(pending, ctx.onStatus||null, null);
+            phaseB = { ...prepared, ...resumed, logoSentAsReference: false, phase:"completed", ok:true, analysis:null, analysisError:"non ré-analysé (job repris)", content:null, textError:null };
+          }catch(e){ /* job perdu/expiré : on relance normalement */ }
+        }
+        if(!phaseB){
+          const preparedWithHook = { ...prepared, onImageJobCreated: (jobId)=>{ if(ctx && ctx.savePartial) ctx.savePartial({ pendingJobId: jobId }); } };
+          phaseB = await confirmAndGenerateImage(preparedWithHook, ctx && ctx.onStatus || null, null);
+        }
+        if(ctx && ctx.savePartial) await ctx.savePartial({ pendingJobId: null });
+        finalized = await finalizeGeneratedImage(phaseB);
+        imageId = `${(ctx&&ctx.runId)||"run"}_${testCase.caseId}`;
+        const blob = await (await fetch(finalized.dataUrl)).blob();
+        await ctx.storage.saveCaseImage(imageId, blob);
+        imageCostUsd = computeMeasuredImageCost(phaseB.imageUsage, "gpt-image-1");
+      }
+      const vr = prepared.validatorReport || {};
+      const u = prepared.usage || {};
+      const plannerCost = computeMeasuredTextCost(u.planner);
+      const redacteurCost = computeMeasuredTextCost(u.redacteur);
+      const textCostUsd = (plannerCost==null && redacteurCost==null) ? null : +( (plannerCost||0) + (redacteurCost||0) ).toFixed(6);
+      const promptTokens = (u.planner?.promptTokens||0) + (u.redacteur?.promptTokens||0);
+      const completionTokens = (u.planner?.completionTokens||0) + (u.redacteur?.completionTokens||0);
+      return {
+        resultSchemaVersion: 2,
+        caseId: testCase.caseId, status: prepared.blockingError ? "erreur" : "ok",
+        startedAt, durationMs: Date.now()-t0,
+        inputs: JSON.parse(JSON.stringify(testCase.params)),
+        outputs: { imagePrompt: prepared.imagePrompt, imageId, texteGenere: phaseB ? (phaseB.content||null) : null },
+        metrics: {
+          promptTokens: (u.planner||u.redacteur) ? promptTokens : null,
+          completionTokens: (u.planner||u.redacteur) ? completionTokens : null,
+          textCostUsd, imageCostUsd,
+          totalCostUsd: (textCostUsd==null && imageCostUsd==null) ? null : +(((textCostUsd||0)+(imageCostUsd||0)).toFixed(6)),
+          costEstimated: 0.005, priceTableVersion: BENCH_PRICE_TABLE.version,
+          promptLength: (prepared.imagePrompt||"").length,
+          validatorContradictions: (vr.contradictions||[]).length,
+          validatorDoublons: (vr.doublons||[]).length,
+          validatorDecisionsAbsentes: (vr.decisionsAbsentes||[]).length,
+          daWriterFallback: prepared.daWriterUsed ? 0 : 1,
+        },
+        artifacts: { brief: prepared.brief, moduleIds: (prepared.steps && prepared.steps.moduleIds) || null,
+                     archetypesAutorises: (prepared.steps && prepared.steps.allowed) || null },
+        diagnostics: {
+          daWriterUsed: !!prepared.daWriterUsed, daWriterFallbackReason: prepared.daWriterFallbackReason || null,
+          usedLocalBriefFallback: !!prepared.usedLocalBriefFallback, plannerError: prepared.plannerError || null,
+          validator: { contradictions: vr.contradictions||[], doublons: vr.doublons||[], decisionsAbsentes: vr.decisionsAbsentes||[], preparationT3: (vr.preparationT3||[]).length, longueur: vr.longueur||0 },
+          orchestrateur: prepared.paquetOrchestrateur ? prepared.paquetOrchestrateur.rapportFusion : null,
+          usage: u,
+          image: phaseB ? { usedReference: !!phaseB.usedReference, referenceFallbackReason: phaseB.referenceFallbackReason||null, logoInScene: finalized ? finalized.logoInScene : null, logoApplied: finalized ? finalized.logoApplied : null, analysis: phaseB.analysis||null, analysisError: phaseB.analysisError||null, imageUsage: phaseB.imageUsage||null } : null,
+          plannerV2: {
+            aucuneRaisonDetre: !!prepared.aucuneRaisonDetre,
+            filiationConflitMomentFaible: !!prepared.filiationConflitMomentFaible,
+            plannerNetworkRetryUsed: !!prepared.plannerNetworkRetryUsed,
+          },
+        },
+        errors: prepared.blockingError ? [prepared.blockingError] : [],
+      };
+    }catch(err){
+      return { resultSchemaVersion: 2, caseId: testCase.caseId, status:"erreur", startedAt, durationMs: Date.now()-t0,
+        inputs: JSON.parse(JSON.stringify(testCase.params)), outputs: null,
+        metrics: { totalCostUsd: null, costEstimated: 0 }, artifacts: null, diagnostics: null,
+        errors: [String(err.message||err)] };
+    }
+  },
+});
+
 /* ---- Métadonnées d'environnement : distinguer, des mois plus tard, une différence de code
    d'une différence de modèle, de provider ou d'environnement. */
 function collectBenchEnvironment(){
@@ -8175,6 +8653,104 @@ function renderPrioritesComparison(zone, comparison){
   zone.appendChild(card);
 }
 
+/* ============================================================
+   CREATIVE PLANNER V2 — comparaison automatique. Même discipline que les comparaisons
+   précédentes : cas en échec technique exclus, jamais comptés comme "0 mismatch". Diagnostics
+   propres à V2 (aucuneRaisonDetre, filiationConflitMomentFaible, plannerNetworkRetryUsed) —
+   rapportés séparément, jamais fondus avec un taux d'amélioration/dégradation. */
+function computePlannerV2Comparison(runV2, runBaseline){
+  const byId = new Map((runBaseline.cases||[]).map(c=> [c.result && c.result.caseId, c]));
+  const rows = (runV2.cases||[]).map(cV2=>{
+    const id = cV2.result && cV2.result.caseId;
+    const cBase = byId.get(id);
+    const labels = cV2.testCase.labels;
+    const analyseV2 = cV2.result?.diagnostics?.image?.analysis || null;
+    const analyseBase = cBase?.result?.diagnostics?.image?.analysis || null;
+    const echecV2 = !cV2.result || cV2.result.status!=="ok" || !analyseV2;
+    const echecBaseline = !cBase || !cBase.result || cBase.result.status!=="ok" || !analyseBase;
+    const mismV2 = (analyseV2 && analyseV2.briefMismatch) || [];
+    const mismBase = (analyseBase && analyseBase.briefMismatch) || [];
+    return {
+      caseId: id, prestation: labels.prestation, platform: labels.platform,
+      trouveDansBaseline: !!cBase, echecTechnique: echecV2 || echecBaseline,
+      echecDetail: echecV2 ? "Planner V2 : "+((cV2.result && cV2.result.errors && cV2.result.errors[0]) || "pas d'analyse visuelle") : (echecBaseline ? "baseline : cas non exploitable" : null),
+      baseline: { mismatchCount: mismBase.length, mismatchList: mismBase },
+      v2: {
+        mismatchCount: mismV2.length, mismatchList: mismV2,
+        plannerV2Diag: cV2.result?.diagnostics?.plannerV2 || null,
+        archetypeEmotionnel: cV2.result?.artifacts?.brief?.archetypeNarratif || null,
+      },
+      delta: (echecV2 || echecBaseline) ? null : mismV2.length - mismBase.length,
+    };
+  });
+  const comp = rows.filter(r=> r.trouveDansBaseline && !r.echecTechnique);
+  const echecs = rows.filter(r=> r.echecTechnique);
+  const ameliores = comp.filter(r=> r.delta<0).length;
+  const stables = comp.filter(r=> r.delta===0).length;
+  const degrades = comp.filter(r=> r.delta>0).length;
+  const aucuneRaisonDetreCount = comp.filter(r=> r.v2.plannerV2Diag && r.v2.plannerV2Diag.aucuneRaisonDetre).length;
+  const filiationFaibleCount = comp.filter(r=> r.v2.plannerV2Diag && r.v2.plannerV2Diag.filiationConflitMomentFaible).length;
+  const networkRetryCount = comp.filter(r=> r.v2.plannerV2Diag && r.v2.plannerV2Diag.plannerNetworkRetryUsed).length;
+  const verdict = echecs.length > 0 ? `non concluant — ${echecs.length}/${rows.length} cas en échec technique, exclus du calcul. Relancer pour obtenir un échantillon complet.`
+    : comp.length===0 ? "non concluant — baseline introuvable ou aucun cas commun"
+    : ameliores > degrades && ameliores >= Math.ceil(comp.length*0.5) ? "amélioration nette"
+    : ameliores > degrades ? "amélioration partielle"
+    : ameliores === degrades ? "gain faible ou nul"
+    : "dégradation";
+  return {
+    generatedAt: new Date().toISOString(),
+    runV2Id: runV2.runId, runBaselineId: runBaseline.runId,
+    nbCasComparables: comp.length, nbCasTotal: rows.length, nbCasEchecTechnique: echecs.length,
+    ameliores, stables, degrades,
+    aucuneRaisonDetreSur: `${aucuneRaisonDetreCount}/${comp.length}`,
+    filiationConflitMomentFaibleSur: `${filiationFaibleCount}/${comp.length}`,
+    plannerNetworkRetryUseSur: `${networkRetryCount}/${comp.length}`,
+    verdict, rows, echecs,
+  };
+}
+
+function renderPlannerV2Comparison(zone, comparison){
+  zone.innerHTML = "";
+  const estNonConcluant = comparison.verdict.startsWith("non concluant");
+  const couleurs = { "amélioration nette":"var(--green)", "amélioration partielle":"var(--green)", "gain faible ou nul":"var(--muted2)", "dégradation":"var(--red)" };
+  const couleur = estNonConcluant ? "var(--muted2)" : (couleurs[comparison.verdict] || "var(--red)");
+  const card = el("div",{class:"card", style:`border-left:4px solid ${couleur};margin-top:10px;`});
+  card.appendChild(el("p",{class:"label"},"Comparaison automatique — Creative Planner V2"));
+  card.appendChild(el("p",{style:`font-size:16px;font-weight:700;color:${couleur};margin-top:4px;`}, comparison.verdict.toUpperCase()));
+  card.appendChild(el("p",{style:"font-size:12px;color:var(--muted2);margin-top:2px;"},
+    `Baseline : ${comparison.runBaselineId} · V2 : ${comparison.runV2Id} · ${comparison.nbCasComparables}/${comparison.nbCasTotal} cas exploitables`));
+  if(comparison.nbCasEchecTechnique>0){
+    card.appendChild(el("p",{style:"font-size:13px;color:var(--red);margin-top:6px;font-weight:600;"},
+      `${comparison.nbCasEchecTechnique} cas en échec technique — EXCLUS du calcul.`));
+  }
+  if(comparison.nbCasComparables>0){
+    card.appendChild(el("p",{style:"font-size:13px;margin-top:8px;"}, `briefMismatch : ${comparison.ameliores} amélioré(s) · ${comparison.stables} stable(s) · ${comparison.degrades} dégradé(s).`));
+    card.appendChild(el("p",{style:"font-size:12px;color:var(--muted2);"}, `Sortie précoce "aucune raison d'exister" : ${comparison.aucuneRaisonDetreSur} · Filiation conflit→moment faible : ${comparison.filiationConflitMomentFaibleSur} · Relance réseau utilisée : ${comparison.plannerNetworkRetryUseSur}`));
+  }
+  if(comparison.echecs.length){
+    card.appendChild(el("p",{class:"label", style:"margin-top:10px;color:var(--red);"},"Cas en échec technique (exclus)"));
+    comparison.echecs.forEach(r=> card.appendChild(el("p",{style:"font-size:12px;border-bottom:1px solid var(--border);padding:4px 0;"}, `${r.prestation} × ${r.platform} — ${r.echecDetail}`)));
+  }
+  card.appendChild(el("p",{class:"label", style:"margin-top:10px;"},"Détail des cas exploitables"));
+  comparison.rows.filter(r=> !r.echecTechnique && r.trouveDansBaseline).forEach(r=>{
+    const rowCard = el("div",{style:"border-bottom:1px solid var(--border);padding:6px 0;"});
+    rowCard.appendChild(el("p",{style:"font-size:13px;font-weight:600;"}, `${r.prestation} × ${r.platform}`));
+    rowCard.appendChild(el("p",{style:"font-size:12px;"}, `briefMismatch : ${r.baseline.mismatchCount} → ${r.v2.mismatchCount} (${r.delta<=0?"":"+"}${r.delta}) · archétype émotionnel : ${r.v2.archetypeEmotionnel||"?"}`));
+    if(r.v2.mismatchList.length) rowCard.appendChild(el("p",{style:"font-size:11px;color:var(--muted2);margin-top:2px;"}, "Mismatch restants : "+r.v2.mismatchList.join(" · ")));
+    card.appendChild(rowCard);
+  });
+  const dlBtn = el("button",{class:"btn-ghost", style:"margin-top:8px;", onclick:()=>{
+    const blob = new Blob([JSON.stringify(comparison, null, 1)], { type:"application/json" });
+    const a = document.createElement("a");
+    a.href = URL.createObjectURL(blob);
+    a.download = `comparaison-planner-v2-${comparison.runV2Id}.json`;
+    a.click();
+    setTimeout(()=> URL.revokeObjectURL(a.href), 5000);
+  }}, "Télécharger le rapport comparatif (JSON)");
+  card.appendChild(dlBtn);
+  zone.appendChild(card);
+}
+
 function buildSettingsTab(){
   const frag = el("div",{});
 
@@ -8188,6 +8764,7 @@ function buildSettingsTab(){
     el("option",{value:"standard_priorites_a"},"Standard — expérience priorités A (regroupement seul, 0 instruction)"),
     el("option",{value:"standard_priorites_b"},"Standard — expérience priorités B (regroupement + règle de priorité)"),
     el("option",{value:"standard_prompt_direct_d1"},"Standard — expérience prompt direct D1 (sans Rédacteur)"),
+    el("option",{value:"standard_planner_v2"},"Standard — Creative Planner V2 (impact émotionnel → mise en scène)"),
     el("option",{value:"complet"},"Complet — matrice entière, images (GOLDEN RUN, ~2-3 h, ~8-20 $)"),
   ]);
   frag.appendChild(benchModeSel);
@@ -8224,11 +8801,12 @@ function buildSettingsTab(){
         : mode==="standard_priorites_a" ? { ...buildSmokeSuite({ ...STANDARD_PRESET, executorId:"creative-image-sdz-priorites-a" }), suiteId:"standard-priorites-a_"+BENCH_TOPIC_BANK.version, mode:"standard", label:"Standard — expérience priorités A" }
         : mode==="standard_priorites_b" ? { ...buildSmokeSuite({ ...STANDARD_PRESET, executorId:"creative-image-sdz-priorites-b" }), suiteId:"standard-priorites-b_"+BENCH_TOPIC_BANK.version, mode:"standard", label:"Standard — expérience priorités B" }
         : mode==="standard_prompt_direct_d1" ? { ...buildSmokeSuite({ ...STANDARD_PRESET, executorId:"creative-image-sdz-prompt-direct-d1" }), suiteId:"standard-prompt-direct-d1_"+BENCH_TOPIC_BANK.version, mode:"standard", label:"Standard — expérience prompt direct D1" }
+        : mode==="standard_planner_v2" ? { ...buildSmokeSuite({ ...STANDARD_PRESET, executorId:"creative-image-sdz-planner-v2" }), suiteId:"standard-planner-v2_"+BENCH_TOPIC_BANK.version, mode:"standard", label:"Standard — Creative Planner V2" }
         : mode==="complet" ? { ...buildSmokeSuite(), suiteId:"complet_"+BENCH_TOPIC_BANK.version, mode:"complet", label:"Complet (Golden Run)" }
         : buildSmokeSuite();
       if(!resumeRunId && mode!=="smoke"){
         const estImage = suite.cases.length * 0.17; // qualité par défaut + analyse + contenu, ordre de grandeur
-        const modeLabel = mode==="complet" ? "GOLDEN RUN — matrice entière" : mode==="standard_brief_complet" ? "Run Standard — expérience brief_complet" : mode==="standard_priorites_a" ? "Run Standard — expérience priorités A" : mode==="standard_priorites_b" ? "Run Standard — expérience priorités B" : mode==="standard_prompt_direct_d1" ? "Run Standard — expérience prompt direct D1" : "Run Standard";
+        const modeLabel = mode==="complet" ? "GOLDEN RUN — matrice entière" : mode==="standard_brief_complet" ? "Run Standard — expérience brief_complet" : mode==="standard_priorites_a" ? "Run Standard — expérience priorités A" : mode==="standard_priorites_b" ? "Run Standard — expérience priorités B" : mode==="standard_prompt_direct_d1" ? "Run Standard — expérience prompt direct D1" : mode==="standard_planner_v2" ? "Run Standard — Creative Planner V2" : "Run Standard";
         if(!confirm(`${modeLabel} : ${suite.cases.length} générations d'images réelles.\nCoût estimé : ~${estImage.toFixed(2)} $ (mesuré précisément pendant le run).\nDurée : ${mode==="complet" ? "~2-3 h" : "~15-25 min"} — l'écran restera allumé (Wake Lock).\nLancer ?`)){ benchBtn.disabled=false; benchResumeBtn.disabled=false; return; }
       }
       const run = await runBenchSuite(suite, {
@@ -8251,7 +8829,7 @@ function buildSettingsTab(){
            avec la baseline Standard. Recherche la baseline la plus récente de suiteId
            "standard_"+version parmi les runs archivés (mode==="standard", status==="terminé").
            N'affecte aucun autre mode. */
-        if(mode==="standard_brief_complet" || mode==="standard_priorites_a" || mode==="standard_priorites_b" || mode==="standard_prompt_direct_d1"){
+        if(mode==="standard_brief_complet" || mode==="standard_priorites_a" || mode==="standard_priorites_b" || mode==="standard_prompt_direct_d1" || mode==="standard_planner_v2"){
           try{
             const storageForCompare = benchStorage();
             const candidats = (await storageForCompare.listRuns()).filter(r=> r.mode==="standard" && r.status==="terminé" && r.runId!==run.runId);
@@ -8263,6 +8841,8 @@ function buildSettingsTab(){
             if(baseline){
               if(mode==="standard_brief_complet"){
                 renderBriefCompletComparison(benchCompareZone, computeBriefCompletComparison(run, baseline));
+              } else if(mode==="standard_planner_v2"){
+                renderPlannerV2Comparison(benchCompareZone, computePlannerV2Comparison(run, baseline));
               } else {
                 renderPrioritesComparison(benchCompareZone, computePrioritesComparison(run, baseline));
               }
