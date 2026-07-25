@@ -887,8 +887,36 @@ async function getAutoTransparentLogo(logoAsset){
   return canvas;
 }
 
+/* La Bibliothèque d'images reste locale et peut être vide sur une Deploy Preview. Le logo officiel,
+   lui, est déjà conservé séparément dans Netlify Blobs et servi par /logo.png : on le récupère
+   automatiquement pour que le Canvas reste fiable sur tous les appareils. */
+let _serverLogoAssetCache = null;
+async function getOfficialLogoAsset(){
+  const localAsset = state.images.find(i=>i.assetType==="logo");
+  if(localAsset) return localAsset;
+  if(_serverLogoAssetCache) return _serverLogoAssetCache;
+  try{
+    const publicUrl = state.logoPublicUrl || `${location.origin}/logo.png`;
+    const res = await fetch(publicUrl, { cache:"no-store" });
+    if(!res.ok) return null;
+    const blob = await res.blob();
+    const dataUrl = await new Promise((resolve,reject)=>{
+      const reader = new FileReader();
+      reader.onload = ()=>resolve(reader.result);
+      reader.onerror = reject;
+      reader.readAsDataURL(blob);
+    });
+    _serverLogoAssetCache = { id:"official-logo-server", dataUrl, assetType:"logo" };
+    state.logoPublicUrl = publicUrl;
+    return _serverLogoAssetCache;
+  }catch(e){
+    return null;
+  }
+}
+function resetOfficialLogoAssetCache(){ _serverLogoAssetCache = null; }
+
 async function compositeRealLogo(baseDataUrl){
-  const logoAsset = state.images.find(i=>i.assetType==="logo");
+  const logoAsset = await getOfficialLogoAsset();
   if(!logoAsset) return { dataUrl: baseDataUrl, applied:false };
   try{
     const baseImg = await loadImage(baseDataUrl);
@@ -1060,6 +1088,7 @@ async function syncOfficialLogoToServer(){
   const already = LS.get("vf-logo-sync", null);
   if(already && already.assetId===logoAsset.id && already.dataUrlHash===hashPrompt(logoAsset.dataUrl)){
     state.logoPublicUrl = already.publicUrl;
+    resetOfficialLogoAssetCache();
     resetBrandReferenceCache();
     return { ok:true, alreadySynced:true, publicUrl: already.publicUrl };
   }
@@ -1072,6 +1101,7 @@ async function syncOfficialLogoToServer(){
     const publicUrl = `${location.origin}/logo.png`;
     LS.set("vf-logo-sync", { assetId: logoAsset.id, dataUrlHash: hashPrompt(logoAsset.dataUrl), publicUrl, syncedAt: Date.now() });
     state.logoPublicUrl = publicUrl;
+    resetOfficialLogoAssetCache();
     resetBrandReferenceCache();
     return { ok:true, alreadySynced:false, publicUrl };
   }catch(e){
@@ -1445,7 +1475,7 @@ function styleBlock(style){
    Politique générale de sécurité — jamais de description visuelle détaillée générée automatiquement
    pour un sujet sensible : c'est à l'utilisateur de rédiger le champ "Scène visuelle" de la fiche
    prestation (base de connaissances) s'il le souhaite ; ce garde-fou s'applique dans tous les cas. */
-const SAFETY_GUARDRAIL = `CONTRAINTE DE SÉCURITÉ PERMANENTE : toute personne représentée doit être habillée de façon appropriée et professionnelle. Si la scène implique un mineur, il doit être entièrement habillé et accompagné visuellement d'un adulte responsable, dans un contexte familial explicite et non ambigu, sans aucune connotation. Si la scène implique une grossesse, la personne doit être habillée de façon pudique, sans exposition du corps. Si la scène implique un contact corporel (réflexologie, massage des pieds...), le cadrage doit rester professionnel et clinique, jamais suggestif. Si la scène évoque une pratique énergétique (reiki...), rester sobre et crédible, sans effets surnaturels exagérés. Aucune promesse médicale ou thérapeutique ne doit être suggérée visuellement. Aucune nudité, aucune sexualisation, aucune violence.`;
+const SAFETY_GUARDRAIL = `CONTRAINTE DE SÉCURITÉ PERMANENTE : toute personne représentée doit être habillée de façon appropriée et professionnelle. Si la scène implique un mineur, il doit être entièrement habillé et accompagné visuellement d'un adulte responsable, dans un contexte familial explicite et non ambigu, sans aucune connotation. Si la scène implique une grossesse, la personne doit être habillée de façon pudique, sans exposition du corps. Si la scène implique un contact corporel (réflexologie, massage des pieds...), le cadrage doit rester professionnel, respectueux et éditorial, jamais suggestif. Si la scène évoque une pratique énergétique (reiki...), rester sobre et crédible, sans effets surnaturels exagérés. Aucune promesse médicale ou thérapeutique ne doit être suggérée visuellement. Aucune nudité, aucune sexualisation, aucune violence.`;
 
 /* Catégories de sujets à traiter avec prudence (pas de description détaillée ici — juste une alerte
    pour inviter l'utilisateur à renseigner un champ "Scène visuelle" dans la fiche de la prestation). */
@@ -1699,46 +1729,46 @@ const ARCHETYPE_CATALOG = [
    contradiction avec un photomontage à plusieurs plans, un symbole monumental et une transformation
    visible — d'où ce catalogue distinct, jamais mélangé avec le premier dans une même sélection. */
 const ARCHETYPE_CATALOG_FANTASTIQUE = [
-  { id:"renaissance_monumentale", label:"Renaissance monumentale",
-    emotion:"renaissance", dramaturgie:"une présence monumentale qui atteste d'une renaissance en cours", rythme:"ascendant, grandiose", sensation:"vertige, embrasement doré",
-    scenesCompatibles:["sujet transformé face à une présence monumentale (phénix, statue, architecture géante) qui incarne la renaissance en cours"],
+  { id:"renaissance_monumentale", label:"Renaissance héroïque",
+    emotion:"élan retrouvé", dramaturgie:"le geste ou le matériel distinctif de la prestation devient le moteur d'une montée lumineuse", rythme:"ascendant, ample", sensation:"puissance calme, élévation",
+    scenesCompatibles:["sujet naturel et intact, cadré avec le geste ou le matériel réel de la prestation parfaitement lisible ; la profondeur et la lumière donnent l'ampleur, sans monument ni créature ajoutés"],
     missionsCompatibles:["toutes"], prestationsCompatibles:["toutes"],
-    cadrages:["vertical d'affiche de film","très large, sujet petit face au symbole monumental"],
-    lumieres:["grande source dramatique traversant ou révélant le symbole monumental"],
-    interdits:["fantasy enfantine","illustration plate","rendu 3D lisse"],
-    presenceSoin:"suggeree", referenceFamily:"monumental" },
-  { id:"passage_symbolique", label:"Passage symbolique",
-    emotion:"passage", dramaturgie:"un seuil ou un cercle qui marque un changement d'état", rythme:"suspendu, juste au seuil", sensation:"souffle, vertige du passage",
-    scenesCompatibles:["seuil, éclipse ou cercle de lumière marquant le passage d'un état à un autre"],
+    cadrages:["vertical d'affiche de film, plan trois-quarts centré sur le matériel ou le geste","plan large vertical à plusieurs plans, sujet et prestation au centre"],
+    lumieres:["source chaude unique latérale ou arrière, sculptant le sujet et le matériel réel sans axe lumineux central"],
+    interdits:["fantasy enfantine","illustration plate","rendu 3D lisse","phénix","statue géante","portail","seuil","transformation physique du visage"],
+    presenceSoin:"visible_editoriale", referenceFamily:"monumental" },
+  { id:"passage_symbolique", label:"Bascule sensorielle",
+    emotion:"prise de distance", dramaturgie:"le bruit visuel recule autour du sujet tandis que la prestation devient le point de netteté", rythme:"suspendu, précis", sensation:"respiration, profondeur retrouvée",
+    scenesCompatibles:["transition rendue par la profondeur, la netteté et le mouvement périphérique autour du geste ou du matériel réel ; aucune porte, aucun seuil, aucun cercle"],
     missionsCompatibles:["toutes"], prestationsCompatibles:["toutes"],
-    cadrages:["vertical d'affiche de film","cadrage centré sur le seuil ou le cercle"],
-    lumieres:["cercle ou halo de lumière froide et noble, jamais un halo de bougie"],
-    interdits:["fantasy enfantine","illustration plate","décor sans profondeur"],
-    presenceSoin:"aucune", referenceFamily:"monumental" },
-  { id:"dualite_interieure", label:"Dualité intérieure",
-    emotion:"tension résolue entre deux vérités", dramaturgie:"une façade qui se fissure pour révéler autre chose", rythme:"contrasté, en tension", sensation:"clair-obscur tranché",
-    scenesCompatibles:["masque fissuré, reflet ou double exposition opposant une façade et une vérité intérieure"],
+    cadrages:["vertical d'affiche de film, composition décentrée avec profondeur marquée","plan rapproché trois-quarts sur le sujet et le matériel"],
+    lumieres:["source chaude unique guidant le regard par contraste de netteté et de matière, sans halo ni axe vertical"],
+    interdits:["fantasy enfantine","illustration plate","décor sans profondeur","portail","seuil","arche","cercle lumineux","silhouette seule"],
+    presenceSoin:"visible_editoriale", referenceFamily:"intime" },
+  { id:"dualite_interieure", label:"Contraste intérieur résolu",
+    emotion:"clarté gagnée", dramaturgie:"deux densités visuelles entourent un sujet intact, la partie lumineuse prenant clairement le dessus", rythme:"contrasté puis apaisé", sensation:"clair-obscur maîtrisé",
+    scenesCompatibles:["sujet naturel et intact avec le geste ou le matériel de la prestation au centre ; la tension reste uniquement dans deux plans d'environnement, jamais sur le corps ni le visage"],
     missionsCompatibles:["toutes"], prestationsCompatibles:["toutes"],
     cadrages:["plan rapproché à mi-corps, composition verticale d'affiche"],
-    lumieres:["contraste marqué entre une moitié éclairée et une moitié dans l'ombre"],
-    interdits:["fantasy enfantine","symétrie parfaite sans tension"],
-    presenceSoin:"suggeree", referenceFamily:"intime" },
-  { id:"liberation_matiere", label:"Libération de la matière",
-    emotion:"libération", dramaturgie:"une matière qui se défait de sa contrainte", rythme:"éclatant, en expansion", sensation:"poussière dorée, éclats",
-    scenesCompatibles:["chaînes, argent ou matière contraignante qui se rompt ou se dissout vers la lumière ou la nature"],
+    lumieres:["source chaude unique en trois-quarts révélant le sujet intact et laissant l'arrière-plan sombre reculer"],
+    interdits:["fantasy enfantine","symétrie parfaite sans tension","visage fissuré","masque","double visage","mutilation","silhouette menaçante"],
+    presenceSoin:"visible_editoriale", referenceFamily:"intime" },
+  { id:"liberation_matiere", label:"Déploiement",
+    emotion:"ampleur retrouvée", dramaturgie:"la posture, le tissu ou l'espace se déploie autour du geste réel de la prestation", rythme:"fluide, en expansion", sensation:"souffle, mouvement ascendant",
+    scenesCompatibles:["geste professionnel ou matériel distinctif au centre, mouvement ample dans le tissu, la lumière ou l'espace environnant ; aucun corps ne se désagrège"],
     missionsCompatibles:["toutes"], prestationsCompatibles:["toutes"],
     cadrages:["vertical d'affiche de film","plan large montrant l'ampleur de la libération"],
-    lumieres:["lumière qui gagne du terrain sur l'obscurité, jamais un flash artificiel"],
-    interdits:["fantasy enfantine","illustration plate","rendu 3D lisse"],
+    lumieres:["source chaude unique qui révèle progressivement le geste et gagne l'espace, sans explosion ni incendie"],
+    interdits:["fantasy enfantine","illustration plate","rendu 3D lisse","chaînes","corps fragmenté","fissures","explosion","poussière de débris"],
     presenceSoin:"visible_editoriale", referenceFamily:"monumental" },
-  { id:"gardien_sdz", label:"Gardien SDZ",
-    emotion:"protection silencieuse", dramaturgie:"une présence veille sans intervenir", rythme:"immobile, imposant", sensation:"poids, permanence",
-    scenesCompatibles:["un véritable animal zèbre réaliste, en tant que gardien symbolique et singularité de la marque — jamais une forme de logo ou d'insigne"],
-    missionsCompatibles:["toutes"], prestationsCompatibles:["toutes"],
+  { id:"gardien_sdz", label:"Présence SDZ",
+    emotion:"assurance", dramaturgie:"une présence humaine professionnelle affirme le soin tandis que la signature officielle reste réservée à Canvas", rythme:"stable, imposant", sensation:"confiance, maîtrise",
+    scenesCompatibles:["praticien ou bénéficiaire habillé, posture assurée, geste ou matériel réel visible ; espace sobre réservé à la signature officielle ajoutée après génération"],
+    missionsCompatibles:["Humaniser le cabinet","Rassurer les nouveaux clients","Annoncer une actualité","Créer une campagne complète"], prestationsCompatibles:["toutes"],
     cadrages:["vertical d'affiche de film","plan large intégrant le décor monumental"],
-    lumieres:["lumière dramatique unique qui sculpte la silhouette du zèbre et le décor"],
-    interdits:["fantasy enfantine","zèbre stylisé en médaillon ou en logo","illustration plate"],
-    presenceSoin:"aucune", referenceFamily:"monumental" },
+    lumieres:["lumière dramatique unique qui sculpte la présence humaine, le geste et le matériel réel"],
+    interdits:["fantasy enfantine","animal zèbre généré","zèbre stylisé en médaillon ou en logo","illustration plate","personnage encapuchonné"],
+    presenceSoin:"visible_editoriale", referenceFamily:"monumental" },
 ];
 
 /* ====== MASTER_UNIVERS_SDZ v0 — AJOUT CIBLÉ MODE PRODUCTION V1 (ne pas étendre hors périmètre) ======
@@ -1861,6 +1891,32 @@ function buildUniversSDZBlock(allowed){
     .sort((x,y)=> x.prioriteArtistique - y.prioriteArtistique);
   if(!modules.length) return "";
   return modules.map(m=>`- [${m.categorie}/${m.roleNarratif}] ${m.label} : ${m.content} Interdit : ${m.interdits.join(", ")}.`).join("\n");
+}
+
+/* V2 — pause créative décidée après les deux runs officiels : l'ancien univers symbolique
+   concentrait presque toutes les scènes autour des mêmes raccourcis (seuil/portail, fissure,
+   axe doré, particules). V1 reste intact pour la traçabilité. V2 repart du geste et du matériel
+   réels ; les modules seront réintroduits un par un après validation artistique. */
+const V2_MOTIFS_EN_PAUSE = [
+  "seuil monumental","seuil de passage","portail","porte monumentale","arche",
+  "fissure","structure fracturée","visage fragmenté","masque fissuré",
+  "ligne dorée centrale","axe de lumière","rayon vertical central",
+  "particules dorées comme sujet principal","pluie de particules",
+  "phénix","statue géante","chaînes rompues","personnage encapuchonné",
+];
+const V2_MOTIF_PATTERNS = [
+  /\b(?:seuil|portail|porte monumentale|arche)\b/,
+  /\b(?:fissur\w*|fractur\w*|fragment\w*|masque fissure)\b/,
+  /\b(?:ligne doree centrale|axe de lumiere|rayon vertical central)\b/,
+  /\b(?:particul\w*|pluie de particules)\b/,
+  /\b(?:phenix|statue geante|chaines rompues|personnage encapuchonne)\b/,
+];
+function buildUniversSDZBlockV2(){
+  return "";
+}
+function contientMotifV2EnPause(value){
+  const norm = normalizeForContainmentCheck(value);
+  return V2_MOTIF_PATTERNS.some(pattern => pattern.test(norm));
 }
 
 /* ---------- 2. CALCUL DÉTERMINISTE DES OPTIONS AUTORISÉES (avant tout appel au Planner) ---------- */
@@ -2053,9 +2109,9 @@ Tu raisonnes STRICTEMENT dans cet ordre, chaque champ étant une conséquence du
 8. miseEnScene (sujet, action, cadrage, point de vue) — le cadrage et le point de vue doivent être choisis PARMI l'ensemble associé à l'archétype retenu à l'étape 7, jamais librement.
 9. decor — doit correspondre aux scènes compatibles de l'archétype retenu.
 10. lumiere, elementOr, niveauLuminosite — doivent correspondre à la signature lumineuse propre à l'archétype retenu. N'utilise JAMAIS un connecteur ou un dispositif universel identique quel que soit l'archétype : chaque archétype a sa propre lumière. Le noir sert d'écrin à un sujet lisible ; il ne doit jamais produire une image sous-exposée, lugubre ou étouffante.
-11. symbolePrincipal — vocabulaire MASTER_UNIVERS_SDZ imposé (fourni plus bas), justifié comme conséquence du conflit, pas seulement de la prestation.
+11. symbolePrincipal — par défaut "aucun" : le geste, la zone du corps ou le matériel réel de la prestation porte la narration. Un symbole n'est admis que s'il rend CETTE prestation plus reconnaissable et s'il figure dans une liste explicitement fournie. N'invente jamais un symbole pour remplir le champ.
 
-REGISTRE ÉMOTIONNEL SDZ : spectaculaire, héroïque, premium, ascendant et transformateur. La tension, l'ombre ou la fragmentation peuvent apparaître dans un plan secondaire comme l'état que le sujet dépasse ; elles ne doivent jamais dominer le visage, le soin ni l'issue de l'image. L'instant principal montre la lumière, la puissance ou l'élan qui reprennent le dessus. Interdits absolus : horreur, terreur, menace, désespoir sans issue, personnage encapuchonné menaçant, visage central mutilé, corps captif, crypte, rituel, sorcellerie, astrologie, signes zodiacaux, faux sceau, faux logo, faux emblème de zèbre. Une géométrie abstraite dorée reste permise si elle ne ressemble à aucun symbole religieux ou ésotérique réel.
+REGISTRE ÉMOTIONNEL SDZ : spectaculaire, héroïque, premium, ascendant et transformateur. La tension ou l'ombre peuvent apparaître dans un plan secondaire comme l'état que le sujet dépasse ; elles ne doivent jamais dominer le visage, le soin ni l'issue de l'image. L'instant principal montre la lumière, la puissance ou l'élan qui reprennent le dessus. Le corps et le visage restent humains, naturels et intacts : "transformation" signifie changement d'ambiance ou de posture, jamais mutation physique. Interdits absolus : horreur, terreur, menace, désespoir sans issue, personnage encapuchonné menaçant, visage central mutilé ou fissuré, corps fragmenté ou captif, crypte, rituel, sorcellerie, astrologie, signes zodiacaux, faux sceau, faux logo, faux emblème de zèbre.
 
 Tu ne rédiges jamais de texte final : tu conçois une scène concrète, précise et jouable par un modèle de génération d'image. Réponds uniquement selon le schéma structuré demandé.`;
 }
@@ -2064,7 +2120,7 @@ function buildCreativePlannerUserPromptV2(allowed, exclusions, mission, prestati
   const socleResult = buildCompactMasterImageSocle(registres);
   const socle = socleResult.text;
   if(trace) trace.moduleIds = socleResult.ids;
-  const universBlock = buildUniversSDZBlock(allowed);
+  const universBlock = buildUniversSDZBlockV2(allowed);
   const prestationBlock = buildPrestationFicheBlock(prestation);
   const info = getSelectedPrestationInfo(prestation);
   const prestationDocumentee = !!(info && !info.generic && info.block);
@@ -2090,7 +2146,8 @@ ${socle}
 
 CONSIGNE OBLIGATOIRE SUR LA PRESTATION :
 ${consignePrestation}
-- Le geste, la zone du corps ou le matériel distinctif doit être visible au premier regard : une image générique de portail, silhouette ou méditation ne suffit jamais.
+- Le geste, la zone du corps ou le matériel distinctif est le héros visuel et doit être visible au premier regard : une image générique de portail, silhouette, méditation ou lumière abstraite ne suffit jamais.
+- L'effet fantastique amplifie la prestation réelle ; il ne la remplace jamais. Le sujet reste naturel, habillé, crédible et intact.
 - Reste éditorial, premium et jamais démonstratif ou didactique.
 
 ${platform==="Story" ? `DIRECTION VISUELLE DE RÉFÉRENCE — STORIES SDZ :
@@ -2098,23 +2155,29 @@ ${platform==="Story" ? `DIRECTION VISUELLE DE RÉFÉRENCE — STORIES SDZ :
 - contraste noir/or spectaculaire mais visage, geste et matériel restent lisibles ;
 - grande zone calme réservée au titre et à la signature officielle ajoutés ensuite par Canvas ;
 - ne reproduis aucun élément d'interface Instagram : barre de story, avatar, date, boutons, réactions, vignettes ou navigation ;
-- ne génère aucun texte, aucun logo, aucun zèbre décoratif et aucun symbole de marque : ils seront ajoutés proprement après génération.` : ""}
+- ne génère aucun texte, aucun logo, aucun zèbre décoratif et aucun symbole de marque : ils seront ajoutés proprement après génération ;
+- interdiction de retomber sur les automatismes des runs précédents : ${V2_MOTIFS_EN_PAUSE.join(", ")}.` : ""}
 
 Archétypes émotionnels autorisés (choisis-en un seul, exactement tel quel dans "archetypeEmotionnel") — chacun est une identité complète, pas une simple catégorie :
 ${allowed.map(a=>`- ${a.id} (${a.label}) : émotion "${a.emotion||""}", dramaturgie "${a.dramaturgie||""}", rythme "${a.rythme||""}", sensation "${a.sensation||""}" — scènes : ${a.scenesCompatibles.join(" / ")} — cadrages possibles : ${a.cadrages.join(", ")} — lumières possibles : ${a.lumieres.join(", ")} — interdits : ${a.interdits.join(", ")} — scène de soin : ${a.presenceSoin}`).join("\n")}
 ${universBlock ? `
 RÈGLE OFFICIELLE MASTER_UNIVERS_SDZ (à respecter impérativement) :
-- Un seul élément de la liste ci-dessous est autorisé, choisi parmi ceux proposés.
+- Un seul élément de la liste ci-dessous est éventuellement autorisé, choisi dans la section de l'archétype retenu. "aucun" reste préférable si le matériel réel suffit.
 - Cet élément ne peut jamais préexister à la scène : il apparaît uniquement parce que le conflit posé se résout ou se manifeste visuellement.
 - Il constitue la manifestation visuelle du conflit et de la transformation éventuelle — jamais un décor, jamais une décoration.
 
 Vocabulaire symbolique SDZ imposé pour "symbolePrincipal" — n'utilise RIEN d'autre, quelle que soit l'origine géographique ou culturelle évoquée par la prestation (aucun monument réel, aucune figure religieuse, aucune référence culturelle existante) :
 ${universBlock}` : ""}
 
+POLITIQUE SYMBOLIQUE V2 :
+- écris "aucun" dans "symbolePrincipal" lorsque le geste ou le matériel distinctif suffit — c'est le choix attendu pour une prestation identifiable ;
+- ne remplace jamais l'absence de symbole par un seuil, un portail, une arche, une fissure, un masque, une ligne centrale, des particules, un phénix, une statue ou des chaînes ;
+- inscris ces motifs en toutes lettres dans "negativePrompt" afin que le constructeur final les interdise aussi.
+
 Éléments à ne surtout pas répéter (déjà utilisés très récemment sur cette plateforme) :
 ${exclusions.length ? exclusions.map(e=>`- ${e}`).join("\n") : "(aucun historique récent)"}
 
-${platform==="Story" ? `Pour "texteImage", fournis obligatoirement une accroche de 2 à 5 mots puis une sous-ligne de 3 à 7 mots, séparées par le caractère |. Réserve "zoneTexte" dans le tiers supérieur ou inférieur selon la scène.` : `Pour "texteImage", reste sobre et conforme aux règles de la plateforme.`}
+${platform==="Story" ? `Pour "texteImage", fournis obligatoirement le NOM COURT ET RECONNAISSABLE DE LA PRESTATION en première partie, puis une sous-ligne spécifique de 3 à 7 mots dérivée de sa fiche, séparées par le caractère |. Exemple de structure : "PSIO® | LUMIÈRE ET SON EN HARMONIE". Interdits car trop génériques : "Déconnexion parfaite", "Immersion dans l'instant", "Révélez-vous", "Renaître", "Expérience transformatrice". Réserve "zoneTexte" dans le tiers supérieur ou inférieur selon la scène.` : `Pour "texteImage", reste sobre et conforme aux règles de la plateforme.`}
 
 Conçois une scène originale et précise respectant l'identité noir & or de SDZ (or noble, jamais orangé ; le noir comme espace, jamais comme sous-exposition).`);
 }
@@ -2323,7 +2386,59 @@ function deriveEmotionFromChaine(briefV2){
   return parts.filter(Boolean).join(" — ");
 }
 
-function validateAndFixBriefV2(brief, allowed, exclusions, typeCreationImpose, prestation){
+const STORY_PRESTATION_LABELS = {
+  "Massage Zébré":"MASSAGE ZÉBRÉ",
+  "Massage Ayurvédique Abhyanga":"ABHYANGA",
+  "Massage Balinais":"MASSAGE BALINAIS",
+  "Massage Thaï traditionnel":"MASSAGE THAÏ",
+  "Massage Femme enceinte":"MASSAGE MATERNITÉ",
+  "Massage Enfant":"MASSAGE ENFANT",
+  "Réflexologie plantaire thaïlandaise":"RÉFLEXOLOGIE",
+  "Massage japonais du visage":"MASSAGE VISAGE",
+  "Massage lymphatique expert":"MASSAGE LYMPHATIQUE",
+  "Soin énergétique":"SOIN ÉNERGÉTIQUE",
+  "Reiki":"REIKI",
+  "Luminothérapie PSIO®":"PSIO®",
+  "Biorésonance quantique":"BIORÉSONANCE",
+  "Soin minceur":"SOIN MINCEUR",
+  "Offre Sylver":"OFFRE SYLVER",
+  "Offre Gold":"OFFRE GOLD",
+  "Massage dos/zone":"MASSAGE CIBLÉ",
+  "Prestations en entreprise":"BIEN-ÊTRE EN ENTREPRISE",
+};
+const STORY_HEADLINES_TROP_GENERIQUES = [
+  "deconnexion parfaite","immersion dans l instant","revelez vous","renaitre",
+  "renaissance","experience transformatrice","nouvel espace interieur",
+  "retrouvez votre energie","liberez vous","harmonie interieure",
+];
+function getStoryPrestationLabel(prestation){
+  if(STORY_PRESTATION_LABELS[prestation]) return STORY_PRESTATION_LABELS[prestation];
+  const clean = String(prestation||"").trim();
+  return clean && clean!=="Tous sujets" ? clean.toUpperCase() : "LA SANTÉ DES ZÈBRES";
+}
+function getStoryDiscoveryLine(prestation){
+  const name = String(prestation||"").trim().toUpperCase();
+  if(!name || prestation==="Tous sujets") return "UNE EXPÉRIENCE SIGNÉE SDZ";
+  if(/^MASSAGE\b/.test(name) || /^SOIN\b/.test(name) || prestation==="Reiki") return `DÉCOUVREZ LE ${name}`;
+  if(/^OFFRE\b/.test(name)) return `DÉCOUVREZ L'${name}`;
+  if(/^PRESTATIONS\b/.test(name)) return `DÉCOUVREZ NOS ${name}`;
+  return `DÉCOUVREZ LA ${name}`;
+}
+function ensureStoryHeadline(texteImage, prestation){
+  const label = getStoryPrestationLabel(prestation);
+  const parts = String(texteImage||"").split("|").map(x=>x.trim()).filter(Boolean);
+  let subtitle = parts.slice(1).join(" ").trim();
+  const subtitleNorm = normalizeForContainmentCheck(subtitle);
+  const wordCount = subtitle.split(/\s+/).filter(Boolean).length;
+  const tropGenerique = !subtitle || wordCount<3 || wordCount>7 ||
+    STORY_HEADLINES_TROP_GENERIQUES.some(x=> subtitleNorm.includes(normalizeForContainmentCheck(x)));
+  if(tropGenerique){
+    subtitle = getStoryDiscoveryLine(prestation);
+  }
+  return `${label} | ${subtitle}`;
+}
+
+function validateAndFixBriefV2(brief, allowed, exclusions, typeCreationImpose, prestation, platform){
   const allowedIds = allowed.map(a=>a.id);
   const fixed = { ...brief };
   let corrected = false;
@@ -2352,6 +2467,49 @@ function validateAndFixBriefV2(brief, allowed, exclusions, typeCreationImpose, p
   if(!Array.isArray(fixed.compositionInterdite)) fixed.compositionInterdite = [];
   fixed.compositionInterdite = [...new Set([...fixed.compositionInterdite, ...exclusions])];
   if(fixed.typeCreation !== typeCreationImpose){ fixed.typeCreation = typeCreationImpose; corrected = true; }
+
+  // Pause déterministe des automatismes observés pendant les runs officiels. Le brief V2 place
+  // désormais la prestation réelle au centre et n'impose aucun symbole de substitution.
+  if(typeCreationImpose==="affiche_fantastique"){
+    const motifInterdits = V2_MOTIFS_EN_PAUSE.join(", ");
+    fixed.compositionInterdite = [...new Set([...fixed.compositionInterdite, ...V2_MOTIFS_EN_PAUSE])];
+    const symboleNorm = normalizeForContainmentCheck(fixed.symbolePrincipal);
+    if(symboleNorm && symboleNorm!=="aucun"){
+      fixed.symbolePrincipal = "aucun";
+      corrected = true;
+    }
+    if(contientMotifV2EnPause(fixed.decor)){
+      fixed.decor = "espace noir profond abstrait, composé en plusieurs plans autour du sujet, du geste et du matériel distinctif";
+      corrected = true;
+    }
+    if(contientMotifV2EnPause(fixed.lumiere) || /symbole monumental|halo|cercle|axe|rayon vertical/i.test(String(fixed.lumiere||""))){
+      fixed.lumiere = (archetypeRetenu && archetypeRetenu.lumieres && archetypeRetenu.lumieres[0])
+        || "source chaude unique latérale révélant le sujet, le geste et le matériel distinctif";
+      corrected = true;
+    }
+    if(contientMotifV2EnPause(fixed.elementOr) || /particul|debris|débris|etincell|étincell/i.test(String(fixed.elementOr||""))){
+      fixed.elementOr = "reflets d'or métallique noble sur le geste et le matériel distinctif";
+      corrected = true;
+    }
+    if(contientMotifV2EnPause(fixed.momentCinematographique)){
+      fixed.momentCinematographique = "l'instant précis où le geste ou le matériel réel de la prestation devient le centre lumineux et lisible de la scène";
+      corrected = true;
+    }
+    const negative = [String(fixed.negativePrompt||"").trim(), motifInterdits,
+      "mutation physique, transfiguration du visage, corps fragmenté, ambiance d'horreur, symboles occultes, faux logo, zèbre décoratif"]
+      .filter(Boolean).join(", ");
+    if(negative !== fixed.negativePrompt){ fixed.negativePrompt = negative; corrected = true; }
+  }
+
+  if(/transfigur/i.test(String(fixed.momentCinematographique||""))){
+    fixed.momentCinematographique = String(fixed.momentCinematographique)
+      .replace(/transfigur(?:é|ée|és|ées|ation)/gi, "révélé par la lumière sans altération physique");
+    corrected = true;
+  }
+  if(platform==="Story"){
+    const headline = ensureStoryHeadline(fixed.texteImage, prestation);
+    if(headline !== fixed.texteImage){ fixed.texteImage = headline; corrected = true; }
+  }
 
   // 1. Interdits absolus : correction locale déterministe pour ne pas condamner tout un item
   //    de campagne sur un seul mot générique ("harmonie" avait bloqué Abhyanga au run 2).
@@ -2470,7 +2628,7 @@ async function generateCreativeBriefV2(mission, prestation, platform, topic, typ
     console.error("[Creative Planner V2] JSON.parse a échoué — contenu brut reçu :", data.text);
     throw new Error(`Creative Planner V2 — erreur JSON.parse :\n${e.message}\n\nRéponse brute :\n${String(data.text||"").slice(0,1500)}`);
   }
-  const { brief, corrected, blockingError, aucuneRaisonDetre, filiationConflitMomentFaible } = validateAndFixBriefV2(rawBrief, allowed, exclusions, typeCreationImpose, prestation);
+  const { brief, corrected, blockingError, aucuneRaisonDetre, filiationConflitMomentFaible } = validateAndFixBriefV2(rawBrief, allowed, exclusions, typeCreationImpose, prestation, platform);
   const usage = data.usage ? { promptTokens: data.usage.prompt_tokens ?? null, completionTokens: data.usage.completion_tokens ?? null, model: provider.model } : null;
   return { brief, corrected, blockingError, aucuneRaisonDetre, filiationConflitMomentFaible, allowed, exclusions, usage, plannerNetworkRetryUsed };
 }
@@ -2565,7 +2723,7 @@ async function generateCreativeBrief(mission, prestation, platform, topic, typeC
    artistique du Creative Planner (buildCreativePlannerUserPrompt, inchangé) : c'est là qu'ils
    façonnent le brief. Ici, dans le prompt image final, ils n'apparaissent plus en concaténation
    de 2500 caractères mais en une charte condensée — même rôle qu'une mémoire implicite. */
-const CHARTE_SDZ_SYNTHESE = "Charte SDZ : palette exclusivement noir et or (or noble, métallique, satiné — jamais jaune vif, cuivre ou orange) ; clair-obscur dramatique avec une seule source de lumière chaude ; rendu premium d'affiche de cinéma ; aucune imagerie de spa générique, aucun beige, brun ou bois clair dominant ; aucune référence culturelle ou religieuse réelle (ni temple, ni Bouddha, ni monument existant) ; visages jamais frontaux ni exposés ; émotion forte portée par la lumière et la composition, pas par la surcharge.";
+const CHARTE_SDZ_SYNTHESE = "Charte SDZ : palette exclusivement noir et or (or noble, métallique, satiné — jamais jaune vif, cuivre ou orange) ; clair-obscur dramatique avec une seule source de lumière chaude ; rendu premium d'affiche de cinéma ; aucune imagerie de spa générique, aucun beige, brun ou bois clair dominant ; aucune référence culturelle ou religieuse réelle (ni temple, ni Bouddha, ni monument existant) ; visages naturels, intacts et crédibles, cadrés de façon éditoriale ; émotion forte portée par la lumière, la composition et la prestation réelle, pas par la surcharge symbolique.";
 
 /* ============================================================
    T1 — ORCHESTRATEUR + PROMPT VALIDATOR (architecture figée, mode rapport)
@@ -2583,7 +2741,7 @@ function buildOrchestratorPacket(brief, registres, platform, aspectKey){
     sujet: brief.sujetPrincipal || "",
     action: brief.action || "",
     emotion: brief.emotion || "",
-    symbole: brief.symbolePrincipal || "",
+    symbole: symboleBriefUtile(brief.symbolePrincipal) ? brief.symbolePrincipal : "",
     instantChoisi: brief.pointDeTransformation || "",
     lienCausal: brief.caracteristiquePrestationVisible || "",
     registres: Object.freeze([...(registres||[])]),
@@ -2659,6 +2817,11 @@ const USE_DA_WRITER = true;
 const DA_WRITER_MODEL = "gpt-5-mini"; // reformulation pure : mini + reasoning_effort minimal suffit
 const DA_WRITER_MAX_WORDS = 320;      // rejet au-delà (cible demandée : 180-250 mots)
 
+function symboleBriefUtile(value){
+  const symbole = String(value||"").trim();
+  return !!symbole && !/^aucun(?:\b|\s|—|-)/i.test(symbole);
+}
+
 /* Extrait UNIQUEMENT les champs exportables du brief (tri validé). Les champs de raisonnement
    (plansVisuels, structureNarrative, oppositionVisuelle, archetypeNarratif, messageCentral,
    referenceFamily, raisonDifference, zoneLogo, zoneTexte, texteImage...) et les sentinelles
@@ -2666,6 +2829,7 @@ const DA_WRITER_MAX_WORDS = 320;      // rejet au-delà (cible demandée : 180-2
 function extractExportableBriefFields(brief){
   const carac = String(brief.caracteristiquePrestationVisible||"").trim();
   const caracUtile = carac && !/^aucune prestation précise\.?$/i.test(carac);
+  const symboleUtile = symboleBriefUtile(brief.symbolePrincipal);
   return {
     typeCreation: brief.typeCreation,
     ideeVisuelle: brief.ideeVisuelle,
@@ -2679,7 +2843,7 @@ function extractExportableBriefFields(brief){
     elementOr: brief.elementOr,
     emotion: brief.emotion,
     pointDeTransformation: brief.pointDeTransformation,
-    symbolePrincipal: brief.symbolePrincipal,
+    ...(symboleUtile ? { symbolePrincipal: brief.symbolePrincipal } : {}),
     ...(caracUtile ? { caracteristiquePrestationVisible: carac } : {}),
   };
 }
@@ -2696,6 +2860,7 @@ function extractExportableBriefFields(brief){
 function extractExportableBriefFieldsComplet(brief){
   const carac = String(brief.caracteristiquePrestationVisible||"").trim();
   const caracUtile = carac && !/^aucune prestation précise\.?$/i.test(carac);
+  const symboleUtile = symboleBriefUtile(brief.symbolePrincipal);
   return {
     typeCreation: brief.typeCreation,
     ideeVisuelle: brief.ideeVisuelle,
@@ -2709,7 +2874,7 @@ function extractExportableBriefFieldsComplet(brief){
     elementOr: brief.elementOr,
     emotion: brief.emotion,
     pointDeTransformation: brief.pointDeTransformation,
-    symbolePrincipal: brief.symbolePrincipal,
+    ...(symboleUtile ? { symbolePrincipal: brief.symbolePrincipal } : {}),
     plansVisuels: brief.plansVisuels || null,
     ...(caracUtile ? { caracteristiquePrestationVisible: carac } : {}),
   };
@@ -2742,9 +2907,10 @@ function computeCompletTransmissionFlags(exportable){
 function extractExportableBriefFieldsGroupe(brief){
   const carac = String(brief.caracteristiquePrestationVisible||"").trim();
   const caracUtile = carac && !/^aucune prestation précise\.?$/i.test(carac);
+  const symboleUtile = symboleBriefUtile(brief.symbolePrincipal);
   const obligatoire = {
     sujetPrincipal: brief.sujetPrincipal,
-    symbolePrincipal: brief.symbolePrincipal,
+    ...(symboleUtile ? { symbolePrincipal: brief.symbolePrincipal } : {}),
     emotion: brief.emotion,
     pointDeTransformation: brief.pointDeTransformation,
     ...(caracUtile ? { caracteristiquePrestationVisible: carac } : {}),
@@ -2821,9 +2987,9 @@ function serializeBriefToPromptFallbackGroupe(brief, platform, aspectKey, isCamp
   const g = { ...groupe.obligatoire, ...groupe.contexte };
   const ligneObligatoire = [
     ["Sujet", g.sujetPrincipal],
-    ["Symbole central relié au sujet par un unique axe de lumière dorée", g.symbolePrincipal],
+    ["Symbole éventuel explicitement demandé par le brief", g.symbolePrincipal],
     ["Instant unique de la scène", g.pointDeTransformation],
-    ...(g.caracteristiquePrestationVisible ? [["Cause visible du symbole", g.caracteristiquePrestationVisible]] : []),
+    ...(g.caracteristiquePrestationVisible ? [["Caractéristique visible de la prestation", g.caracteristiquePrestationVisible]] : []),
     ["Émotion", g.emotion],
   ].filter(([,v])=> String(v||"").trim()).map(([k,v])=> `${k} : ${s(v)}`).join(" ");
   const ligneContexte = [
@@ -2849,7 +3015,7 @@ function narrativeMissingElements(text, exportable){
   const normText = normalizeForContainmentCheck(text);
   const critical = {
     "sujet": exportable.sujetPrincipal,
-    "symbole": exportable.symbolePrincipal,
+    ...(symboleBriefUtile(exportable.symbolePrincipal) ? { "symbole": exportable.symbolePrincipal } : {}),
     "émotion": exportable.emotion,
     "instant de transformation": exportable.pointDeTransformation,
     ...(exportable.caracteristiquePrestationVisible ? { "caractéristique de la prestation": exportable.caracteristiquePrestationVisible } : {}),
@@ -2875,7 +3041,8 @@ RÈGLES ABSOLUES — tu reformules, tu n'inventes JAMAIS :
 - Décris chaque symbole UNE seule fois. Aucun doublon, aucune répétition de concept.
 - Raconte UN seul instant : la scène est figée à l'instant de transformation indiqué — jamais une séquence d'états (pas de "d'abord... puis...").
 - Une seule lumière dominante, une seule ambiance, une seule idée centrale.
-- Le symbole n'est jamais un décor : il est la conséquence visible du geste de la prestation, relié au sujet par un unique axe de lumière dorée.
+- La prestation réelle prime : son geste, sa zone du corps ou son matériel doit rester lisible. Si le brief ne contient aucun "symbolePrincipal", n'en invente pas. S'il en contient un, décris-le une seule fois sans inventer d'axe, de portail, de halo ou de lien lumineux absent du brief.
+- Le corps et le visage restent humains, naturels et intacts. Ne transforme jamais une évolution émotionnelle en mutation physique.
 - Ignore toute valeur technique ou interne qui semblerait être une donnée de contrôle.
 - Longueur : 180 à 250 mots. Un texte continu en 2 ou 3 paragraphes, sans titres, sans listes, sans étiquettes.
 - N'écris RIEN d'autre que la note elle-même : pas de préambule, pas de commentaire.`;
@@ -2971,7 +3138,7 @@ async function rewriteBriefAsNarrativeComplet(brief){
    Le Rédacteur ne les voit jamais et ne peut donc jamais les réécrire. */
 function buildPromptHeader(brief, platform, aspectKey, isCampaign){
   const typeRendu = brief.typeCreation === "affiche_fantastique"
-    ? "Affiche cinématographique fantastique, photomontage hyperréaliste, ampleur monumentale et narration symbolique."
+    ? "Affiche cinématographique fantastique, photomontage hyperréaliste, composition premium à plusieurs plans et narration centrée sur la prestation réelle."
     : "Photographie éditoriale premium, cinématographique, réaliste, sobre et intime.";
   return `${typeRendu} Format ${platform} ${aspectKey} (${ASPECTS[aspectKey].w}x${ASPECTS[aspectKey].h}).${isCampaign?" L'image appartient à une campagne multi-formats : la scène doit rester reconnaissable comme membre de la même série.":""}`;
 }
@@ -3003,8 +3170,8 @@ function serializeBriefToPromptFallback(brief, platform, aspectKey, isCampaign){
     ["Sujet", brief.sujetPrincipal], ["Action", brief.action], ["Décor", brief.decor],
     ["Cadrage", [brief.cadrage, brief.pointDeVue].filter(Boolean).join(", ")],
     ["Instant unique de la scène", brief.pointDeTransformation],
-    ["Symbole central relié au sujet par un unique axe de lumière dorée", brief.symbolePrincipal],
-    ...(caracUtile ? [["Cause visible du symbole", carac]] : []),
+    ...(symboleBriefUtile(brief.symbolePrincipal) ? [["Symbole éventuel explicitement demandé par le brief", brief.symbolePrincipal]] : []),
+    ...(caracUtile ? [["Caractéristique visible de la prestation", carac]] : []),
     ["Lumière", [brief.lumiere, brief.elementOr].filter(Boolean).join(" ")],
     ["Émotion", brief.emotion],
   ].filter(([,v])=> String(v||"").trim());
@@ -3034,8 +3201,8 @@ function serializeBriefToPromptFallbackComplet(brief, platform, aspectKey, isCam
     ["Premier plan", pv.premierPlan], ["Plan principal", pv.planPrincipal],
     ["Plan secondaire", pv.planSecondaire], ["Arrière-plan", pv.arrierePlan],
     ["Instant unique de la scène", brief.pointDeTransformation],
-    ["Symbole central relié au sujet par un unique axe de lumière dorée", brief.symbolePrincipal],
-    ...(caracUtile ? [["Cause visible du symbole", carac]] : []),
+    ...(symboleBriefUtile(brief.symbolePrincipal) ? [["Symbole éventuel explicitement demandé par le brief", brief.symbolePrincipal]] : []),
+    ...(caracUtile ? [["Caractéristique visible de la prestation", carac]] : []),
     ["Lumière", [brief.lumiere, brief.elementOr].filter(Boolean).join(" ")],
     ["Niveau de luminosité", brief.niveauLuminosite],
     ["Émotion", brief.emotion],
@@ -3400,6 +3567,7 @@ function mapBriefV2ToV1Shape(briefV2){
     compositionInterdite: briefV2.compositionInterdite, negativePrompt: briefV2.negativePrompt,
     referenceFamily: briefV2.referenceFamily, texteImage: briefV2.texteImage,
     zoneTexte: briefV2.zoneTexte, zoneLogo: briefV2.zoneLogo, messageCentral: briefV2.messageCentral,
+    raisonDifferenceAvecHistorique: briefV2.raisonDetre,
   };
 }
 
@@ -3560,6 +3728,17 @@ async function applyHeadlineToItem(item){
 async function confirmAndGenerateImage(prepared, onStatus, cancelToken){
   const { inputs, brief, referenceSelections } = prepared;
   const { platform, mission, size } = inputs;
+
+  if(logoRequiredFor(platform)){
+    onStatus && onStatus("Vérification du logo officiel...");
+    const officialLogo = await getOfficialLogoAsset();
+    if(!officialLogo){
+      return {
+        ...prepared, phase:"image_failed", ok:false, stage:"preflight",
+        error:"Logo officiel indisponible : génération bloquée avant l'appel image. Aucun crédit image n'a été consommé. Définis d'abord le logo officiel dans la Bibliothèque.",
+      };
+    }
+  }
 
   onStatus && onStatus("Génération de l'image...");
   const smartReferenceDataUrls = (referenceSelections||[]).map(r=>r.dataUrl).filter(Boolean);
