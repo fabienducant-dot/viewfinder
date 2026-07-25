@@ -2486,6 +2486,7 @@ const PSIO_COMPOSITION_INTERDITE = [
   "forme, proportions ou commandes des lunettes PSiO® modifiées",
   "halo circulaire ou auréole autour de la tête",
   "faisceau lumineux ajouté",
+  "particules dorées, poussière dorée ou halo de poussières",
   "main ou geste secondaire inventé",
 ];
 function pointDeVueRabatLeSujet(value){
@@ -2524,32 +2525,45 @@ function validateAndFixBriefV2(brief, allowed, exclusions, typeCreationImpose, p
   fixed.compositionInterdite = [...new Set([...fixed.compositionInterdite, ...exclusions])];
   if(fixed.typeCreation !== typeCreationImpose){ fixed.typeCreation = typeCreationImpose; corrected = true; }
 
+  // Le matériel PSiO® doit rester exact quel que soit le registre choisi. Cette normalisation
+  // ne dépend donc pas du type "affiche_fantastique" : Luxe silencieux et tous les futurs styles
+  // bénéficient du même verrou produit, de la même posture de séance et des mêmes exclusions.
+  const isPsio = prestation==="Luminothérapie PSIO®";
+  fixed.miseEnScene = fixed.miseEnScene || {};
+  if(isPsio){
+    const sujetPsio = getServiceHeroSubject(prestation);
+    const actionPsio = getServiceHeroAction(prestation);
+    const momentPsio = getServiceVisualMoment(prestation);
+    const orPsio = getServiceGoldAccent(prestation);
+    const caracteristiquePsio = getServiceVisibleCharacteristic(prestation);
+    fixed.compositionInterdite = [...new Set([...fixed.compositionInterdite, ...PSIO_COMPOSITION_INTERDITE])];
+    if(fixed.miseEnScene.sujetPrincipal!==sujetPsio){ fixed.miseEnScene.sujetPrincipal = sujetPsio; corrected = true; }
+    if(fixed.miseEnScene.action!==actionPsio){ fixed.miseEnScene.action = actionPsio; corrected = true; }
+    if(fixed.momentCinematographique!==momentPsio){ fixed.momentCinematographique = momentPsio; corrected = true; }
+    if(fixed.elementOr!==orPsio){ fixed.elementOr = orPsio; corrected = true; }
+    if(fixed.caracteristiquePrestationVisible!==caracteristiquePsio){
+      fixed.caracteristiquePrestationVisible = caracteristiquePsio;
+      corrected = true;
+    }
+    if(fixed.presenceSoin!=="visible_editoriale"){ fixed.presenceSoin = "visible_editoriale"; corrected = true; }
+    if(platform==="Story" && pointDeVueRabatLeSujet(fixed.miseEnScene.pointDeVue)){
+      fixed.miseEnScene.pointDeVue = "angle trois-quarts à hauteur du regard, posture valorisante";
+      corrected = true;
+    }
+    if(platform==="Story" && fixed.niveauLuminosite!=="lumineux_eclatant"){
+      fixed.niveauLuminosite = "lumineux_eclatant";
+      corrected = true;
+    }
+  }
+
   // Pause déterministe des automatismes observés pendant les runs officiels. Le brief V2 place
   // désormais la prestation réelle au centre et n'impose aucun symbole de substitution.
   if(typeCreationImpose==="affiche_fantastique"){
     fixed.compositionInterdite = [...new Set([...fixed.compositionInterdite, ...V2_MOTIFS_EN_PAUSE])];
-    const isPsio = prestation==="Luminothérapie PSIO®";
     const symboleNorm = normalizeForContainmentCheck(fixed.symbolePrincipal);
     if(symboleNorm && symboleNorm!=="aucun"){
       fixed.symbolePrincipal = "aucun";
       corrected = true;
-    }
-    fixed.miseEnScene = fixed.miseEnScene || {};
-    if(isPsio){
-      const sujetPsio = getServiceHeroSubject(prestation);
-      const actionPsio = getServiceHeroAction(prestation);
-      const momentPsio = getServiceVisualMoment(prestation);
-      const orPsio = getServiceGoldAccent(prestation);
-      const caracteristiquePsio = getServiceVisibleCharacteristic(prestation);
-      fixed.compositionInterdite = [...new Set([...fixed.compositionInterdite, ...PSIO_COMPOSITION_INTERDITE])];
-      if(fixed.miseEnScene.sujetPrincipal!==sujetPsio){ fixed.miseEnScene.sujetPrincipal = sujetPsio; corrected = true; }
-      if(fixed.miseEnScene.action!==actionPsio){ fixed.miseEnScene.action = actionPsio; corrected = true; }
-      if(fixed.momentCinematographique!==momentPsio){ fixed.momentCinematographique = momentPsio; corrected = true; }
-      if(fixed.elementOr!==orPsio){ fixed.elementOr = orPsio; corrected = true; }
-      if(fixed.caracteristiquePrestationVisible!==caracteristiquePsio){
-        fixed.caracteristiquePrestationVisible = caracteristiquePsio;
-        corrected = true;
-      }
     }
     if(contientMotifV2EnPause(fixed.decor)){
       fixed.decor = "espace noir profond abstrait, composé en plusieurs plans autour du sujet, du geste et du matériel distinctif";
