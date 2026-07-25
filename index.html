@@ -2150,7 +2150,7 @@ ${consignePrestation}
 - Dans "miseEnScene.action", décris uniquement l'usage réel de la prestation, une posture ou un geste humain crédible. N'y place jamais un effet visuel, des particules, une lumière, une transformation ou un symbole.
 - L'effet fantastique amplifie la prestation réelle ; il ne la remplace jamais. Le sujet reste naturel, habillé, crédible et intact.
 - Reste éditorial, premium et jamais démonstratif ou didactique.
-${prestation==="Luminothérapie PSIO®" ? `- CAS PSIO® : la personne est déjà confortablement installée, les yeux fermés, avec les lunettes correctement portées et lisibles sur le visage. Elle n'est jamais debout, en attente de commencer, ni en train de tenir les lunettes à la main. Aucun casque VR, halo circulaire, auréole, faisceau ajouté ou geste secondaire inventé.` : ""}
+${prestation==="Luminothérapie PSIO®" ? `- CAS PSIO® : la personne est déjà confortablement installée, les yeux fermés, avec les lunettes correctement portées et lisibles sur le visage. Elle n'est jamais debout, en attente de commencer, ni en train de tenir les lunettes à la main. La forme, les proportions, la surface optique, l'écran, les commandes et les câbles doivent correspondre strictement à la référence officielle ; seule la couleur peut être adaptée en noir profond et or noble SDZ. Aucun casque VR, halo circulaire, auréole, faisceau ajouté ou geste secondaire inventé.` : ""}
 
 ${platform==="Story" ? `DIRECTION VISUELLE DE RÉFÉRENCE — STORIES SDZ :
 - composition verticale 9:16 dense et éditoriale, sujet héroïque central, profondeur en plusieurs plans, énergie dorée ascendante ;
@@ -2466,13 +2466,13 @@ function getServiceHeroSubject(prestation){
 }
 function getServiceGoldAccent(prestation){
   if(prestation==="Luminothérapie PSIO®"){
-    return "reflets d'or métallique noble sur le visage et le vêtement, sans recolorer les lunettes PSiO® officielles blanches et bleues";
+    return "reflets d'or métallique noble sur le visage, le vêtement et les lunettes PSiO® recolorées en noir profond et or noble, sans modifier leur forme officielle";
   }
   return "";
 }
 function getServiceVisibleCharacteristic(prestation){
   if(prestation==="Luminothérapie PSIO®"){
-    return "lunettes PSiO® officielles blanches et bleues, correctement portées sur le visage et lisibles au premier regard";
+    return "lunettes PSiO® de forme officielle exacte, correctement portées sur le visage et lisibles au premier regard, recolorées en noir profond et or noble SDZ";
   }
   return "";
 }
@@ -2482,7 +2482,7 @@ const PSIO_COMPOSITION_INTERDITE = [
   "lunettes PSiO® tenues à la main",
   "lunettes assimilées à un casque VR",
   "autres lunettes ou casque que le modèle PSiO® officiel fourni en référence",
-  "monture PSiO® noire, dorée ou recolorée",
+  "lunettes PSiO® générées dans une palette autre que noir profond et or noble SDZ",
   "forme, proportions ou commandes des lunettes PSiO® modifiées",
   "halo circulaire ou auréole autour de la tête",
   "faisceau lumineux ajouté",
@@ -3240,12 +3240,7 @@ function buildFixedGuardrailBlocks(brief, platform){
     brief.sujetPrincipal, brief.action, brief.caracteristiquePrestationVisible,
     brief.caracteristiqueSourcePrestation,
   ].filter(Boolean).join(" "));
-  const charte = isPsio
-    ? CHARTE_SDZ_SYNTHESE.replace(
-        "palette exclusivement noir et or (or noble, métallique, satiné — jamais jaune vif, cuivre ou orange)",
-        "palette de scène noir et or (or noble, métallique, satiné — jamais jaune vif, cuivre ou orange), avec une unique exception produit : les lunettes PSiO® conservent strictement leurs couleurs officielles blanches, bleues/cyan et leur petit écran noir"
-      )
-    : CHARTE_SDZ_SYNTHESE;
+  const charte = CHARTE_SDZ_SYNTHESE;
   const soinPhrase = brief.presenceSoin==="aucune" ? "Aucune scène de soin n'est visible."
     : brief.presenceSoin==="suggeree" ? "La sensation du soin est suggérée, jamais son déroulé technique."
     : "Une scène de soin peut être visible si elle reste professionnelle, respectueuse, éditoriale et premium.";
@@ -3267,7 +3262,7 @@ function buildFixedGuardrailBlocks(brief, platform){
     ? "Story 9:16 : composition dense, héroïque et ascendante, mais sans barre Instagram, avatar, date, boutons, réactions, vignettes ni navigation."
     : "";
   const psioProductGuard = isPsio
-    ? "RÉFÉRENCE PRODUIT PSiO® OBLIGATOIRE : la seule image de référence fournie sert uniquement à reproduire exactement les lunettes officielles — forme et proportions réelles, monture blanche, large surface optique bleue/cyan incurvée, petit écran noir et commandes latérales. Ignore entièrement le visage, l'identité, les cheveux, la pose, le siège, le fond blanc, le cercle et le cadrage de la photo de référence. Aucun autre type de lunettes, masque, casque ou visière n'est admis. Ne recolore, ne stylise et ne réinterprète jamais le dispositif."
+    ? "RÉFÉRENCE PRODUIT PSiO® OBLIGATOIRE : la seule image de référence fournie sert uniquement à reproduire exactement la géométrie des lunettes officielles — silhouette, proportions, grande surface optique incurvée, boîtiers latéraux, petit écran rectangulaire, commandes et câbles. Recolore le dispositif en noir profond et or métallique noble SDZ ; les couleurs blanche, bleue et cyan de la photo ne sont pas à conserver. Ignore entièrement le visage, l'identité, les cheveux, la pose, le siège, le fond blanc, le cercle et le cadrage de la photo de référence. Aucun autre type de lunettes, masque, casque ou visière n'est admis. Ne modifie, ne simplifie, ne stylise et ne réinterprète jamais la forme du dispositif."
     : "";
   return `${charte} ${soinPhrase} Noir profond comme écrin, jamais comme sous-exposition. Sujet, geste et matériel lisibles au premier regard. Or métallique noble, jamais orange, ambre, feu ou incendie. Énergie ascendante et désirable. L'ombre ou la fragmentation ne peuvent exister qu'en opposition secondaire clairement dépassée par le sujet ; jamais horreur, menace, désespoir sans issue, personnage encapuchonné menaçant, visage central mutilé, crypte, rituel, sorcellerie, astrologie ou signes zodiacaux. Aucun texte n'est incrusté dans l'image ; une zone visuellement calme reste prête à recevoir le texte ajouté ensuite. ${storyGuard} ${psioProductGuard} ${logoPhrase}${eviter ? ` À éviter absolument : ${eviter}.` : ""}
 
