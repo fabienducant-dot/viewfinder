@@ -3836,6 +3836,7 @@ async function prepareCreativeBrief(inputs){
     usedLocalBriefFallback, referenceSelections, referenceError, imagePrompt, steps, blockingError,
     daWriterUsed, daWriterFallbackReason, usage, transmissionCheck, instrumentation,
     paquetOrchestrateur, validatorReport,
+    appVersion: VF_VERSION,
     plannerVersion, aucuneRaisonDetre, filiationConflitMomentFaible, plannerNetworkRetryUsed, // EXPÉRIENCE Planner V2 — null/false en V1
   };
 }
@@ -5684,7 +5685,8 @@ function buildPostTab(){
       // ---- Textes bruts nécessaires aux boutons de copie (calculés une seule fois) ----
       const promptText = flow.imagePrompt || "";
       const jsonText = JSON.stringify(flow.brief, null, 2);
-      const combinedText = `========================\nPROMPT OPENAI\n========================\n\n${promptText}\n\n========================\nSTRUCTURED OUTPUT\n========================\n\n${jsonText}`;
+      const engineVersion = flow.appVersion || "ancienne/non identifiée";
+      const combinedText = `========================\nVERSION MOTEUR\n========================\n\n${engineVersion}\n\n========================\nPROMPT OPENAI\n========================\n\n${promptText}\n\n========================\nSTRUCTURED OUTPUT\n========================\n\n${jsonText}`;
 
       // ---- Bandeau récapitulatif (lecture seule de flow.inputs/flow.brief/state.modules — aucune invention) ----
       const safe = v => (v===undefined || v===null || v==="") ? "—" : v;
@@ -5716,6 +5718,7 @@ function buildPostTab(){
       const totalImageModulesInjected = constitutionInjectedCount + noirOrInjectedCount + Object.values(registreInjectedCounts).reduce((a,b)=>a+b,0);
       const summaryBox = el("div",{class:"card", style:"margin-top:8px;font-size:12px;"});
       const srow = (label,val)=> el("div",{style:"padding:2px 0;"}, [el("span",{style:"color:var(--muted2);"}, label+" : "), el("span",{}, String(val))]);
+      summaryBox.appendChild(srow("Version moteur", engineVersion));
       summaryBox.appendChild(srow("Prestation", prestationLabel));
       summaryBox.appendChild(srow("Mission", missionLabel));
       summaryBox.appendChild(srow("Plateforme", platformLabel));
@@ -6905,7 +6908,7 @@ function buildApiTab(){
 ============================================================ */
 
 /* ---- Versionnage ---- */
-const VF_VERSION = "2.1.0-v1"; // semver manuelle : à incrémenter à chaque déploiement touchant le moteur
+const VF_VERSION = "2.1.1-psio"; // semver manuelle : à incrémenter à chaque déploiement touchant le moteur
 /* Hash déterministe de l'état des règles : deux runs au même hash = strictement les mêmes règles.
    Couvre : modules (contenu+état), UNIVERS_SDZ, charte condensée, garde-fou sécurité. */
 function computeModulesHash(){
@@ -9843,7 +9846,19 @@ checkServerOnLoad();
 
 if ("serviceWorker" in navigator) {
   window.addEventListener("load", () => {
-    navigator.serviceWorker.register("./sw.js").catch((err) => console.error("SW non enregistré :", err));
+    const reloadKey = "vf-sw-reloaded-version";
+    navigator.serviceWorker.addEventListener("controllerchange", () => {
+      // Une seule actualisation automatique par version : le nouveau moteur remplace
+      // immédiatement la page encore ouverte, sans boucle de rechargement.
+      if(sessionStorage.getItem(reloadKey) !== VF_VERSION){
+        sessionStorage.setItem(reloadKey, VF_VERSION);
+        window.location.reload();
+      }
+    });
+    navigator.serviceWorker
+      .register(`./sw.js?v=${encodeURIComponent(VF_VERSION)}`, { updateViaCache: "none" })
+      .then((registration) => registration.update())
+      .catch((err) => console.error("SW non enregistré :", err));
   });
 }
 </script>
