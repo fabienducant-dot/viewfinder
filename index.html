@@ -2941,7 +2941,7 @@ const HEALY_COMPOSITION_INTERDITE = [
   "autre dispositif électronique ou appareil que le modèle Healy officiel fourni en référence",
   "boîtier Healy généré dans une palette autre que noir profond et or noble SDZ",
   "forme, proportions ou commandes du boîtier Healy modifiées",
-  "icônes, pictogrammes ou symboles imprimés visibles sur les commandes ou l'écran",
+  "icône reconnaissable (bluetooth, batterie, USB) ou lettre imprimée sur les commandes ou l'écran",
   "inscriptions, marques ou logos du fabricant reproduits sur le boîtier",
   "médaillon circulaire, anneau ou point doré au centre du boîtier",
   "cercle concentrique ou blason décoratif sur la face du dispositif",
@@ -3768,7 +3768,7 @@ function buildFixedGuardrailBlocks(brief, platform){
   const psioProductGuard = isPsio
     ? "VERROU PRODUIT — RETOUCHE À PARTIR DE L'IMAGE 1 : les trois images fournies décrivent ensemble un seul et même dispositif officiel. L'image 1, vue de profil portée, est la photographie de base à transformer : conserve exactement la pose, l'angle de tête, l'ajustement sur le visage, la silhouette, les proportions, la grande surface optique incurvée, les boîtiers latéraux, le petit écran, les commandes et les câbles. Ne recrée pas le dispositif sur une autre personne. Ne change que le décor, l'éclairage éditorial et la couleur des surfaces du dispositif. Image 2 : vue de face portée, référence secondaire pour confirmer la visière incurvée et le pont nasal. Image 3 : produit isolé, référence secondaire pour confirmer l'écran, les commandes et les câbles. Recolore uniquement les surfaces blanches, bleues et cyan du dispositif en noir profond et or métallique noble SDZ, sans modifier leur géométrie, leur perspective ni leur position. Ignore et ne recopie aucune inscription, marque, mot, lettre, chiffre ou pictogramme visible sur le dispositif ou dans les références : toutes les surfaces du produit doivent rester vierges et sans marque dans l'image brute. Aucun autre type de lunettes, masque, casque ou visière n'est admis. Change uniquement le fond, la lumière et la palette ; conserve le sujet et le produit de l'image 1 inchangés dans leur forme et leur placement."
     : isHealy
-    ? "VERROU PRODUIT — RETOUCHE À PARTIR DE L'IMAGE 1 : les deux images fournies décrivent le même dispositif officiel Healy. L'image 1, vue de face nette sur fond blanc, est la photographie de base à transformer : conserve exactement la forme carrée à coins arrondis et la base élargie du boîtier. La grande zone circulaire dégradée au centre de la face (là où figure le logo du fabricant) doit devenir une surface plate, mate et unie, de la même couleur noire ou dorée que le reste du boîtier — PAS un médaillon, PAS un anneau, PAS un cercle concentrique, PAS un point central, PAS un blason : une simple portion de surface sans relief ni ornement, comme si cette zone n'avait jamais porté de marquage. Les zones de commande (bluetooth, alimentation, batterie, USB, plus/moins) restent elles aussi sobres et vierges, sans icône ni pictogramme, de simples surfaces lisses à leur emplacement d'origine. Image 2 : photographie réelle du dispositif avec son accessoire attaché, référence secondaire pour confirmer le volume et la silhouette complète en trois dimensions. Recolore uniquement les surfaces blanches et les teintes bleues, roses, vertes et turquoise du boîtier en noir profond et or métallique noble SDZ, sans modifier sa géométrie, sa perspective ni sa position. Ignore et ne recopie aucune inscription, marque, mot, lettre, chiffre, logo, icône, pictogramme, médaillon, anneau ou étiquette visible sur le dispositif ou dans les références : toutes les surfaces du produit doivent rester vierges et sans marque dans l'image brute. Aucun autre dispositif électronique n'est admis. Change uniquement le fond, la lumière et la palette ; conserve le produit de l'image 1 inchangé dans sa forme et son placement."
+    ? "VERROU PRODUIT — RETOUCHE À PARTIR DE L'IMAGE 1 : les deux images fournies décrivent le même dispositif officiel Healy. L'image 1, vue de face nette sur fond blanc, est la photographie de base à transformer : conserve exactement la forme carrée à coins arrondis et la base élargie du boîtier. La grande zone circulaire dégradée au centre de la face (là où figure le logo du fabricant) doit devenir une surface plate, mate et unie, de la même couleur noire ou dorée que le reste du boîtier — PAS un médaillon, PAS un anneau, PAS un cercle concentrique, PAS un point central, PAS un blason : une simple portion de surface sans relief ni ornement, comme si cette zone n'avait jamais porté de marquage. Les zones de commande peuvent conserver de simples repères abstraits de boutons (petits cercles, points, traits) à leur emplacement d'origine — c'est un détail normal d'appareil — mais sans aucune icône, pictogramme, lettre ou symbole reconnaissable (pas de bluetooth, pas de symbole batterie, pas de lettre). Image 2 : photographie réelle du dispositif avec son accessoire attaché, référence secondaire pour confirmer le volume et la silhouette complète en trois dimensions. Recolore uniquement les surfaces blanches et les teintes bleues, roses, vertes et turquoise du boîtier en noir profond et or métallique noble SDZ, sans modifier sa géométrie, sa perspective ni sa position. Ignore et ne recopie aucune inscription, marque, mot, lettre, chiffre, logo, médaillon, anneau ou étiquette visible sur le dispositif ou dans les références. Aucun autre dispositif électronique n'est admis. Change uniquement le fond, la lumière et la palette ; conserve le produit de l'image 1 inchangé dans sa forme et son placement."
     : "";
   const registryGuard = buildActiveRegistryDecorContract(brief.registresActifs);
   return `${charte} ${soinPhrase} Noir profond comme écrin, jamais comme sous-exposition. Sujet, geste et matériel lisibles au premier regard. Or métallique noble, jamais orange, ambre, feu ou incendie. Énergie ascendante et désirable. ${registryGuard ? `CONTRAT DE VISIBILITÉ DES REGISTRES : ${registryGuard}. Le décor doit être immédiatement perceptible derrière et autour du sujet ; une grande surface noire uniforme ou vide constitue un échec.` : ""} L'ombre ou la fragmentation ne peuvent exister qu'en opposition secondaire clairement dépassée par le sujet ; jamais horreur, menace, désespoir sans issue, personnage encapuchonné menaçant, visage central mutilé, crypte, rituel, sorcellerie, astrologie ou signes zodiacaux. Aucun texte n'est incrusté dans l'image ; une zone visuellement calme reste prête à recevoir le texte ajouté ensuite. ${storyGuard} ${psioProductGuard} ${logoPhrase}${eviter ? ` À éviter absolument : ${eviter}.` : ""}
@@ -4053,7 +4053,7 @@ async function analyzeGeneratedImage(dataUrl, brief, options){
   const userPrompt = `Analyse précisément l'image générée et compare-la au brief :\nScène prévue : ${brief.ideeVisuelle}\nSujet prévu : ${brief.sujetPrincipal}\nAction prévue : ${brief.action}\nMatériel distinctif attendu : ${brief.caracteristiquePrestationVisible||"aucun"}`;
   const rawImage=await resizeDataUrlForAnalysis(dataUrl,1024,.82);
   const deviceIconsAllowed = !!(options && options.deviceIconsAllowed);
-  const overlaySystemPrompt=`Tu es un contrôleur OCR et identité de marque. Inspecte uniquement l'image brute fournie, zone par zone, y compris ses bords et son tiers inférieur. rawOverlayDetected vaut true dès qu'un seul élément graphique ajouté apparaît : lettre, mot, nom de produit (y compris « PSiO »), marque, slogan, URL, prix, logo, emblème, sceau, monogramme ou zèbre de marque. Même un nom normalement attendu sur le produit compte comme overlay interdit : toute typographie et toute signature seront ajoutées ensuite par Canvas. Une simple forme géométrique sans lettre ni identité ne compte pas.${deviceIconsAllowed ? " EXCEPTION : les icônes fonctionnelles qui font partie de la face du dispositif électronique officiel de référence (bluetooth, alimentation, batterie, USB, plus, moins, écran) NE comptent PAS comme overlay interdit — ce sont des éléments réels du produit à préserver, pas un ajout de l'IA. Seuls un mot, une lettre, une marque ou un logo ajoutés en dehors de ces icônes fonctionnelles comptent." : ""} Décris exactement ce qui est lu ou reconnu dans rawOverlayDescription ; chaîne vide seulement si rien n'est détecté.`;
+  const overlaySystemPrompt=`Tu es un contrôleur OCR et identité de marque. Inspecte uniquement l'image brute fournie, zone par zone, y compris ses bords et son tiers inférieur. rawOverlayDetected vaut true dès qu'un seul élément graphique ajouté apparaît : lettre, mot, nom de produit (y compris « PSiO »), marque, slogan, URL, prix, logo, emblème, sceau, monogramme ou zèbre de marque. Même un nom normalement attendu sur le produit compte comme overlay interdit : toute typographie et toute signature seront ajoutées ensuite par Canvas. Une simple forme géométrique sans lettre ni identité ne compte pas.${deviceIconsAllowed ? " EXCEPTION : sur la face d'un dispositif électronique officiel de référence, les repères abstraits de boutons ou commandes (cercles, points, lignes, traits, triangles, formes géométriques simples) NE comptent PAS comme overlay interdit, même s'ils évoquent des boutons, un bouton play/power ou une commande — ce sont des détails normaux d'appareil, pas un ajout de l'IA. Compte en revanche comme overlay interdit : tout texte, toute lettre, tout mot, toute marque, ainsi qu'un grand médaillon circulaire, un anneau ou un cercle concentrique décoratif au centre de la face (élément caractéristique d'un logo de fabricant), qui restent interdits quelle que soit leur simplicité apparente." : ""} Décris exactement ce qui est lu ou reconnu dans rawOverlayDescription ; chaîne vide seulement si rien n'est détecté.`;
   const [res,overlayRes] = await Promise.all([
     fetch("/.netlify/functions/generate-text", {
       method:"POST", headers:{ "Content-Type":"application/json" },
@@ -4537,9 +4537,21 @@ async function prepareCreativeBrief(inputs){
    l'exécuteur du Banc n'écrit rien. Une seule implémentation du post-traitement pour les deux. */
 async function finalizeGeneratedImage(flow){
   const platform = flow.inputs.platform;
+  const isHealyFlow = flow.inputs.prestation==="Biorésonance quantique";
   const generatedOverlayViolation=findGeneratedOverlayViolation(flow.analysis);
+  let overlayWarning = null;
   if(generatedOverlayViolation){
-    throw new Error(`Image brute refusée avant Canvas : ${generatedOverlayViolation.replace(/^overlay ia interdit\s*:\s*/i,"")}. Le texte et le logo officiels doivent être ajoutés uniquement par Canvas.`);
+    /* Healy : un blocage strict ici s'est révélé peu fiable — le modèle d'image ne parvient jamais
+       de façon garantie à laisser la zone du logo fabricant parfaitement vierge, quelle que soit la
+       formulation du prompt. Plutôt que de faire échouer la génération (crédit dépensé, redéploiement
+       nécessaire à chaque itération de formulation), ce point devient un avertissement à vérifier
+       visuellement avant publication, pour cette prestation uniquement. Les autres prestations (PSiO®
+       compris) gardent le blocage strict, qui lui fonctionne de façon fiable. */
+    if(isHealyFlow){
+      overlayWarning = `Élément graphique à vérifier sur le boîtier avant publication : ${generatedOverlayViolation.replace(/^overlay ia interdit\s*:\s*/i,"")}`;
+    }else{
+      throw new Error(`Image brute refusée avant Canvas : ${generatedOverlayViolation.replace(/^overlay ia interdit\s*:\s*/i,"")}. Le texte et le logo officiels doivent être ajoutés uniquement par Canvas.`);
+    }
   }
   const productViolation=findProductReferenceViolation(flow.analysis);
   if(productViolation){
@@ -4580,7 +4592,7 @@ async function finalizeGeneratedImage(flow){
   }
   if(needLogo && !logoApplied) throw new Error("Composition Canvas bloquée : la signature officielle SDZ n'a pas pu être appliquée.");
   if(headline && !headlineApplied) throw new Error("Composition Canvas bloquée : l'accroche n'a pas pu être rendue lisiblement.");
-  return { dataUrl, logoApplied, logoInScene, headlineApplied, layoutReport };
+  return { dataUrl, logoApplied, logoInScene, headlineApplied, layoutReport, overlayWarning };
 }
 
 /* Écriture unique d'une image créative finalisée. Utilisée par la génération normale et par la
@@ -6651,6 +6663,7 @@ function buildPostTab(){
         if(flow.content) parts.push("Texte inséré dans la zone de publication ci-dessous ✓");
         if(flow.analysisError) parts.push("⚠ "+flow.analysisError);
         if(flow.textError) parts.push("⚠ "+flow.textError+" — utilise \"Régénérer uniquement le texte\".");
+        if(finalized.overlayWarning) parts.push("⚠ "+finalized.overlayWarning);
         imgApiStatus.textContent = parts.join(" — ");
         renderCreativeInspector();
         renderMain();
@@ -7232,7 +7245,7 @@ function buildCalendarCard(item, inCampaign){
           /* Post-traitement : MÊME fonction que la génération unitaire (format officiel, accroche,
              logo) — aucun code dupliqué, aucun chemin parallèle. */
           const finalizedItem = await finalizeGeneratedImage({
-            inputs:{ platform:item.platform }, dataUrl: phaseB.dataUrl,
+            inputs:{ platform:item.platform, prestation:state.prestationName }, dataUrl: phaseB.dataUrl,
             logoSentAsReference:false, usedReference, content: phaseB.content || item.contentData || null,
             brief:item.creativeBrief,
           });
@@ -7258,7 +7271,8 @@ function buildCalendarCard(item, inCampaign){
             : logoRequiredFor(item.platform) ? (logoApplied ? "Image générée, logo réel appliqué ✓" : "Image générée — aucun logo marqué comme actif de marque, rien n'a été ajouté.")
             : "Image générée ✓") + " — " + referenceLabel +
             (finalizedItem.layoutReport&&!finalizedItem.layoutReport.skipped
-              ? ` — Canvas premium ✓ (${finalizedItem.layoutReport.textZone||"sans texte"} / ${finalizedItem.layoutReport.logoZone||"sans logo"})` : "");
+              ? ` — Canvas premium ✓ (${finalizedItem.layoutReport.textZone||"sans texte"} / ${finalizedItem.layoutReport.logoZone||"sans logo"})` : "") +
+            (finalizedItem.overlayWarning ? ` — ⚠ ${finalizedItem.overlayWarning}` : "");
           renderMain();
         }catch(err){
           const cancelled = String(err.message||err)==="__CANCELLED__";
