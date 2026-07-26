@@ -1188,7 +1188,9 @@ function drawPremiumHeadline(ctx,headline,box,platform){
   if(subtitle){
     const ruleW=Math.min(maxWidth*(isStory?.32:.24),W*(isStory?.19:.16)), ruleY=y+subtitleSize*.05;
     ctx.strokeStyle="rgba(224,197,106,.86)"; ctx.lineWidth=Math.max(1,W*.0014);
-    ctx.beginPath(); ctx.moveTo(anchor-ruleW/2,ruleY); ctx.lineTo(anchor+ruleW/2,ruleY); ctx.stroke();
+    const ruleStart=box.align==="left"?anchor:box.align==="right"?anchor-ruleW:anchor-ruleW/2;
+    const ruleEnd=box.align==="left"?anchor+ruleW:box.align==="right"?anchor:anchor+ruleW/2;
+    ctx.beginPath(); ctx.moveTo(ruleStart,ruleY); ctx.lineTo(ruleEnd,ruleY); ctx.stroke();
     y+=subtitleSize*.88;
     ctx.fillStyle=isStory?"#F5F2E9":officialGoldGradient(ctx,y-subtitleSize,y+subtitleSize*1.8);
     ctx.font=`500 ${subtitleSize}px Georgia, 'Times New Roman', serif`;
@@ -7495,7 +7497,7 @@ function buildApiTab(){
 ============================================================ */
 
 /* ---- Versionnage ---- */
-const VF_VERSION = "2.2.14-canvas-premium-scale"; // semver manuelle : à incrémenter à chaque déploiement touchant le moteur
+const VF_VERSION = "2.2.15-canvas-premium-align"; // semver manuelle : à incrémenter à chaque déploiement touchant le moteur
 /* Hash déterministe de l'état des règles : deux runs au même hash = strictement les mêmes règles.
    Couvre : modules (contenu+état), UNIVERS_SDZ, charte condensée, garde-fou sécurité. */
 function computeModulesHash(){
