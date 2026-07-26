@@ -975,11 +975,11 @@ function brandLayoutCandidates(platform, kind){
   if(kind==="text"){
     if(isStory) return [
       {id:"top-center", x:.10,y:.145,w:.80,h:.20,align:"center",pref:"top"},
-      {id:"top-left",   x:.075,y:.15,w:.62,h:.19,align:"left",pref:"top"},
-      {id:"top-right",  x:.305,y:.15,w:.62,h:.19,align:"right",pref:"top"},
+      {id:"top-left",   x:.075,y:.15,w:.56,h:.19,align:"left",pref:"top"},
+      {id:"top-right",  x:.365,y:.15,w:.56,h:.19,align:"right",pref:"top"},
       {id:"bottom-center",x:.10,y:.655,w:.80,h:.18,align:"center",pref:"bottom"},
-      {id:"bottom-left",x:.075,y:.65,w:.62,h:.19,align:"left",pref:"bottom"},
-      {id:"bottom-right",x:.305,y:.65,w:.62,h:.19,align:"right",pref:"bottom"},
+      {id:"bottom-left",x:.075,y:.65,w:.56,h:.19,align:"left",pref:"bottom"},
+      {id:"bottom-right",x:.365,y:.65,w:.56,h:.19,align:"right",pref:"bottom"},
     ];
     return [
       {id:"top-center",x:.09,y:.075,w:.82,h:.20,align:"center",pref:"top"},
@@ -998,11 +998,11 @@ function brandLayoutCandidates(platform, kind){
   ];
   if(isStory) return [
     {id:"top-center",x:.37,y:.14,w:.26,h:.18,align:"center",pref:"top"},
-    {id:"top-left",x:.065,y:.145,w:.28,h:.18,align:"left",pref:"top"},
-    {id:"top-right",x:.655,y:.145,w:.28,h:.18,align:"right",pref:"top"},
+    {id:"top-left",x:.065,y:.145,w:.235,h:.18,align:"left",pref:"top"},
+    {id:"top-right",x:.70,y:.145,w:.235,h:.18,align:"right",pref:"top"},
     {id:"bottom-center",x:.37,y:.665,w:.26,h:.17,align:"center",pref:"bottom"},
-    {id:"bottom-left",x:.065,y:.665,w:.28,h:.17,align:"left",pref:"bottom"},
-    {id:"bottom-right",x:.655,y:.665,w:.28,h:.17,align:"right",pref:"bottom"},
+    {id:"bottom-left",x:.065,y:.665,w:.235,h:.17,align:"left",pref:"bottom"},
+    {id:"bottom-right",x:.70,y:.665,w:.235,h:.17,align:"right",pref:"bottom"},
   ];
   return [
     {id:"top-center",x:.37,y:.065,w:.26,h:.21,align:"center",pref:"top"},
@@ -1017,6 +1017,21 @@ function boxesOverlap(a,b,padding){
   if(!a || !b) return false;
   const p = padding||0;
   return !(a.x+a.w+p<=b.x || b.x+b.w+p<=a.x || a.y+a.h+p<=b.y || b.y+b.h+p<=a.y);
+}
+function boxOverlapRatio(a,b){
+  if(!a||!b) return 0;
+  const w=Math.max(0,Math.min(a.x+a.w,b.x+b.w)-Math.max(a.x,b.x));
+  const h=Math.max(0,Math.min(a.y+a.h,b.y+b.h)-Math.max(a.y,b.y));
+  return (w*h)/Math.max(.0001,a.w*a.h);
+}
+function normalizedProtectedZones(analysis){
+  return (analysis&&Array.isArray(analysis.protectedZones)?analysis.protectedZones:[]).map(z=>({
+    label:String(z.label||"zone protégée"),
+    x:Math.max(0,Math.min(1,Number(z.x||0)/100)),
+    y:Math.max(0,Math.min(1,Number(z.y||0)/100)),
+    w:Math.max(0,Math.min(1,Number(z.width||0)/100)),
+    h:Math.max(0,Math.min(1,Number(z.height||0)/100)),
+  })).filter(z=>z.w>.01&&z.h>.01);
 }
 function measureImageRegion(imageData, box){
   const W=imageData.width, H=imageData.height, d=imageData.data;
@@ -1038,21 +1053,40 @@ function measureImageRegion(imageData, box){
   const mean=count?sum/count:0, variance=count?Math.max(0,sum2/count-mean*mean):0;
   return { mean, variance, edge:count?edges/count:0 };
 }
-function selectBrandRegion(imageData, platform, kind, preferred, occupied){
+function scoreBrandRegion(imageData,box,preferred,occupied,protectedZones){
   const pref=normalizeOverlayZonePreference(preferred);
-  const candidates=brandLayoutCandidates(platform,kind);
+  const metrics=measureImageRegion(imageData,box);
+  /* Variations et arêtes signalent généralement visage, mains, matériel ou décor détaillé.
+     Le centre est légèrement pénalisé : les prestations y placent presque toujours le sujet. */
+  const cx=box.x+box.w/2, cy=box.y+box.h/2;
+  const centerPenalty=(Math.abs(cx-.5)<.16 && cy>.28 && cy<.72) ? .30 : 0;
+  /* Une collision texte/logo est toujours pire qu'un placement moins idéal sur l'image. */
+  const overlapPenalty=boxesOverlap(box,occupied,.025) ? 100 : 0;
+  const subjectPenalty=(protectedZones||[]).reduce((sum,z)=>{
+    const ratio=boxOverlapRatio(box,z);
+    return sum+(ratio>0 ? 4+ratio*24 : 0);
+  },0);
+  const prefBonus=pref && (box.pref===pref || box.id.includes(pref)) ? -.18 : 0;
+  return {...box,metrics,score:metrics.variance*3.2+metrics.edge*2.7+metrics.mean*.18+
+    centerPenalty+overlapPenalty+subjectPenalty+prefBonus};
+}
+function selectBrandRegion(imageData,platform,kind,preferred,occupied,protectedZones){
   let best=null;
-  candidates.forEach(box=>{
-    const metrics=measureImageRegion(imageData,box);
-    /* Variations et arêtes signalent généralement visage, mains, matériel ou décor détaillé.
-       Le centre est légèrement pénalisé : les prestations y placent presque toujours le sujet. */
-    const cx=box.x+box.w/2, cy=box.y+box.h/2;
-    const centerPenalty=(Math.abs(cx-.5)<.16 && cy>.28 && cy<.72) ? .30 : 0;
-    const overlapPenalty=boxesOverlap(box,occupied,.025) ? 2 : 0;
-    const prefBonus=pref && (box.pref===pref || box.id.includes(pref)) ? -.18 : 0;
-    const score=metrics.variance*3.2 + metrics.edge*2.7 + metrics.mean*.18 +
-      centerPenalty + overlapPenalty + prefBonus;
-    if(!best || score<best.score) best={...box,metrics,score};
+  brandLayoutCandidates(platform,kind).forEach(box=>{
+    const scored=scoreBrandRegion(imageData,box,preferred,occupied,protectedZones);
+    if(!best||scored.score<best.score) best=scored;
+  });
+  return best;
+}
+function selectBrandLayoutPair(imageData,platform,preferredText,preferredLogo,protectedZones){
+  let best=null;
+  brandLayoutCandidates(platform,"text").forEach(text=>{
+    brandLayoutCandidates(platform,"logo").forEach(logo=>{
+      const textScored=scoreBrandRegion(imageData,text,preferredText,logo,protectedZones);
+      const logoScored=scoreBrandRegion(imageData,logo,preferredLogo,text,protectedZones);
+      const score=textScored.score+logoScored.score;
+      if(!best||score<best.score) best={text:textScored,logo:logoScored,score};
+    });
   });
   return best;
 }
@@ -1106,8 +1140,9 @@ function wrapTrackedText(ctx,text,maxWidth,tracking,maxLines){
 function drawPremiumHeadline(ctx,headline,box,platform){
   const W=ctx.canvas.width,H=ctx.canvas.height;
   const parts=String(headline||"").split("|").map(s=>s.trim()).filter(Boolean);
-  const title=(parts.shift()||"").toUpperCase();
-  const subtitle=parts.join(" — ").toUpperCase();
+  const preserveOfficialNames = value => String(value||"").toUpperCase().replace(/\bPSIO\b/g,"PSiO");
+  const title=preserveOfficialNames(parts.shift()||"");
+  const subtitle=preserveOfficialNames(parts.join(" — "));
   const maxWidth=box.w*W;
   let titleSize=Math.round(W*(platform==="Story"?.061:.052));
   const minTitle=Math.round(W*.035);
@@ -1183,13 +1218,16 @@ async function compositeBrandSignature(baseDataUrl, platform, options){
     const pixels=ctx.getImageData(0,0,canvas.width,canvas.height);
     const preferredText=opts.brief && opts.brief.zoneTexte;
     const preferredLogo=opts.brief && opts.brief.zoneLogo;
-    const textBox=headline ? selectBrandRegion(pixels,platform,"text",preferredText,null) : null;
-    const logoBox=logoImg ? selectBrandRegion(pixels,platform,"logo",preferredLogo,textBox) : null;
+    const protectedZones=normalizedProtectedZones(opts.analysis);
+    const pair=headline&&logoImg
+      ? selectBrandLayoutPair(pixels,platform,preferredText,preferredLogo,protectedZones) : null;
+    const textBox=headline ? (pair?pair.text:selectBrandRegion(pixels,platform,"text",preferredText,null,protectedZones)) : null;
+    const logoBox=logoImg ? (pair?pair.logo:selectBrandRegion(pixels,platform,"logo",preferredLogo,textBox,protectedZones)) : null;
     const report={version:"canvas-layout-v2",platform,
       textZone:textBox&&textBox.id||null,logoZone:logoBox&&logoBox.id||null,
       preferredText:normalizeOverlayZonePreference(preferredText),
       preferredLogo:normalizeOverlayZonePreference(preferredLogo),
-      scrimApplied:[],warnings:[]};
+      protectedZones:protectedZones.map(z=>z.label),scrimApplied:[],warnings:[]};
 
     /* Un voile dégradé est local et progressif : il sécurise la lecture sans fabriquer une carte,
        un bandeau opaque ou une esthétique de flyer. */
@@ -3612,8 +3650,15 @@ const IMAGE_ANALYSIS_SCHEMA = {
       visibleObjects: { type:"array", items:{type:"string"} },
       lighting: { type:"string" }, altText: { type:"string" },
       briefMismatch: { type:"array", items:{type:"string"} },
+      protectedZones: { type:"array", items:{ type:"object", additionalProperties:false, properties:{
+        label:{type:"string"}, x:{type:"number"}, y:{type:"number"}, width:{type:"number"}, height:{type:"number"},
+      }, required:["label","x","y","width","height"] } },
+      dominantColorCast: { type:"string", enum:["official_gold","neutral","orange_amber","yellow","copper","other"] },
+      productReferenceConformity: { type:"string", enum:["not_applicable","conforme","non_conforme","incertain"] },
+      productReferenceMismatch: { type:"string" },
     },
-    required: ["visibleSubjects","visibleAction","visibleSetting","visibleObjects","lighting","altText","briefMismatch"],
+    required: ["visibleSubjects","visibleAction","visibleSetting","visibleObjects","lighting","altText","briefMismatch",
+      "protectedZones","dominantColorCast","productReferenceConformity","productReferenceMismatch"],
   },
 };
 /* Analyse l'image RÉELLEMENT obtenue (pas le brief) — c'est cette sortie, pas le brief, qui doit
@@ -3642,11 +3687,30 @@ function resizeDataUrlForAnalysis(dataUrl, maxDim, quality){
     }catch(e){ resolve(dataUrl); }
   });
 }
-async function analyzeGeneratedImage(dataUrl, brief){
+async function buildProductComparisonForAnalysis(generatedDataUrl, referenceDataUrl){
+  if(!referenceDataUrl) return resizeDataUrlForAnalysis(generatedDataUrl,1024,.7);
+  try{
+    const [ref,generated]=await Promise.all([loadImage(referenceDataUrl),loadImage(generatedDataUrl)]);
+    const canvas=document.createElement("canvas"); canvas.width=1024; canvas.height=768;
+    const ctx=canvas.getContext("2d"); ctx.fillStyle="#161616"; ctx.fillRect(0,0,canvas.width,canvas.height);
+    const drawContain=(img,x,w)=>{
+      const scale=Math.min(w/img.width,canvas.height/img.height);
+      const dw=img.width*scale,dh=img.height*scale;
+      ctx.drawImage(img,x+(w-dw)/2,(canvas.height-dh)/2,dw,dh);
+    };
+    drawContain(ref,0,512); drawContain(generated,512,512);
+    return canvas.toDataURL("image/jpeg",.78);
+  }catch(e){ return resizeDataUrlForAnalysis(generatedDataUrl,1024,.7); }
+}
+async function analyzeGeneratedImage(dataUrl, brief, options){
   const provider = state.apiProviders.find(p=>p.id===state.selectedProviderId) || DEFAULT_OPENAI_PROVIDER;
-  const analysisImage = await resizeDataUrlForAnalysis(dataUrl, 1024, 0.7);
-  const systemPrompt = "Tu décris uniquement ce qui est visuellement présent dans l'image fournie, jamais ce qui était prévu ou souhaité. Ne complète jamais par supposition (pas de bon cadeau, huile ou accessoire non visible). Si un élément du brief n'apparaît pas dans l'image, note-le dans briefMismatch. RÈGLE DE PRODUCTION : l'image brute doit être vierge de toute typographie et identité de marque. Si tu vois le moindre mot, lettre, URL, slogan, logo, emblème, sceau, monogramme ou zèbre de marque, décris-le explicitement dans visibleObjects ET ajoute un briefMismatch commençant par « Overlay IA interdit : ».";
-  const userPrompt = `Décris précisément ce qui est visible dans cette image, en la comparant à ce qui était prévu (sans jamais inventer ce qui manque) :\nScène prévue : ${brief.ideeVisuelle}\nSujet prévu : ${brief.sujetPrincipal}\nAction prévue : ${brief.action}`;
+  const productReferenceDataUrl=options&&options.productReferenceDataUrl||"";
+  const analysisImage=await buildProductComparisonForAnalysis(dataUrl,productReferenceDataUrl);
+  const comparisonRule=productReferenceDataUrl
+    ? "L'image d'analyse est un comparatif : référence produit officielle à GAUCHE, image générée à DROITE. Décris visibleSubjects, visibleAction, visibleSetting, visibleObjects, lighting et altText uniquement pour l'image générée de droite. Compare très strictement la géométrie du produit de droite à celle de gauche : silhouette, proportions, grande surface optique incurvée, boîtiers latéraux, petit écran, commandes et câbles. Une visière générique ou un casque VR = non_conforme. Les coordonnées protectedZones restent celles de l'image générée seule, de 0 à 100, indépendamment du comparatif."
+    : "Il n'y a pas de référence produit séparée : productReferenceConformity vaut not_applicable.";
+  const systemPrompt = `Tu décris uniquement ce qui est visuellement présent dans l'image fournie, jamais ce qui était prévu ou souhaité. Ne complète jamais par supposition. ${comparisonRule} Si un élément du brief n'apparaît pas dans l'image, note-le dans briefMismatch. protectedZones contient uniquement les rectangles critiques à ne jamais recouvrir par du texte ou un logo : visage, mains actives et matériel de prestation ; coordonnées x, y, width, height en pourcentage 0-100 de l'image générée. dominantColorCast juge la dominante réellement visible : l'orange ou l'ambre ne sont jamais de l'or officiel. RÈGLE DE PRODUCTION : l'image brute doit être vierge de toute typographie et identité de marque. Si tu vois le moindre mot, lettre, URL, slogan, logo, emblème, sceau, monogramme ou zèbre de marque, décris-le explicitement dans visibleObjects ET ajoute un briefMismatch commençant par « Overlay IA interdit : ».`;
+  const userPrompt = `Analyse précisément l'image générée et compare-la au brief :\nScène prévue : ${brief.ideeVisuelle}\nSujet prévu : ${brief.sujetPrincipal}\nAction prévue : ${brief.action}\nMatériel distinctif attendu : ${brief.caracteristiquePrestationVisible||"aucun"}`;
   const res = await fetch("/.netlify/functions/generate-text", {
     method:"POST", headers:{ "Content-Type":"application/json" },
     body: JSON.stringify({ kind: provider.kind, model: provider.model, baseUrl: provider.baseUrl, systemPrompt, userPrompt, responseSchema: IMAGE_ANALYSIS_SCHEMA, imageDataUrl: analysisImage }),
@@ -3665,6 +3729,16 @@ function findGeneratedOverlayViolation(analysis){
   const explicit=mismatches.find(x=>/^overlay ia interdit\s*:/i.test(String(x||"").trim()));
   if(explicit) return String(explicit);
   return "";
+}
+function findProductReferenceViolation(analysis){
+  if(!analysis||analysis.productReferenceConformity!=="non_conforme") return "";
+  return String(analysis.productReferenceMismatch||"le matériel généré ne correspond pas à la référence officielle");
+}
+function findPaletteViolation(analysis){
+  const cast=analysis&&analysis.dominantColorCast;
+  if(!["orange_amber","yellow","copper"].includes(cast)) return "";
+  const labels={orange_amber:"orange ou ambre",yellow:"jaune vif",copper:"cuivre"};
+  return `dominante ${labels[cast]} incompatible avec l'or officiel SDZ`;
 }
 
 
@@ -4048,6 +4122,14 @@ async function finalizeGeneratedImage(flow){
   if(generatedOverlayViolation){
     throw new Error(`Image brute refusée avant Canvas : ${generatedOverlayViolation.replace(/^overlay ia interdit\s*:\s*/i,"")}. Le texte et le logo officiels doivent être ajoutés uniquement par Canvas.`);
   }
+  const productViolation=findProductReferenceViolation(flow.analysis);
+  if(productViolation){
+    throw new Error(`Image brute refusée avant Canvas : ${productViolation}. Aucune visière générique ne peut remplacer le produit officiel.`);
+  }
+  const paletteViolation=findPaletteViolation(flow.analysis);
+  if(paletteViolation){
+    throw new Error(`Image brute refusée avant Canvas : ${paletteViolation}. Canvas n'ajoute jamais sa signature sur une image hors charte.`);
+  }
   /* Une référence utilisée ne prouve jamais que le logo officiel est présent et exact.
      Seule la signature ajoutée par Canvas est considérée comme valide. */
   const logoInScene = false;
@@ -4158,11 +4240,15 @@ async function confirmAndGenerateImage(prepared, onStatus, cancelToken){
   onStatus && onStatus("Analyse de l'image obtenue...");
   let analysis, analysisError = null;
   try{
-    analysis = await analyzeGeneratedImage(dataUrl, brief);
+    const productReference=(referenceSelections||[]).find(r=>r.id===OFFICIAL_PSIO_REFERENCE_ID&&r.dataUrl);
+    analysis = await analyzeGeneratedImage(dataUrl, brief, {
+      productReferenceDataUrl:productReference&&productReference.dataUrl||"",
+    });
   }catch(err){
     analysisError = `Échec de l'analyse d'image : ${String(err.message||err)} — image conservée, alt text prudent utilisé.`;
     analysis = { visibleSubjects:[], visibleAction:"", visibleSetting:"", visibleObjects:[], lighting:"",
-      altText: "Image générée pour La Santé des Zèbres.", briefMismatch:[] };
+      altText:"Image générée pour La Santé des Zèbres.", briefMismatch:[], protectedZones:[],
+      dominantColorCast:"other", productReferenceConformity:"incertain", productReferenceMismatch:"Analyse indisponible." };
   }
 
   onStatus && onStatus("Rédaction du texte...");
@@ -6124,7 +6210,10 @@ function buildPostTab(){
       if(!flow || !flow.dataUrl) return;
       relaunchAnalysisBtn.disabled = true;
       try{
-        const analysis = await analyzeGeneratedImage(flow.dataUrl, flow.brief);
+        const productReference=(flow.referenceSelections||[]).find(r=>r.id===OFFICIAL_PSIO_REFERENCE_ID&&r.dataUrl);
+        const analysis = await analyzeGeneratedImage(flow.dataUrl, flow.brief, {
+          productReferenceDataUrl:productReference&&productReference.dataUrl||"",
+        });
         flow.analysis = analysis; flow.analysisError = null;
         imgApiStatus.textContent = "Analyse de l'image relancée ✓ (aucun nouvel appel image facturé)";
         renderCreativeInspector();
@@ -6384,8 +6473,8 @@ function buildPostTab(){
       el("img",{src:previewImgForPost.dataUrl, style:"width:100%;display:block;"}),
     ])));
 
-    const logoAsset = state.images.find(i=>i.assetType==="logo");
-    if(logoAsset){
+    /* Le logo officiel peut venir de la Bibliothèque locale ou de /logo.png sur le serveur. */
+    {
       const logoMsg = el("p",{style:"font-size:12px;color:var(--green);min-height:16px;margin:0 0 10px;text-align:center;"},"");
       frag.appendChild(el("button",{class:"btn-secondary", style:"margin-bottom:10px;", onclick: async ()=>{
         logoMsg.style.color = "var(--muted2)"; logoMsg.textContent = "Ajout du logo en cours...";
@@ -6412,9 +6501,6 @@ function buildPostTab(){
       frag.appendChild(logoMsg);
       frag.appendChild(el("p",{style:"font-size:11px;color:var(--muted2);margin:-4px 0 10px;text-align:center;"},
         "Canvas choisit automatiquement une zone calme et sûre. Une nouvelle image est créée ; l'originale reste intacte."));
-    } else {
-      frag.appendChild(el("p",{style:"font-size:12px;color:var(--muted2);margin:0 0 10px;"},
-        "Aucun logo enregistré comme actif de marque — marque une image \"Logo\" dans l'onglet Bibliothèque pour pouvoir l'ajouter automatiquement ici."));
     }
   }
 
@@ -7124,7 +7210,7 @@ function buildApiTab(){
 ============================================================ */
 
 /* ---- Versionnage ---- */
-const VF_VERSION = "2.2.0-canvas"; // semver manuelle : à incrémenter à chaque déploiement touchant le moteur
+const VF_VERSION = "2.2.1-canvas"; // semver manuelle : à incrémenter à chaque déploiement touchant le moteur
 /* Hash déterministe de l'état des règles : deux runs au même hash = strictement les mêmes règles.
    Couvre : modules (contenu+état), UNIVERS_SDZ, charte condensée, garde-fou sécurité. */
 function computeModulesHash(){
