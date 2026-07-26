@@ -31,12 +31,15 @@ function dataUrlToBlob(dataUrl){
   return new Blob([binary], { type: contentType });
 }
 
-async function generateWithReferenceImages({ key, prompt, size, model, referenceImageUrls, referenceImageData }){
+async function generateWithReferenceImages({ key, prompt, size, model, quality, referenceImageUrls, referenceImageData }){
   const form = new FormData();
-  form.append("model", model || "gpt-image-1");
+  const imageModel = model || "gpt-image-1";
+  form.append("model", imageModel);
   form.append("prompt", prompt);
   form.append("size", size || "1024x1024");
   form.append("n", "1");
+  if(imageModel !== "gpt-image-2") form.append("input_fidelity", "high");
+  if(quality) form.append("quality", quality);
   const urls = (referenceImageUrls || []).slice(0, 3);
   const dataUrls = (referenceImageData || []).slice(0, 3 - urls.length);
   for(const url of urls){
@@ -59,7 +62,7 @@ async function generateWithReferenceImages({ key, prompt, size, model, reference
   return res.json();
 }
 
-async function generateStandard({ key, prompt, size, model }){
+async function generateStandard({ key, prompt, size, model, quality }){
   const res = await fetch("https://api.openai.com/v1/images/generations", {
     method: "POST",
     headers: { "Content-Type": "application/json", Authorization: `Bearer ${key}` },
@@ -67,6 +70,7 @@ async function generateStandard({ key, prompt, size, model }){
       model: model || "gpt-image-1",
       prompt,
       size: size || "1024x1024",
+      ...(quality ? { quality } : {}),
       n: 1,
     }),
   });
@@ -88,7 +92,7 @@ exports.handler = async (event) => {
   } catch (e) {
     return { statusCode: 400, body: JSON.stringify({ error: "Corps de requête invalide" }) };
   }
-  const { prompt, size, model, referenceImageUrls, referenceImageData } = payload;
+  const { prompt, size, model, quality, referenceImageUrls, referenceImageData } = payload;
   const referenceRequired = payload.referenceRequired === true;
 
   try {
@@ -101,17 +105,17 @@ exports.handler = async (event) => {
     const hasData = Array.isArray(referenceImageData) && referenceImageData.length;
     if (hasUrls || hasData) {
       try {
-        data = await generateWithReferenceImages({ key, prompt, size, model, referenceImageUrls, referenceImageData });
+        data = await generateWithReferenceImages({ key, prompt, size, model, quality, referenceImageUrls, referenceImageData });
         usedReference = true;
       } catch (refErr) {
         if(referenceRequired){
           throw new Error(`Référence produit obligatoire non utilisée : ${String(refErr.message || refErr)}`);
         }
         // Dégradation propre pour les références artistiques facultatives uniquement.
-        data = await generateStandard({ key, prompt, size, model });
+        data = await generateStandard({ key, prompt, size, model, quality });
       }
     } else {
-      data = await generateStandard({ key, prompt, size, model });
+      data = await generateStandard({ key, prompt, size, model, quality });
     }
 
     const b64 = data.data?.[0]?.b64_json || null;

@@ -3551,7 +3551,7 @@ function buildFixedGuardrailBlocks(brief, platform){
     ? "Story 9:16 : composition dense, héroïque et ascendante, mais sans barre Instagram, avatar, date, boutons, réactions, vignettes ni navigation."
     : "";
   const psioProductGuard = isPsio
-    ? "RÉFÉRENCES PRODUIT PSiO® OBLIGATOIRES : les trois images fournies décrivent ensemble un seul et même modèle officiel. Image 1 : produit isolé, référence prioritaire pour l'écran, les commandes et les câbles. Image 2 : vue de face portée, référence prioritaire pour la visière incurvée et le pont nasal. Image 3 : vue de profil portée, référence prioritaire pour les boîtiers latéraux, les proportions et l'ajustement sur le visage. Utilise ces images uniquement pour reproduire exactement la géométrie des lunettes officielles — silhouette, proportions, grande surface optique incurvée, boîtiers latéraux, petit écran rectangulaire, commandes et câbles. Recolore le dispositif en noir profond et or métallique noble SDZ ; les couleurs blanche, bleue et cyan des références ne sont pas à conserver. Ignore entièrement les visages, identités, cheveux, poses, sièges, fonds et cadrages des trois références. Ignore et ne recopie aucune inscription, marque, mot, lettre, chiffre ou pictogramme visible sur le dispositif ou dans les références : toutes les surfaces du produit doivent rester vierges et sans marque dans l'image brute. Aucun autre type de lunettes, masque, casque ou visière n'est admis. Ne modifie, ne simplifie, ne stylise et ne réinterprète jamais la forme du dispositif."
+    ? "VERROU PRODUIT — RETOUCHE À PARTIR DE L'IMAGE 1 : les trois images fournies décrivent ensemble un seul et même dispositif officiel. L'image 1, vue de profil portée, est la photographie de base à transformer : conserve exactement la pose, l'angle de tête, l'ajustement sur le visage, la silhouette, les proportions, la grande surface optique incurvée, les boîtiers latéraux, le petit écran, les commandes et les câbles. Ne recrée pas le dispositif sur une autre personne. Ne change que le décor, l'éclairage éditorial et la couleur des surfaces du dispositif. Image 2 : vue de face portée, référence secondaire pour confirmer la visière incurvée et le pont nasal. Image 3 : produit isolé, référence secondaire pour confirmer l'écran, les commandes et les câbles. Recolore uniquement les surfaces blanches, bleues et cyan du dispositif en noir profond et or métallique noble SDZ, sans modifier leur géométrie, leur perspective ni leur position. Ignore et ne recopie aucune inscription, marque, mot, lettre, chiffre ou pictogramme visible sur le dispositif ou dans les références : toutes les surfaces du produit doivent rester vierges et sans marque dans l'image brute. Aucun autre type de lunettes, masque, casque ou visière n'est admis. Change uniquement le fond, la lumière et la palette ; conserve le sujet et le produit de l'image 1 inchangés dans leur forme et leur placement."
     : "";
   const registryGuard = buildActiveRegistryDecorContract(brief.registresActifs);
   return `${charte} ${soinPhrase} Noir profond comme écrin, jamais comme sous-exposition. Sujet, geste et matériel lisibles au premier regard. Or métallique noble, jamais orange, ambre, feu ou incendie. Énergie ascendante et désirable. ${registryGuard ? `CONTRAT DE VISIBILITÉ DES REGISTRES : ${registryGuard}. Le décor doit être immédiatement perceptible derrière et autour du sujet ; une grande surface noire uniforme ou vide constitue un échec.` : ""} L'ombre ou la fragmentation ne peuvent exister qu'en opposition secondaire clairement dépassée par le sujet ; jamais horreur, menace, désespoir sans issue, personnage encapuchonné menaçant, visage central mutilé, crypte, rituel, sorcellerie, astrologie ou signes zodiacaux. Aucun texte n'est incrusté dans l'image ; une zone visuellement calme reste prête à recevoir le texte ajouté ensuite. ${storyGuard} ${psioProductGuard} ${logoPhrase}${eviter ? ` À éviter absolument : ${eviter}.` : ""}
@@ -3644,9 +3644,11 @@ function selectReferencesForBrief(brief, platform, maxCount){
    Les trois vues complémentaires verrouillent la géométrie : produit isolé, face portée et profil
    porté. Visages, poses, fonds et couleurs des photos ne sont jamais des références créatives. */
 const OFFICIAL_PSIO_REFERENCES = [
-  { id:"official-psio-product-v2", path:"/assets/psio-official-product.jpg", role:"produit_isole_commandes_ecran_cables" },
-  { id:"official-psio-front-v2", path:"/assets/psio-official-front.jpg", role:"face_portee_visiere_pont" },
-  { id:"official-psio-profile-v2", path:"/assets/psio-official-reference.jpg", role:"profil_porte_boitiers_ajustement" },
+  /* L'ordre est contractuel pour /images/edits : l'image portée de profil est la photographie
+     de base, les deux suivantes ne servent qu'à confirmer la géométrie du produit. */
+  { id:"official-psio-profile-v2", path:"/assets/psio-official-reference.jpg", role:"base_profil_portee_a_preserver" },
+  { id:"official-psio-front-v2", path:"/assets/psio-official-front.jpg", role:"controle_face_visiere_pont" },
+  { id:"official-psio-product-v2", path:"/assets/psio-official-product.jpg", role:"controle_commandes_ecran_cables" },
 ];
 const OFFICIAL_PSIO_REFERENCE_IDS = new Set(OFFICIAL_PSIO_REFERENCES.map(r=>r.id));
 let _officialPsioReferencesCache = null;
@@ -3781,7 +3783,7 @@ async function analyzeGeneratedImage(dataUrl, brief, options){
   const productReferenceDataUrls=(options&&options.productReferenceDataUrls||[]).filter(Boolean);
   const analysisImage=await buildProductComparisonForAnalysis(dataUrl,productReferenceDataUrls);
   const comparisonRule=productReferenceDataUrls.length
-    ? "L'image d'analyse est un comparatif : les trois références produit officielles complémentaires sont empilées à GAUCHE (produit isolé, face portée, profil porté) et l'image générée est à DROITE. Décris visibleSubjects, visibleAction, visibleSetting, visibleObjects, lighting et altText uniquement pour l'image générée de droite. Évalue productGeometryConformity UNIQUEMENT sur la géométrie du produit de droite par rapport à l'ensemble des vues de gauche : silhouette, proportions, grande surface optique incurvée, pont nasal, boîtiers latéraux, petit écran, commandes et câbles. IGNORE TOTALEMENT les différences de couleur pour ce verdict : le blanc, le bleu et le cyan des références doivent volontairement être recolorés en noir profond et or noble dans l'image générée. Une différence uniquement chromatique ne constitue jamais une non-conformité géométrique et productGeometryMismatch doit alors rester vide. Une visière générique, un casque VR ou une forme matériellement différente = non_conforme. Les coordonnées protectedZones restent celles de l'image générée seule, de 0 à 100, indépendamment du comparatif."
+    ? "L'image d'analyse est un comparatif : les trois références produit officielles complémentaires sont empilées à GAUCHE (profil porté de base, face portée, produit isolé) et l'image générée est à DROITE. Décris visibleSubjects, visibleAction, visibleSetting, visibleObjects, lighting et altText uniquement pour l'image générée de droite. Évalue productGeometryConformity UNIQUEMENT sur la géométrie du produit de droite par rapport à l'ensemble des vues de gauche, avec l'image de profil située en haut à gauche comme référence principale : silhouette, proportions, grande surface optique incurvée, pont nasal, boîtiers latéraux, petit écran, commandes et câbles. IGNORE TOTALEMENT les différences de couleur pour ce verdict : le blanc, le bleu et le cyan des références doivent volontairement être recolorés en noir profond et or noble dans l'image générée. Une différence uniquement chromatique ne constitue jamais une non-conformité géométrique et productGeometryMismatch doit alors rester vide. Une visière générique, un casque VR ou une forme matériellement différente = non_conforme. Les coordonnées protectedZones restent celles de l'image générée seule, de 0 à 100, indépendamment du comparatif."
     : "Il n'y a pas de référence produit séparée : productGeometryConformity vaut not_applicable.";
   const systemPrompt = `Tu décris uniquement ce qui est visuellement présent dans l'image fournie, jamais ce qui était prévu ou souhaité. Ne complète jamais par supposition. ${comparisonRule} Si un élément du brief n'apparaît pas dans l'image, note-le dans briefMismatch. protectedZones contient les rectangles critiques à ne jamais recouvrir par du texte ou un logo : visage, tête, lunettes ou matériel PSiO®, mains actives et matériel de prestation ; coordonnées x, y, width, height en pourcentage 0-100 de l'image générée. dominantColorCast juge séparément la dominante réellement visible : l'orange ou l'ambre ne sont jamais de l'or officiel. Ne mélange jamais ce verdict chromatique avec productGeometryConformity.`;
   const userPrompt = `Analyse précisément l'image générée et compare-la au brief :\nScène prévue : ${brief.ideeVisuelle}\nSujet prévu : ${brief.sujetPrincipal}\nAction prévue : ${brief.action}\nMatériel distinctif attendu : ${brief.caracteristiquePrestationVisible||"aucun"}`;
@@ -4327,6 +4329,8 @@ async function confirmAndGenerateImage(prepared, onStatus, cancelToken){
     const genResult = await callProviderImage(prepared.imagePrompt, size, undefined, onStatus, cancelToken, {
       smartReferenceDataUrls,
       referenceRequired: psioReferenceRequired,
+      model: psioReferenceRequired ? "gpt-image-2" : undefined,
+      quality: psioReferenceRequired ? "high" : undefined,
       onJobCreated: prepared.onImageJobCreated,
     });
     dataUrl = genResult.dataUrl; usedReference = genResult.usedReference; referenceFallbackReason = genResult.referenceFallbackReason; logoSentAsReference = !!genResult.logoSentAsReference; imageUsage = genResult.imageUsage || null;
@@ -4587,6 +4591,8 @@ async function callProviderImage(prompt, size, extraReferenceDataUrls, onStatus,
     headers: { "Content-Type":"application/json" },
     body: JSON.stringify({
       prompt, size,
+      model: options.model || undefined,
+      quality: options.quality || undefined,
       referenceImageUrls: referenceImageUrls.length ? referenceImageUrls : undefined,
       referenceImageData: referenceImageData.length ? referenceImageData : undefined,
       referenceRequired: options.referenceRequired===true,
@@ -6164,7 +6170,9 @@ function buildPostTab(){
             ? "3 vues chargées et obligatoires ✓" : "Jeu incomplet — génération bloquée"));
       }
       if(flow.phase!=="prepared") body.appendChild(row("Référence réellement utilisée", flow.usedReference ? "Oui ✓" : (flow.referenceFallbackReason ? "Non — repli : "+flow.referenceFallbackReason : "Non demandée")));
-      body.appendChild(row("Modèle", "gpt-image-1"));
+      body.appendChild(row("Modèle", flow.inputs?.prestation==="Luminothérapie PSIO®"
+        ? "gpt-image-2 · retouche produit verrouillée · qualité haute"
+        : "gpt-image-1"));
       body.appendChild(row("Rédacteur DA", flow.daWriterUsed ? "Utilisé ✓ (prompt narratif)" : (flow.daWriterFallbackReason ? "Repli sur l'assemblage classique — "+flow.daWriterFallbackReason : "Désactivé")));
       if(flow.validatorReport){
         const vr = flow.validatorReport;
@@ -7321,7 +7329,7 @@ function buildApiTab(){
 ============================================================ */
 
 /* ---- Versionnage ---- */
-const VF_VERSION = "2.2.8-brandless-generation"; // semver manuelle : à incrémenter à chaque déploiement touchant le moteur
+const VF_VERSION = "2.2.9-psio-product-lock"; // semver manuelle : à incrémenter à chaque déploiement touchant le moteur
 /* Hash déterministe de l'état des règles : deux runs au même hash = strictement les mêmes règles.
    Couvre : modules (contenu+état), UNIVERS_SDZ, charte condensée, garde-fou sécurité. */
 function computeModulesHash(){
