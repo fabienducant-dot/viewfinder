@@ -10,6 +10,7 @@
    répondre immédiatement. Elle n'attend jamais OpenAI. */
 const { getStore } = require("@netlify/blobs");
 const crypto = require("crypto");
+const { resolveInvocationBaseUrl } = require("./_shared/netlify-invocation-url");
 
 function openJobStore(){
   const opts = { consistency: "strong" }; // écriture puis relecture quasi immédiate du statut : la
@@ -58,11 +59,14 @@ exports.handler = async (event) => {
       referenceFallbackReason: null,
     }));
 
-    const siteUrl = (process.env.SITE_URL || process.env.URL || "").replace(/\/$/, "");
+    // Le job doit déclencher la Background Function du MÊME déploiement. Sur une Deploy Preview,
+    // URL/SITE_URL peuvent pointer vers la production ; l'hôte Netlify validé de la requête
+    // entrante reste donc prioritaire.
+    const siteUrl = resolveInvocationBaseUrl(event);
     if (!siteUrl) {
       await store.set(`jobs/${jobId}`, JSON.stringify({
         jobId, status: "failed", createdAt: now, updatedAt: Date.now(),
-        error: { message: "SITE_URL/URL non disponible côté serveur — impossible de déclencher la génération.", source: "config" },
+        error: { message: "Hôte du déploiement Netlify introuvable — impossible de déclencher la génération.", source: "config" },
         resultKey: null, usedReference: null, referenceFallbackReason: null,
       }));
       return { statusCode: 200, headers: { "Content-Type": "application/json" }, body: JSON.stringify({ ok: true, jobId, status: "failed" }) };
