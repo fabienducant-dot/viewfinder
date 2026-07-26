@@ -2581,7 +2581,7 @@ ${consignePrestation}
 - L'effet fantastique amplifie la prestation réelle ; il ne la remplace jamais. Le sujet reste naturel, habillé, crédible et intact.
 - Reste éditorial, premium et jamais démonstratif ou didactique.
 ${prestation==="Luminothérapie PSIO®" ? `- CAS PSIO® : la personne est déjà confortablement installée, les yeux fermés, avec les lunettes correctement portées et lisibles sur le visage. Elle n'est jamais debout, en attente de commencer, ni en train de tenir les lunettes à la main. La forme, les proportions, la surface optique, l'écran, les commandes et les câbles doivent correspondre strictement à la référence officielle ; seule la couleur peut être adaptée en noir profond et or noble SDZ. Aucun casque VR, halo circulaire, auréole, faisceau ajouté ou geste secondaire inventé.` : ""}
-${prestation==="Biorésonance quantique" ? `- CAS BIORÉSONANCE (Healy) : le boîtier Healy est visiblement posé sur la peau ou tenu à proximité immédiate du corps, jamais rangé ou hors champ. La forme (carré à coins arrondis, base élargie), les proportions et l'emplacement des commandes doivent correspondre strictement à la référence officielle, mais les zones de commande restent vierges, sans icône ni pictogramme imprimé ; seule la couleur peut être adaptée en noir profond et or noble SDZ. Aucune inscription, marque ou icône du fabricant reproduite, aucun autre dispositif électronique, aucun halo, auréole, faisceau ajouté ou geste secondaire inventé.` : ""}
+${prestation==="Biorésonance quantique" ? `- CAS BIORÉSONANCE (Healy) : le boîtier Healy est utilisé selon l'un de ses deux usages réels — soit relié par câbles fins à des électrodes fixées sur les poignets, soit via son adaptateur sans fil (coil) fixé sur le vêtement au niveau du thorax ou du cou ; le boîtier lui-même est tenu en main ou posé à proximité immédiate, jamais rangé ou hors champ, et jamais collé directement sur la peau comme un patch autocollant (ex. épaule) sans câble ni coil visible. La forme (carré à coins arrondis, base élargie) et les proportions doivent correspondre strictement à la référence officielle. La grande zone circulaire centrale de la face (où figure le logo du fabricant) et les zones de commande restent des surfaces plates et vierges, sans icône, pictogramme, médaillon, anneau ni point central — seule la couleur peut être adaptée en noir profond et or noble SDZ. Aucune inscription, marque ou icône du fabricant reproduite, aucun autre dispositif électronique, aucun halo, auréole, faisceau ajouté ou geste secondaire inventé.` : ""}
 
 ${platform==="Story" ? `DIRECTION VISUELLE DE RÉFÉRENCE — STORIES SDZ :
 - composition verticale 9:16 dense et éditoriale, sujet héroïque central, profondeur en plusieurs plans, énergie dorée ascendante ;
@@ -2882,7 +2882,7 @@ function getServiceVisualMoment(prestation){
     return "l'instant calme où les lunettes PSiO® portées sur le visage deviennent le centre visuel";
   }
   if(prestation==="Biorésonance quantique"){
-    return "l'instant précis où le boîtier Healy, posé sur la peau ou tenu à proximité du corps, devient le centre visuel";
+    return "l'instant précis où le boîtier Healy, tenu en main et relié soit par câbles à des électrodes aux poignets soit par son coil sans fil fixé sur le vêtement, devient le centre visuel";
   }
   return "l'instant où le geste ou le matériel distinctif de la prestation devient clairement lisible";
 }
@@ -2891,7 +2891,7 @@ function getServiceHeroAction(prestation){
     return "rester confortablement installé, les yeux fermés pendant la séance, lunettes PSiO® bien visibles";
   }
   if(prestation==="Biorésonance quantique"){
-    return "rester confortablement installé pendant la séance, le boîtier Healy correctement positionné sur ou à proximité du corps, bien visible";
+    return "rester confortablement installé pendant la séance, tenant le boîtier Healy en main ou à proximité immédiate, relié soit par câbles à des électrodes fixées sur les poignets, soit par son adaptateur sans fil (coil) posé sur le vêtement au niveau du thorax ou du cou — jamais collé directement sur la peau comme un patch";
   }
   return "recevoir ou utiliser la prestation, avec son geste ou son matériel distinctif clairement visible";
 }
@@ -2900,7 +2900,7 @@ function getServiceHeroSubject(prestation){
     return "une personne adulte confortablement installée, portant les lunettes PSiO® correctement ajustées sur le visage";
   }
   if(prestation==="Biorésonance quantique"){
-    return "une personne adulte confortablement installée, le boîtier Healy visiblement posé sur la peau ou tenu à proximité du corps";
+    return "une personne adulte confortablement installée, le boîtier Healy visible en main ou à proximité, relié par câbles à des électrodes aux poignets ou par un coil sans fil fixé sur le vêtement au niveau du thorax ou du cou";
   }
   return "";
 }
@@ -2937,11 +2937,14 @@ const PSIO_COMPOSITION_INTERDITE = [
 ];
 const HEALY_COMPOSITION_INTERDITE = [
   "boîtier tenu ou positionné d'une façon qui ne correspond pas à son usage réel",
+  "boîtier collé directement sur la peau comme un patch autocollant (épaule ou ailleurs), sans câble ni coil visible",
   "autre dispositif électronique ou appareil que le modèle Healy officiel fourni en référence",
   "boîtier Healy généré dans une palette autre que noir profond et or noble SDZ",
   "forme, proportions ou commandes du boîtier Healy modifiées",
   "icônes, pictogrammes ou symboles imprimés visibles sur les commandes ou l'écran",
   "inscriptions, marques ou logos du fabricant reproduits sur le boîtier",
+  "médaillon circulaire, anneau ou point doré au centre du boîtier",
+  "cercle concentrique ou blason décoratif sur la face du dispositif",
   "halo circulaire ou auréole autour de la tête",
   "faisceau lumineux ajouté",
   "particules dorées, poussière dorée ou halo de poussières",
@@ -3765,7 +3768,7 @@ function buildFixedGuardrailBlocks(brief, platform){
   const psioProductGuard = isPsio
     ? "VERROU PRODUIT — RETOUCHE À PARTIR DE L'IMAGE 1 : les trois images fournies décrivent ensemble un seul et même dispositif officiel. L'image 1, vue de profil portée, est la photographie de base à transformer : conserve exactement la pose, l'angle de tête, l'ajustement sur le visage, la silhouette, les proportions, la grande surface optique incurvée, les boîtiers latéraux, le petit écran, les commandes et les câbles. Ne recrée pas le dispositif sur une autre personne. Ne change que le décor, l'éclairage éditorial et la couleur des surfaces du dispositif. Image 2 : vue de face portée, référence secondaire pour confirmer la visière incurvée et le pont nasal. Image 3 : produit isolé, référence secondaire pour confirmer l'écran, les commandes et les câbles. Recolore uniquement les surfaces blanches, bleues et cyan du dispositif en noir profond et or métallique noble SDZ, sans modifier leur géométrie, leur perspective ni leur position. Ignore et ne recopie aucune inscription, marque, mot, lettre, chiffre ou pictogramme visible sur le dispositif ou dans les références : toutes les surfaces du produit doivent rester vierges et sans marque dans l'image brute. Aucun autre type de lunettes, masque, casque ou visière n'est admis. Change uniquement le fond, la lumière et la palette ; conserve le sujet et le produit de l'image 1 inchangés dans leur forme et leur placement."
     : isHealy
-    ? "VERROU PRODUIT — RETOUCHE À PARTIR DE L'IMAGE 1 : les deux images fournies décrivent le même dispositif officiel Healy. L'image 1, vue de face nette sur fond blanc, est la photographie de base à transformer : conserve exactement la forme carrée à coins arrondis, la base élargie, l'écran et l'emplacement des commandes (bluetooth, alimentation, batterie, USB, plus/moins) avec leurs proportions exactes, mais SANS reproduire les icônes, pictogrammes ou symboles qui y sont imprimés — ces zones de commande restent visuellement sobres et vierges, comme des surfaces lisses de la même couleur que le boîtier, sans aucun signe distinctif. Image 2 : photographie réelle du dispositif avec son accessoire attaché, référence secondaire pour confirmer le volume et la silhouette complète en trois dimensions. Recolore uniquement les surfaces blanches et les teintes bleues, roses, vertes et turquoise du boîtier en noir profond et or métallique noble SDZ, sans modifier sa géométrie, sa perspective ni sa position. Ignore et ne recopie aucune inscription, marque, mot, lettre, chiffre, logo, icône, pictogramme ou étiquette visible sur le dispositif ou dans les références : toutes les surfaces du produit doivent rester vierges et sans marque dans l'image brute. Aucun autre dispositif électronique n'est admis. Change uniquement le fond, la lumière et la palette ; conserve le produit de l'image 1 inchangé dans sa forme et son placement."
+    ? "VERROU PRODUIT — RETOUCHE À PARTIR DE L'IMAGE 1 : les deux images fournies décrivent le même dispositif officiel Healy. L'image 1, vue de face nette sur fond blanc, est la photographie de base à transformer : conserve exactement la forme carrée à coins arrondis et la base élargie du boîtier. La grande zone circulaire dégradée au centre de la face (là où figure le logo du fabricant) doit devenir une surface plate, mate et unie, de la même couleur noire ou dorée que le reste du boîtier — PAS un médaillon, PAS un anneau, PAS un cercle concentrique, PAS un point central, PAS un blason : une simple portion de surface sans relief ni ornement, comme si cette zone n'avait jamais porté de marquage. Les zones de commande (bluetooth, alimentation, batterie, USB, plus/moins) restent elles aussi sobres et vierges, sans icône ni pictogramme, de simples surfaces lisses à leur emplacement d'origine. Image 2 : photographie réelle du dispositif avec son accessoire attaché, référence secondaire pour confirmer le volume et la silhouette complète en trois dimensions. Recolore uniquement les surfaces blanches et les teintes bleues, roses, vertes et turquoise du boîtier en noir profond et or métallique noble SDZ, sans modifier sa géométrie, sa perspective ni sa position. Ignore et ne recopie aucune inscription, marque, mot, lettre, chiffre, logo, icône, pictogramme, médaillon, anneau ou étiquette visible sur le dispositif ou dans les références : toutes les surfaces du produit doivent rester vierges et sans marque dans l'image brute. Aucun autre dispositif électronique n'est admis. Change uniquement le fond, la lumière et la palette ; conserve le produit de l'image 1 inchangé dans sa forme et son placement."
     : "";
   const registryGuard = buildActiveRegistryDecorContract(brief.registresActifs);
   return `${charte} ${soinPhrase} Noir profond comme écrin, jamais comme sous-exposition. Sujet, geste et matériel lisibles au premier regard. Or métallique noble, jamais orange, ambre, feu ou incendie. Énergie ascendante et désirable. ${registryGuard ? `CONTRAT DE VISIBILITÉ DES REGISTRES : ${registryGuard}. Le décor doit être immédiatement perceptible derrière et autour du sujet ; une grande surface noire uniforme ou vide constitue un échec.` : ""} L'ombre ou la fragmentation ne peuvent exister qu'en opposition secondaire clairement dépassée par le sujet ; jamais horreur, menace, désespoir sans issue, personnage encapuchonné menaçant, visage central mutilé, crypte, rituel, sorcellerie, astrologie ou signes zodiacaux. Aucun texte n'est incrusté dans l'image ; une zone visuellement calme reste prête à recevoir le texte ajouté ensuite. ${storyGuard} ${psioProductGuard} ${logoPhrase}${eviter ? ` À éviter absolument : ${eviter}.` : ""}
