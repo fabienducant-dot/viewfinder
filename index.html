@@ -1193,6 +1193,14 @@ function drawPremiumHeadline(ctx,headline,box,platform){
     if(lines.every(line=>trackedTextWidth(ctx,line,tracking)<=maxWidth)) break;
     titleSize-=2;
   }while(titleSize>=minTitle);
+  /* GARDE-FOU ABSOLU : si un mot long dépasse encore le cadre au plancher (accroche x3 généreuse
+     mais pas infaillible), on continue de réduire sans plancher jusqu'à tenir réellement. */
+  while(!lines.every(line=>trackedTextWidth(ctx,line,tracking)<=maxWidth) && titleSize>10){
+    titleSize-=2;
+    ctx.font=`500 ${titleSize}px Georgia, 'Times New Roman', serif`;
+    tracking=Math.max(1,Math.round(titleSize*.075));
+    lines=wrapTrackedText(ctx,title,maxWidth,tracking,2);
+  }
   let subtitleSize=Math.max(isStory?23:19,Math.round(titleSize*(isStory?.46:.43)));
   let lineHeight=titleSize*1.22;
   let total=lines.length*lineHeight+(subtitle?subtitleSize*2.05:0);
@@ -1309,6 +1317,36 @@ function drawPremiumBrandLockup(ctx,headline,logoImg,box,platform){
     if(total<=box.h*H*.94&&widthOk) break;
     scale-=.025;
   }while(scale>.70);
+
+  /* GARDE-FOU ABSOLU : le plancher de taille ci-dessus privilégie un rendu "affiche" généreux,
+     mais ne doit jamais l'emporter sur la lisibilité réelle. Si un mot long dépasse encore le
+     cadre à ce stade (plancher atteint), on continue de réduire sans plancher, en pixels, jusqu'à
+     ce que chaque ligne tienne réellement dans maxWidth — jamais de débordement, quelle que soit
+     la longueur de l'accroche. */
+  {
+    let guardTitleSize = layout.titleSize, guardSubtitleSize = layout.subtitleSize;
+    let guardTitleTracking = layout.titleTracking, guardSubtitleTracking = layout.subtitleTracking;
+    let guardTitleLines = layout.titleLines, guardSubtitleLines = layout.subtitleLines;
+    let guardFits = layout.titleLines.every(line=>trackedTextWidth(ctx,line,guardTitleTracking)<=maxWidth)
+      && layout.subtitleLines.every(line=>trackedTextWidth(ctx,line,guardSubtitleTracking)<=maxWidth);
+    while(!guardFits && guardTitleSize>10){
+      guardTitleSize -= 2; guardSubtitleSize = Math.max(10, Math.round(guardSubtitleSize*.96));
+      guardTitleTracking = Math.max(1,Math.round(guardTitleSize*.15));
+      guardSubtitleTracking = Math.max(1,Math.round(guardSubtitleSize*.13));
+      ctx.font=`500 ${guardTitleSize}px Georgia, 'Times New Roman', serif`;
+      guardTitleLines = wrapTrackedText(ctx,title,maxWidth,guardTitleTracking,2);
+      ctx.font=`500 ${guardSubtitleSize}px Georgia, 'Times New Roman', serif`;
+      guardSubtitleLines = subtitle?wrapTrackedText(ctx,subtitle,maxWidth,guardSubtitleTracking,2):[];
+      guardFits = guardTitleLines.every(line=>trackedTextWidth(ctx,line,guardTitleTracking)<=maxWidth)
+        && guardSubtitleLines.every(line=>trackedTextWidth(ctx,line,guardSubtitleTracking)<=maxWidth);
+    }
+    if(guardTitleSize!==layout.titleSize){
+      layout.titleSize=guardTitleSize; layout.subtitleSize=guardSubtitleSize;
+      layout.titleTracking=guardTitleTracking; layout.subtitleTracking=guardSubtitleTracking;
+      layout.titleLines=guardTitleLines; layout.subtitleLines=guardSubtitleLines;
+      layout.titleLineHeight=guardTitleSize*1.18; layout.subtitleLineHeight=guardSubtitleSize*1.34;
+    }
+  }
 
   const l=layout;
   let y=box.y*H+(box.h*H-l.total)/2;
@@ -7175,6 +7213,82 @@ function buildPostTab(){
    ONGLET CALENDRIER — programmation et archive des publications
 ============================================================ */
 const SCHEDULE_STATUS_LABEL = { "brouillon":"📝 Brouillon", "validé":"☑️ Validé", "programmé":"⏳ Programmé", "envoyé":"✅ Envoyé", "erreur":"⚠️ Erreur" };
+/* Génération d'image pour un post de campagne — extrait pour être appelé à la fois par le bouton
+   individuel et par le bouton "Générer les 5". Gère la réutilisation Facebook<-Instagram, aucun
+   chemin dupliqué. Retourne un message de statut, ou lève une erreur (jamais de génération payante
+   relancée automatiquement). */
+async function generateImageForCampaignItem(item, onStatus, cancelToken){
+  if(item.blockingError) throw new Error("Génération bloquée : " + item.blockingError);
+  const t0 = Date.now();
+  const size = API_IMAGE_SIZE_BY_PLATFORM[item.platform] || "1024x1024";
+  /* V1.0 — Facebook réutilise EXACTEMENT l'image Instagram de la même campagne : aucune seconde
+     génération, aucune seconde facturation. Même format (4:5), image identique. */
+  if(item.platform==="Facebook"){
+    const twin = getCampaignSiblingImage(item.campaignId, item.id, "Instagram");
+    if(!twin){
+      throw new Error("Génère d'abord l'image Instagram de cette campagne : Facebook réutilise exactement la même image.");
+    }
+    item.imageDataUrl = twin; item.usedReference = false; item.referenceFallbackReason = null;
+    item.reusedFrom = "Instagram";
+    const okSave = LS.set("vf-scheduled", state.scheduled);
+    return okSave ? "Image Instagram réutilisée à l'identique ✓ (aucun crédit consommé)"
+                  : "Image réutilisée, mais échec d'enregistrement (stockage plein ?).";
+  }
+  const referenceSelections = await resolveReferenceSelectionsByIds(item.referenceSelectionIds||[]);
+  const phaseB = await confirmAndGenerateImage({
+    phase:"prepared",
+    inputs:{ mission:item.mission, platform:item.platform, prestation:state.prestationName,
+      topic:item.topic, size, aspectKey:PLATFORM_ASPECT[item.platform], isCampaign:true },
+    brief:item.creativeBrief, imagePrompt:item.imagePrompt, referenceSelections,
+  }, onStatus, cancelToken);
+  if(!phaseB.ok) throw new Error(phaseB.error || "Échec de la génération");
+  const { usedReference, referenceFallbackReason } = phaseB;
+  /* Post-traitement : MÊME fonction que la génération unitaire (format officiel, accroche,
+     logo) — aucun code dupliqué, aucun chemin parallèle. */
+  const finalizedItem = await finalizeGeneratedImage({
+    inputs:{ platform:item.platform, prestation:state.prestationName }, dataUrl: phaseB.dataUrl,
+    logoSentAsReference:false, usedReference, content: phaseB.content || item.contentData || null,
+    brief:item.creativeBrief,
+  });
+  const dataUrl = finalizedItem.dataUrl;
+  const logoApplied = finalizedItem.logoApplied;
+  item.imageDataUrl = dataUrl; item.logoApplied = logoApplied; item.usedReference = usedReference; item.referenceFallbackReason = referenceFallbackReason;
+  item.layoutReport = finalizedItem.layoutReport||null;
+  item.analysis = phaseB.analysis || null; item.analysisError = phaseB.analysisError || null;
+  item.contentData = phaseB.content || item.contentData || null; item.textError = phaseB.textError || null;
+  if(item.contentData && item.platform!=="Story"){
+    const hashtagsText = (item.contentData.hashtags||[]).map(x=>x.startsWith("#")?x:"#"+x).slice(0,5).join(" ");
+    item.textFinal = [item.contentData.caption||"", hashtagsText].filter(Boolean).join("\n\n");
+    item.altText = item.contentData.altText || "";
+  }
+  item.headlineApplied = !!finalizedItem.headlineApplied; // texte déjà présent : accroche posée dès la génération
+  const saved = LS.set("vf-scheduled", state.scheduled);
+  logToLab({ provider:"OpenAI", model:"gpt-image-1-mini", type:"image", prompt:item.imagePrompt, promptHash:hashPrompt(item.imagePrompt), cost:null, durationMs:Date.now()-t0, status:"accepted" });
+  let referenceLabel;
+  if(usedReference) referenceLabel = "Référence visuelle utilisée ✓";
+  else if(referenceFallbackReason) referenceLabel = "Référence non utilisée — génération standard de secours.";
+  else referenceLabel = "Génération standard — aucune référence visuelle fournie.";
+  return (!saved ? "Générée, mais échec d'enregistrement (stockage plein ?)."
+    : logoRequiredFor(item.platform) ? (logoApplied ? "Image générée, logo réel appliqué ✓" : "Image générée — aucun logo marqué comme actif de marque, rien n'a été ajouté.")
+    : "Image générée ✓") + " — " + referenceLabel +
+    (finalizedItem.layoutReport&&!finalizedItem.layoutReport.skipped
+      ? ` — Canvas premium ✓ (${finalizedItem.layoutReport.textZone||"sans texte"} / ${finalizedItem.layoutReport.logoZone||"sans logo"})` : "") +
+    (finalizedItem.overlayWarning ? ` — ⚠ ${finalizedItem.overlayWarning}` : "");
+}
+/* Génération de texte pour un post de campagne — même extraction, même principe. */
+async function generateTextForCampaignItem(item){
+  const content = await generateContentFromBrief(item.creativeBrief, item.analysis || null, item.platform, item.mission);
+  item.contentData = content;
+  const hashtagsText = (content.hashtags||[]).map(x=> x.startsWith("#") ? x : "#"+x).slice(0,5).join(" ");
+  item.textFinal = [content.caption||"", hashtagsText].filter(Boolean).join("\n\n");
+  item.altText = content.altText || "";
+  const headlineDone = await applyHeadlineToItem(item);
+  const saved = LS.set("vf-scheduled", state.scheduled);
+  return (!saved ? "Texte généré, mais échec d'enregistrement (stockage plein ?)."
+    : headlineDone ? "Texte généré ✓ — accroche incrustée sur l'image"
+    : item.imageDataUrl ? "Texte généré ✓ — aucune accroche pour cette publication (image sans texte)"
+    : "Texte généré ✓ — génère l'image pour appliquer l'éventuelle accroche");
+}
 function buildCalendarCard(item, inCampaign){
   const card = el("div",{class:"history-card"});
   card.appendChild(el("div",{class:"history-top"},[
@@ -7210,69 +7324,10 @@ function buildCalendarCard(item, inCampaign){
         if(!confirm("Lancer la génération d'image via OpenAI ? Ceci consomme du crédit API.")) return;
         imgApiBtn.disabled = true; // évite une double génération pour cette même déclinaison
         imgCancelBtn.style.display = "inline-block";
-        const t0 = Date.now();
-        const size = API_IMAGE_SIZE_BY_PLATFORM[item.platform] || "1024x1024";
         const cancelToken = { cancelled:false };
         activeCancelToken = cancelToken;
         try{
-          /* V1.0 — Facebook réutilise EXACTEMENT l'image Instagram de la même campagne : aucune
-             seconde génération, aucune seconde facturation. Même format (4:5), image identique. */
-          if(item.platform==="Facebook"){
-            const twin = getCampaignSiblingImage(item.campaignId, item.id, "Instagram");
-            if(!twin){
-              imgApiStatus.textContent = "Génère d'abord l'image Instagram de cette campagne : Facebook réutilise exactement la même image.";
-              imgApiBtn.disabled = false; imgCancelBtn.style.display = "none"; activeCancelToken = null;
-              return;
-            }
-            item.imageDataUrl = twin; item.usedReference = false; item.referenceFallbackReason = null;
-            item.reusedFrom = "Instagram";
-            const okSave = LS.set("vf-scheduled", state.scheduled);
-            imgApiStatus.textContent = okSave ? "Image Instagram réutilisée à l'identique ✓ (aucun crédit consommé)"
-                                              : "Image réutilisée, mais échec d'enregistrement (stockage plein ?).";
-            imgApiBtn.disabled = false; imgCancelBtn.style.display = "none"; activeCancelToken = null;
-            renderMain();
-            return;
-          }
-          const referenceSelections = await resolveReferenceSelectionsByIds(item.referenceSelectionIds||[]);
-          const phaseB = await confirmAndGenerateImage({
-            phase:"prepared",
-            inputs:{ mission:item.mission, platform:item.platform, prestation:state.prestationName,
-              topic:item.topic, size, aspectKey:PLATFORM_ASPECT[item.platform], isCampaign:true },
-            brief:item.creativeBrief, imagePrompt:item.imagePrompt, referenceSelections,
-          }, (label)=>{ imgApiStatus.textContent = label; }, cancelToken);
-          if(!phaseB.ok) throw new Error(phaseB.error || "Échec de la génération");
-          const { usedReference, referenceFallbackReason } = phaseB;
-          /* Post-traitement : MÊME fonction que la génération unitaire (format officiel, accroche,
-             logo) — aucun code dupliqué, aucun chemin parallèle. */
-          const finalizedItem = await finalizeGeneratedImage({
-            inputs:{ platform:item.platform, prestation:state.prestationName }, dataUrl: phaseB.dataUrl,
-            logoSentAsReference:false, usedReference, content: phaseB.content || item.contentData || null,
-            brief:item.creativeBrief,
-          });
-          let dataUrl = finalizedItem.dataUrl;
-          const logoApplied = finalizedItem.logoApplied;
-          item.imageDataUrl = dataUrl; item.logoApplied = logoApplied; item.usedReference = usedReference; item.referenceFallbackReason = referenceFallbackReason;
-          item.layoutReport = finalizedItem.layoutReport||null;
-          item.analysis = phaseB.analysis || null; item.analysisError = phaseB.analysisError || null;
-          item.contentData = phaseB.content || item.contentData || null; item.textError = phaseB.textError || null;
-          if(item.contentData && item.platform!=="Story"){
-            const hashtagsText = (item.contentData.hashtags||[]).map(x=>x.startsWith("#")?x:"#"+x).slice(0,5).join(" ");
-            item.textFinal = [item.contentData.caption||"", hashtagsText].filter(Boolean).join("\n\n");
-            item.altText = item.contentData.altText || "";
-          }
-          item.headlineApplied = !!finalizedItem.headlineApplied; // texte déjà présent : accroche posée dès la génération
-          const saved = LS.set("vf-scheduled", state.scheduled);
-          logToLab({ provider:"OpenAI", model:"gpt-image-1-mini", type:"image", prompt:item.imagePrompt, promptHash:hashPrompt(item.imagePrompt), cost:null, durationMs:Date.now()-t0, status:"accepted" });
-          let referenceLabel;
-          if(usedReference) referenceLabel = "Référence visuelle utilisée ✓";
-          else if(referenceFallbackReason) referenceLabel = "Référence non utilisée — génération standard de secours.";
-          else referenceLabel = "Génération standard — aucune référence visuelle fournie.";
-          imgApiStatus.textContent = (!saved ? "Générée, mais échec d'enregistrement (stockage plein ?)."
-            : logoRequiredFor(item.platform) ? (logoApplied ? "Image générée, logo réel appliqué ✓" : "Image générée — aucun logo marqué comme actif de marque, rien n'a été ajouté.")
-            : "Image générée ✓") + " — " + referenceLabel +
-            (finalizedItem.layoutReport&&!finalizedItem.layoutReport.skipped
-              ? ` — Canvas premium ✓ (${finalizedItem.layoutReport.textZone||"sans texte"} / ${finalizedItem.layoutReport.logoZone||"sans logo"})` : "") +
-            (finalizedItem.overlayWarning ? ` — ⚠ ${finalizedItem.overlayWarning}` : "");
+          imgApiStatus.textContent = await generateImageForCampaignItem(item, (label)=>{ imgApiStatus.textContent = label; }, cancelToken);
           renderMain();
         }catch(err){
           const cancelled = String(err.message||err)==="__CANCELLED__";
@@ -7318,17 +7373,7 @@ function buildCalendarCard(item, inCampaign){
       textApiBtn.addEventListener("click", async ()=>{
         textApiBtn.disabled = true; textApiStatus.textContent = "Génération du texte...";
         try{
-          const content = await generateContentFromBrief(item.creativeBrief, item.analysis || null, item.platform, item.mission);
-          item.contentData = content;
-          const hashtagsText = (content.hashtags||[]).map(x=> x.startsWith("#") ? x : "#"+x).slice(0,5).join(" ");
-          item.textFinal = [content.caption||"", hashtagsText].filter(Boolean).join("\n\n");
-          item.altText = content.altText || "";
-          const headlineDone = await applyHeadlineToItem(item);
-          const saved = LS.set("vf-scheduled", state.scheduled);
-          textApiStatus.textContent = (!saved ? "Texte généré, mais échec d'enregistrement (stockage plein ?)."
-            : headlineDone ? "Texte généré ✓ — accroche incrustée sur l'image"
-            : item.imageDataUrl ? "Texte généré ✓ — aucune accroche pour cette publication (image sans texte)"
-            : "Texte généré ✓ — génère l'image pour appliquer l'éventuelle accroche");
+          textApiStatus.textContent = await generateTextForCampaignItem(item);
           renderMain();
         }catch(err){ textApiStatus.textContent = "Échec : " + (err.message||err); }
         textApiBtn.disabled = false;
@@ -7373,8 +7418,8 @@ function buildCalendarCard(item, inCampaign){
     card.appendChild(validateMsg);
   }
 
+  if(item.imageDataUrl) card.appendChild(el("img",{src:item.imageDataUrl, style:"width:100%;display:block;border-radius:8px;margin-top:8px;"}));
   const row = el("div",{style:"display:flex;gap:10px;align-items:flex-start;margin-top:8px;"});
-  if(item.imageDataUrl) row.appendChild(el("img",{src:item.imageDataUrl, style:"width:70px;height:70px;object-fit:cover;border-radius:8px;flex-shrink:0;"}));
   row.appendChild(el("div",{style:"font-size:12px;color:var(--muted);flex:1;white-space:pre-wrap;"}, (item.textFinal||"").slice(0,180)+((item.textFinal||"").length>180?"...":"")));
   card.appendChild(row);
 
@@ -7509,10 +7554,50 @@ function buildCalendarTab(){
       return (cb.createdAt||0)-(ca.createdAt||0);
     });
 
+  const CAMPAIGN_GENERATION_ORDER = ["Instagram","Facebook","Google Business","Story","Article Blog Wix"];
   campaignIds.forEach(cid=>{
     const items = state.scheduled.filter(p=>p.campaignId===cid);
     const topic = items[0].campaignTopic || items[0].topic || "(sans thème)";
     frag.appendChild(el("h2",{class:"section"}, `📦 Campagne — ${topic.length>60 ? topic.slice(0,60)+"..." : topic}`));
+
+    const batchBtn = el("button",{class:"btn-secondary", style:"margin:4px 0 8px;"}, [svgIcon(ICONS.wand,14), el("span",{},"🚀 Générer les 5 (images + textes)")]);
+    const batchCancelBtn = el("button",{class:"btn-secondary", style:"margin:4px 0 8px 8px;display:none;"}, "Annuler");
+    const batchStatus = el("p",{style:"font-size:12px;color:var(--muted2);margin:0 0 8px;min-height:16px;"},"");
+    let batchCancelToken = null;
+    batchCancelBtn.addEventListener("click", ()=>{ if(batchCancelToken) batchCancelToken.cancelled = true; });
+    batchBtn.addEventListener("click", async ()=>{
+      const missing = items.filter(it=> !it.imageDataUrl || (it.textPrompt && it.platform!=="Story" && (!it.textFinal||!it.textFinal.trim())));
+      if(!missing.length){ batchStatus.textContent = "Tout est déjà généré pour cette campagne ✓"; return; }
+      if(!confirm(`Lancer la génération de ce qui manque pour les ${items.length} formats de cette campagne ? Ceci consomme du crédit API.`)) return;
+      batchBtn.disabled = true; batchCancelBtn.style.display = "inline-block";
+      const cancelToken = { cancelled:false };
+      batchCancelToken = cancelToken;
+      const ordered = items.slice().sort((a,b)=> CAMPAIGN_GENERATION_ORDER.indexOf(a.platform)-CAMPAIGN_GENERATION_ORDER.indexOf(b.platform));
+      let doneCount = 0;
+      for(const it of ordered){
+        if(cancelToken.cancelled){ batchStatus.textContent = `Annulé après ${doneCount}/${ordered.length}.`; break; }
+        try{
+          if(!it.imageDataUrl){
+            await generateImageForCampaignItem(it, (label)=>{ batchStatus.textContent = `${it.platform} : ${label}`; }, cancelToken);
+          }
+          if(it.textPrompt && it.platform!=="Story" && (!it.textFinal||!it.textFinal.trim())){
+            batchStatus.textContent = `${it.platform} : génération du texte...`;
+            await generateTextForCampaignItem(it);
+          }
+          doneCount++;
+          batchStatus.textContent = `${it.platform} traité ✓ (${doneCount}/${ordered.length})`;
+        }catch(err){
+          const cancelled = String(err.message||err)==="__CANCELLED__";
+          if(cancelled){ batchStatus.textContent = `Annulé après ${doneCount}/${ordered.length}.`; break; }
+          batchStatus.textContent = `${it.platform} : échec (${err.message||err}) — passage au suivant.`;
+        }
+      }
+      if(!cancelToken.cancelled) batchStatus.textContent = `Terminé : ${doneCount}/${ordered.length} formats traités ✓`;
+      batchBtn.disabled = false; batchCancelBtn.style.display = "none"; batchCancelToken = null;
+      renderMain();
+    });
+    frag.appendChild(batchBtn); frag.appendChild(batchCancelBtn); frag.appendChild(batchStatus);
+
     items.forEach(item=> frag.appendChild(buildCalendarCard(item, true)));
   });
 
