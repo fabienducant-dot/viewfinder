@@ -14,6 +14,7 @@
    complète également ce garde-fou : un job déjà completed/failed/processing-récent n'est jamais
    retraité. */
 const { getStore } = require("@netlify/blobs");
+const { applyImageEditOptions } = require("./_shared/openai-image-edit-options");
 
 const PROCESSING_RECENT_THRESHOLD_MS = 14 * 60 * 1000; // en dessous, on suppose qu'une autre
                                                           // invocation traite déjà ce job
@@ -60,16 +61,10 @@ function dataUrlToBlob(dataUrl){
 
 async function generateWithReferenceImages({ key, prompt, size, model, quality, referenceImageUrls, referenceImageData }){
   const form = new FormData();
-  const imageModel = model || "gpt-image-1";
-  form.append("model", imageModel);
   form.append("prompt", prompt);
   form.append("size", size || "1024x1024");
   form.append("n", "1");
-  // input_fidelity "high" : paramètre documenté par OpenAI pour préserver les détails distinctifs
-  // des images de référence (logos, visages) avec gpt-image-1 sur /v1/images/edits — indispensable
-  // au prototype logo-référence : sans lui, le logo officiel risque d'être approximé.
-  if(imageModel !== "gpt-image-2") form.append("input_fidelity", "high");
-  if(quality) form.append("quality", quality);
+  applyImageEditOptions(form, { model, quality });
   const urls = (referenceImageUrls || []).slice(0, 3);
   const dataUrls = (referenceImageData || []).slice(0, 3 - urls.length);
   for(const url of urls){
