@@ -6199,8 +6199,18 @@ function buildPostTab(){
       if(flow.plannerError) body.appendChild(row("⚠ Creative Planner", flow.plannerError));
       if(flow.referenceError) body.appendChild(row("⚠ Références", flow.referenceError));
       if(flow.error) body.appendChild(row("⚠ Image", flow.error));
+      if(flow.finalizationError) body.appendChild(row("⛔ Image brute mise en quarantaine", flow.finalizationError));
       if(flow.analysisError) body.appendChild(row("⚠ Analyse d'image", flow.analysisError));
       if(flow.textError) body.appendChild(row("⚠ Génération texte", flow.textError));
+      if(flow.finalizationError && flow.dataUrl){
+        body.appendChild(el("p",{style:"font-weight:600;margin:12px 0 6px;color:var(--red);"},
+          "Image brute refusée — contrôle uniquement, publication bloquée"));
+        body.appendChild(el("img",{src:flow.dataUrl,alt:"Image brute refusée avant Canvas",
+          style:"width:100%;display:block;border:1px solid var(--red);border-radius:12px;"}));
+        body.appendChild(el("a",{href:flow.dataUrl,download:`image-brute-refusee-${Date.now()}.png`,
+          class:"btn-secondary",style:"display:flex;text-decoration:none;margin-top:8px;justify-content:center;"},
+          "Télécharger l’image brute refusée"));
+      }
       body.appendChild(el("p",{style:"font-weight:600;margin:8px 0 4px;"}, "Creative Brief (JSON)"));
       body.appendChild(el("pre",{style:"white-space:pre-wrap;font-size:11px;"}, jsonText));
       body.appendChild(el("p",{style:"font-weight:600;margin:8px 0 4px;"}, "Prompt image compact (exactement celui qui sera/a été envoyé)"));
@@ -6243,7 +6253,7 @@ function buildPostTab(){
         const flow = await confirmAndGenerateImage(state.lastCreativeFlow, (label)=>{ imgApiStatus.textContent = label; }, cancelToken);
         state.lastCreativeFlow = flow;
         if(!flow.ok){
-          logToLab({ provider:"OpenAI", model:"gpt-image-1", type:"image", prompt: flow.imagePrompt, promptHash: hashPrompt(flow.imagePrompt||""), cost:null, durationMs: Date.now()-t0, status:"refused", reason: flow.error });
+          logToLab({ provider:"OpenAI", model:flow.inputs?.prestation==="Luminothérapie PSIO®"?"gpt-image-2":"gpt-image-1", type:"image", prompt: flow.imagePrompt, promptHash: hashPrompt(flow.imagePrompt||""), cost:null, durationMs: Date.now()-t0, status:"refused", reason: flow.error });
           imgApiStatus.textContent = flow.error;
           renderCreativeInspector();
           confirmBtn.disabled = false; imgCancelBtn.style.display = "none"; activeCancelToken = null;
@@ -6269,7 +6279,7 @@ function buildPostTab(){
           { mission: state.mission, platform, prestation: state.prestationName, topic: state.topic },
           flow.brief, (flow.referenceSelections||[]).map(r=>r.id), flow.imagePrompt, id
         );
-        logToLab({ provider:"OpenAI", model:"gpt-image-1", type:"image", prompt: flow.imagePrompt, promptHash: hashPrompt(flow.imagePrompt), cost:null, durationMs: Date.now()-t0, status:"accepted" });
+        logToLab({ provider:"OpenAI", model:flow.inputs?.prestation==="Luminothérapie PSIO®"?"gpt-image-2":"gpt-image-1", type:"image", prompt: flow.imagePrompt, promptHash: hashPrompt(flow.imagePrompt), cost:null, durationMs: Date.now()-t0, status:"accepted" });
 
         // Raccordement réel du texte final au flux normal de publication : Instagram attend
         // caption+hashtags dans state.textPasted, l'alt text est conservé séparément — c'est cette
@@ -6297,6 +6307,10 @@ function buildPostTab(){
       }catch(err){
         const cancelled = String(err.message||err)==="__CANCELLED__";
         imgApiStatus.textContent = cancelled ? "Suivi annulé (la génération continue peut-être côté serveur)." : `Erreur inattendue : ${err.message||err}`;
+        if(!cancelled && state.lastCreativeFlow && state.lastCreativeFlow.dataUrl){
+          state.lastCreativeFlow.finalizationError = String(err.message||err);
+          renderCreativeInspector();
+        }
       }
       confirmBtn.disabled = false; imgCancelBtn.style.display = "none"; activeCancelToken = null;
     });
@@ -7329,7 +7343,7 @@ function buildApiTab(){
 ============================================================ */
 
 /* ---- Versionnage ---- */
-const VF_VERSION = "2.2.9-psio-product-lock"; // semver manuelle : à incrémenter à chaque déploiement touchant le moteur
+const VF_VERSION = "2.2.10-psio-product-lock"; // semver manuelle : à incrémenter à chaque déploiement touchant le moteur
 /* Hash déterministe de l'état des règles : deux runs au même hash = strictement les mêmes règles.
    Couvre : modules (contenu+état), UNIVERS_SDZ, charte condensée, garde-fou sécurité. */
 function computeModulesHash(){
