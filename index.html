@@ -976,7 +976,7 @@ function brandLayoutCandidates(platform, kind){
   /* Sur les formats Meta avec texte, l'accroche et la signature forment un seul verrou éditorial
      centré. Deux positions seulement : bas par défaut, haut si le sujet occupe réellement le bas. */
   if(kind==="lockup" && isStory) return [
-    {id:"bottom-center-lockup",x:.10,y:.54,w:.80,h:.275,align:"center",pref:"bottom"},
+    {id:"bottom-center-lockup",x:.10,y:.595,w:.80,h:.265,align:"center",pref:"bottom"},
     {id:"top-center-lockup",x:.10,y:.145,w:.80,h:.275,align:"center",pref:"top"},
   ];
   if(kind==="lockup" && isMetaFeed) return [
@@ -1269,7 +1269,7 @@ function drawPremiumBrandLockup(ctx,headline,logoImg,box,platform){
   const title=preserveOfficialNames(parts.shift()||"");
   const subtitle=preserveOfficialNames(parts.join(" — "));
   const centerX=(box.x+box.w/2)*W;
-  const maxWidth=box.w*W*.84;
+  const maxWidth=box.w*W*(isStory?.84:.78);
   const logoRatio=logoImg.height/logoImg.width;
   let scale=1,layout=null;
 
@@ -7639,7 +7639,7 @@ function buildApiTab(){
 ============================================================ */
 
 /* ---- Versionnage ---- */
-const VF_VERSION = "2.2.19-raw-finalizer"; // semver manuelle : à incrémenter à chaque déploiement touchant le moteur
+const VF_VERSION = "2.2.20-meta-spacing"; // semver manuelle : à incrémenter à chaque déploiement touchant le moteur
 /* Hash déterministe de l'état des règles : deux runs au même hash = strictement les mêmes règles.
    Couvre : modules (contenu+état), UNIVERS_SDZ, charte condensée, garde-fou sécurité. */
 function computeModulesHash(){
