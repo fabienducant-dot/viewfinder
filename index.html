@@ -694,9 +694,10 @@ function normalizeCampaignHistoryEntry(h){
 /* Point d'entrée unique : à appeler après tout chargement externe (localStorage au démarrage,
    restauration Netlify Blobs, import JSON, restauration de sauvegarde) et avant chaque rendu/génération. */
 /* ============ TRACE TEMPORAIRE D'EXÉCUTION (diagnostic Phase B) ============
-   VF_TRACE=true : chaque étape du workflow image est journalisée en mémoire et copiable
-   depuis l'écran de création. À retirer une fois le point d'arrêt identifié. */
-const VF_TRACE = true;
+   VF_TRACE=false : le point d'arrêt diagnostiqué en Phase B est résolu — journalisation
+   coupée. Le mécanisme reste en place (aucune ligne supprimée) au cas où un futur diagnostic
+   similaire soit utile ; il suffira de repasser ce flag à true. */
+const VF_TRACE = false;
 window.__VF_TRACE = window.__VF_TRACE || [];
 function vfTrace(step, data){
   if(!VF_TRACE) return;
