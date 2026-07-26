@@ -957,79 +957,265 @@ function wrapText(ctx, text, maxWidth){
   return lines;
 }
 
+/* ---------- Canvas Layout Engine V2 ----------
+   Le modèle image ne dessine jamais le texte ni la signature. Ce moteur observe les pixels de
+   l'image finale, choisit la zone la plus calme parmi des zones sûres propres à la plateforme,
+   puis compose la vraie signature et l'accroche sans masquer le sujet central. */
+function normalizeOverlayZonePreference(value){
+  const v = String(value||"").toLowerCase();
+  if(/haut|sup|top/.test(v)) return "top";
+  if(/bas|inf|bottom/.test(v)) return "bottom";
+  if(/gauch|left/.test(v)) return "left";
+  if(/droit|right/.test(v)) return "right";
+  return "";
+}
+function brandLayoutCandidates(platform, kind){
+  const isStory = platform==="Story";
+  const isLandscape = platform==="Google Business" || platform==="Article Blog Wix";
+  if(kind==="text"){
+    if(isStory) return [
+      {id:"top-center", x:.10,y:.145,w:.80,h:.20,align:"center",pref:"top"},
+      {id:"top-left",   x:.075,y:.15,w:.62,h:.19,align:"left",pref:"top"},
+      {id:"top-right",  x:.305,y:.15,w:.62,h:.19,align:"right",pref:"top"},
+      {id:"bottom-center",x:.10,y:.655,w:.80,h:.18,align:"center",pref:"bottom"},
+      {id:"bottom-left",x:.075,y:.65,w:.62,h:.19,align:"left",pref:"bottom"},
+      {id:"bottom-right",x:.305,y:.65,w:.62,h:.19,align:"right",pref:"bottom"},
+    ];
+    return [
+      {id:"top-center",x:.09,y:.075,w:.82,h:.20,align:"center",pref:"top"},
+      {id:"top-left",x:.065,y:.08,w:.64,h:.20,align:"left",pref:"top"},
+      {id:"top-right",x:.295,y:.08,w:.64,h:.20,align:"right",pref:"top"},
+      {id:"bottom-center",x:.09,y:.72,w:.82,h:.20,align:"center",pref:"bottom"},
+      {id:"bottom-left",x:.065,y:.71,w:.64,h:.21,align:"left",pref:"bottom"},
+      {id:"bottom-right",x:.295,y:.71,w:.64,h:.21,align:"right",pref:"bottom"},
+    ];
+  }
+  if(isLandscape) return [
+    {id:"top-left",x:.055,y:.075,w:.25,h:.23,align:"left",pref:"top"},
+    {id:"top-right",x:.695,y:.075,w:.25,h:.23,align:"right",pref:"top"},
+    {id:"bottom-left",x:.055,y:.695,w:.25,h:.23,align:"left",pref:"bottom"},
+    {id:"bottom-right",x:.695,y:.695,w:.25,h:.23,align:"right",pref:"bottom"},
+  ];
+  if(isStory) return [
+    {id:"top-center",x:.37,y:.14,w:.26,h:.18,align:"center",pref:"top"},
+    {id:"top-left",x:.065,y:.145,w:.28,h:.18,align:"left",pref:"top"},
+    {id:"top-right",x:.655,y:.145,w:.28,h:.18,align:"right",pref:"top"},
+    {id:"bottom-center",x:.37,y:.665,w:.26,h:.17,align:"center",pref:"bottom"},
+    {id:"bottom-left",x:.065,y:.665,w:.28,h:.17,align:"left",pref:"bottom"},
+    {id:"bottom-right",x:.655,y:.665,w:.28,h:.17,align:"right",pref:"bottom"},
+  ];
+  return [
+    {id:"top-center",x:.37,y:.065,w:.26,h:.21,align:"center",pref:"top"},
+    {id:"top-left",x:.06,y:.07,w:.27,h:.21,align:"left",pref:"top"},
+    {id:"top-right",x:.67,y:.07,w:.27,h:.21,align:"right",pref:"top"},
+    {id:"bottom-center",x:.37,y:.72,w:.26,h:.21,align:"center",pref:"bottom"},
+    {id:"bottom-left",x:.06,y:.72,w:.27,h:.21,align:"left",pref:"bottom"},
+    {id:"bottom-right",x:.67,y:.72,w:.27,h:.21,align:"right",pref:"bottom"},
+  ];
+}
+function boxesOverlap(a,b,padding){
+  if(!a || !b) return false;
+  const p = padding||0;
+  return !(a.x+a.w+p<=b.x || b.x+b.w+p<=a.x || a.y+a.h+p<=b.y || b.y+b.h+p<=a.y);
+}
+function measureImageRegion(imageData, box){
+  const W=imageData.width, H=imageData.height, d=imageData.data;
+  const x0=Math.max(0,Math.floor(box.x*W)), y0=Math.max(0,Math.floor(box.y*H));
+  const x1=Math.min(W,Math.ceil((box.x+box.w)*W)), y1=Math.min(H,Math.ceil((box.y+box.h)*H));
+  const step=Math.max(3,Math.floor(Math.min(W,H)/150));
+  let sum=0, sum2=0, edges=0, count=0;
+  for(let y=y0;y<y1;y+=step){
+    for(let x=x0;x<x1;x+=step){
+      const i=(y*W+x)*4;
+      const lum=(.2126*d[i]+.7152*d[i+1]+.0722*d[i+2])/255;
+      const nx=Math.min(W-1,x+step), ny=Math.min(H-1,y+step);
+      const ix=(y*W+nx)*4, iy=(ny*W+x)*4;
+      const lx=(.2126*d[ix]+.7152*d[ix+1]+.0722*d[ix+2])/255;
+      const ly=(.2126*d[iy]+.7152*d[iy+1]+.0722*d[iy+2])/255;
+      sum+=lum; sum2+=lum*lum; edges+=Math.abs(lum-lx)+Math.abs(lum-ly); count++;
+    }
+  }
+  const mean=count?sum/count:0, variance=count?Math.max(0,sum2/count-mean*mean):0;
+  return { mean, variance, edge:count?edges/count:0 };
+}
+function selectBrandRegion(imageData, platform, kind, preferred, occupied){
+  const pref=normalizeOverlayZonePreference(preferred);
+  const candidates=brandLayoutCandidates(platform,kind);
+  let best=null;
+  candidates.forEach(box=>{
+    const metrics=measureImageRegion(imageData,box);
+    /* Variations et arêtes signalent généralement visage, mains, matériel ou décor détaillé.
+       Le centre est légèrement pénalisé : les prestations y placent presque toujours le sujet. */
+    const cx=box.x+box.w/2, cy=box.y+box.h/2;
+    const centerPenalty=(Math.abs(cx-.5)<.16 && cy>.28 && cy<.72) ? .30 : 0;
+    const overlapPenalty=boxesOverlap(box,occupied,.025) ? 2 : 0;
+    const prefBonus=pref && (box.pref===pref || box.id.includes(pref)) ? -.18 : 0;
+    const score=metrics.variance*3.2 + metrics.edge*2.7 + metrics.mean*.18 +
+      centerPenalty + overlapPenalty + prefBonus;
+    if(!best || score<best.score) best={...box,metrics,score};
+  });
+  return best;
+}
+function drawSoftScrim(ctx, box, strength){
+  const W=ctx.canvas.width,H=ctx.canvas.height;
+  const x=Math.max(0,(box.x-.035)*W), y=Math.max(0,(box.y-.025)*H);
+  const w=Math.min(W-x,(box.w+.07)*W), h=Math.min(H-y,(box.h+.05)*H);
+  const g=ctx.createLinearGradient(0,y,0,y+h);
+  const a=Math.min(.72,Math.max(.28,strength||.42));
+  g.addColorStop(0,"rgba(0,0,0,0)");
+  g.addColorStop(.22,`rgba(0,0,0,${a})`);
+  g.addColorStop(.78,`rgba(0,0,0,${a})`);
+  g.addColorStop(1,"rgba(0,0,0,0)");
+  ctx.fillStyle=g; ctx.fillRect(x,y,w,h);
+}
+function trackedTextWidth(ctx,text,tracking){
+  const chars=[...String(text||"")];
+  return chars.reduce((n,ch)=>n+ctx.measureText(ch).width,0)+Math.max(0,chars.length-1)*tracking;
+}
+function drawTrackedText(ctx,text,x,y,tracking,align){
+  const chars=[...String(text||"")];
+  const total=trackedTextWidth(ctx,text,tracking);
+  let cursor=align==="left"?x:align==="right"?x-total:x-total/2;
+  ctx.textAlign="left";
+  chars.forEach(ch=>{ ctx.fillText(ch,cursor,y); cursor+=ctx.measureText(ch).width+tracking; });
+}
+function officialGoldGradient(ctx,y1,y2){
+  const g=ctx.createLinearGradient(0,y1,0,Math.max(y1+1,y2));
+  g.addColorStop(0,"#8F6B16");
+  g.addColorStop(.34,"#E0C56A");
+  g.addColorStop(.58,"#C9A227");
+  g.addColorStop(1,"#75530C");
+  return g;
+}
+function wrapTrackedText(ctx,text,maxWidth,tracking,maxLines){
+  const words=String(text||"").split(/\s+/).filter(Boolean), lines=[];
+  let current="";
+  words.forEach(word=>{
+    const test=current?current+" "+word:word;
+    if(current && trackedTextWidth(ctx,test,tracking)>maxWidth){ lines.push(current); current=word; }
+    else current=test;
+  });
+  if(current) lines.push(current);
+  if(lines.length>(maxLines||2)){
+    const kept=lines.slice(0,(maxLines||2)-1);
+    kept.push(lines.slice((maxLines||2)-1).join(" "));
+    return kept;
+  }
+  return lines;
+}
+function drawPremiumHeadline(ctx,headline,box,platform){
+  const W=ctx.canvas.width,H=ctx.canvas.height;
+  const parts=String(headline||"").split("|").map(s=>s.trim()).filter(Boolean);
+  const title=(parts.shift()||"").toUpperCase();
+  const subtitle=parts.join(" — ").toUpperCase();
+  const maxWidth=box.w*W;
+  let titleSize=Math.round(W*(platform==="Story"?.061:.052));
+  const minTitle=Math.round(W*.035);
+  let tracking=Math.max(1,Math.round(titleSize*.075)), lines=[];
+  do{
+    ctx.font=`600 ${titleSize}px Georgia, 'Times New Roman', serif`;
+    tracking=Math.max(1,Math.round(titleSize*.075));
+    lines=wrapTrackedText(ctx,title,maxWidth,tracking,2);
+    if(lines.every(line=>trackedTextWidth(ctx,line,tracking)<=maxWidth)) break;
+    titleSize-=2;
+  }while(titleSize>=minTitle);
+  const subtitleSize=Math.max(19,Math.round(titleSize*.43));
+  const lineHeight=titleSize*1.24;
+  const total=lines.length*lineHeight+(subtitle?subtitleSize*2.05:0);
+  let y=box.y*H+(box.h*H-total)/2+titleSize*.55;
+  const anchor=box.align==="left"?box.x*W:box.align==="right"?(box.x+box.w)*W:(box.x+box.w/2)*W;
+  ctx.textBaseline="middle";
+  ctx.shadowColor="rgba(0,0,0,.88)"; ctx.shadowBlur=Math.round(W*.009);
+  ctx.fillStyle="#F5F2E9";
+  ctx.font=`600 ${titleSize}px Georgia, 'Times New Roman', serif`;
+  lines.forEach(line=>{ drawTrackedText(ctx,line,anchor,y,tracking,box.align); y+=lineHeight; });
+  if(subtitle){
+    const ruleW=Math.min(maxWidth*.24,W*.16), ruleY=y+subtitleSize*.05;
+    ctx.strokeStyle="rgba(201,162,39,.78)"; ctx.lineWidth=Math.max(1,W*.0014);
+    ctx.beginPath(); ctx.moveTo(anchor-ruleW/2,ruleY); ctx.lineTo(anchor+ruleW/2,ruleY); ctx.stroke();
+    y+=subtitleSize*.88;
+    ctx.fillStyle=officialGoldGradient(ctx,y-subtitleSize,y+subtitleSize*1.8);
+    ctx.font=`500 ${subtitleSize}px Georgia, 'Times New Roman', serif`;
+    const subTracking=Math.max(1,Math.round(subtitleSize*.13));
+    const subLines=wrapTrackedText(ctx,subtitle,maxWidth,subTracking,2);
+    subLines.forEach(line=>{ drawTrackedText(ctx,line,anchor,y,subTracking,box.align); y+=subtitleSize*1.35; });
+  }
+  ctx.shadowBlur=0;
+  return {titleLines:lines.length,subtitleLines:subtitle?Math.min(2,wrapTrackedText(ctx,subtitle,maxWidth,Math.max(1,Math.round(subtitleSize*.13)),2).length):0,titleSize};
+}
+function drawOfficialSignature(ctx,logoImg,box,platform){
+  const W=ctx.canvas.width,H=ctx.canvas.height;
+  const blockCenterX=(box.x+box.w/2)*W;
+  const maxLogoW=Math.min(box.w*W, W*(platform==="Story"?.155:.13));
+  const logoH=maxLogoW*(logoImg.height/logoImg.width);
+  const top=box.y*H+Math.max(0,(box.h*H-(logoH+W*.068))/2);
+  ctx.drawImage(logoImg,blockCenterX-maxLogoW/2,top,maxLogoW,logoH);
+  const brandSize=Math.max(15,Math.round(W*.0225)), citySize=Math.max(11,Math.round(W*.0135));
+  const brandY=top+logoH+Math.round(W*.010);
+  ctx.textBaseline="top"; ctx.shadowColor="rgba(0,0,0,.88)"; ctx.shadowBlur=Math.round(W*.006);
+  ctx.fillStyle="#F5F2E9"; ctx.font=`600 ${brandSize}px Georgia, 'Times New Roman', serif`;
+  drawTrackedText(ctx,"LA SANTÉ DES ZÈBRES",blockCenterX,brandY,Math.max(1,brandSize*.08),"center");
+  ctx.fillStyle=officialGoldGradient(ctx,brandY+brandSize,brandY+brandSize*2.4);
+  ctx.font=`500 ${citySize}px Georgia, 'Times New Roman', serif`;
+  drawTrackedText(ctx,"RAISMES",blockCenterX,brandY+brandSize*1.38,Math.max(1,citySize*.22),"center");
+  ctx.shadowBlur=0;
+  return {logoWidth:Math.round(maxLogoW),brandSize};
+}
+
 async function compositeBrandSignature(baseDataUrl, platform, options){
-  /* V1.0 — options.headline : accroche incrustée, passée EXPLICITEMENT (plus de lecture d'état
-     global). options.withLogo=false permet d'incruster l'accroche seule quand le logo est déjà
-     dans la scène. Sans accroche ni logo, l'image ressort inchangée. */
+  /* V2.0 — composition adaptative fondée sur les pixels réels. Le Planner ne fait qu'indiquer une
+     préférence de zone ; Canvas conserve le dernier mot pour protéger lisibilité et sujet. */
   const opts = options || {};
   const headline = String(opts.headline !== undefined ? opts.headline : (state.visualAccroche || "")).trim();
   const withLogo = opts.withLogo !== false;
-  const logoResult = withLogo ? await compositeRealLogo(baseDataUrl) : { applied:false, dataUrl:baseDataUrl };
-  if(!logoResult.applied && !headline) return { applied:false, dataUrl: baseDataUrl };
+  const logoAsset = withLogo ? await getOfficialLogoAsset() : null;
+  if(withLogo && !logoAsset) return { applied:false, headlineApplied:false, dataUrl:baseDataUrl,
+    layoutReport:{version:"canvas-layout-v2",blockingError:"Logo officiel SDZ indisponible."} };
+  if(!withLogo && !headline) return { applied:false, headlineApplied:false, dataUrl:baseDataUrl,
+    layoutReport:{version:"canvas-layout-v2",skipped:true} };
   try{
-    const img = await loadImage(logoResult.applied ? logoResult.dataUrl : baseDataUrl);
+    const img = await loadImage(baseDataUrl);
+    const logoImg = logoAsset ? await getAutoTransparentLogo(logoAsset) : null;
     const canvas = document.createElement("canvas");
     canvas.width = img.width; canvas.height = img.height;
     const ctx = canvas.getContext("2d");
     ctx.drawImage(img, 0, 0);
+    const pixels=ctx.getImageData(0,0,canvas.width,canvas.height);
+    const preferredText=opts.brief && opts.brief.zoneTexte;
+    const preferredLogo=opts.brief && opts.brief.zoneLogo;
+    const textBox=headline ? selectBrandRegion(pixels,platform,"text",preferredText,null) : null;
+    const logoBox=logoImg ? selectBrandRegion(pixels,platform,"logo",preferredLogo,textBox) : null;
+    const report={version:"canvas-layout-v2",platform,
+      textZone:textBox&&textBox.id||null,logoZone:logoBox&&logoBox.id||null,
+      preferredText:normalizeOverlayZonePreference(preferredText),
+      preferredLogo:normalizeOverlayZonePreference(preferredLogo),
+      scrimApplied:[],warnings:[]};
 
-    // --- Accroche / titre visuel : texte saisi par Fabien, jamais généré par l'IA (fiabilité à 100%) ---
+    /* Un voile dégradé est local et progressif : il sécurise la lecture sans fabriquer une carte,
+       un bandeau opaque ou une esthétique de flyer. */
+    if(textBox){
+      const strength=.34+Math.min(.28,textBox.metrics.mean*.30+textBox.metrics.edge*.55);
+      drawSoftScrim(ctx,textBox,strength); report.scrimApplied.push("text");
+    }
+    if(logoBox){
+      const strength=.30+Math.min(.24,logoBox.metrics.mean*.25+logoBox.metrics.edge*.45);
+      drawSoftScrim(ctx,logoBox,strength); report.scrimApplied.push("logo");
+    }
+
+    let headlineMetrics=null, logoMetrics=null;
     if(headline){
-      const zone = state.textOverlayZone || { y: 60, maxWidthPct: 82 };
-      const maxWidth = canvas.width * (zone.maxWidthPct/100);
-      const titleFontSize = Math.max(20, Math.round(canvas.width * 0.052));
-      ctx.textAlign = "center";
-      ctx.textBaseline = "middle";
-      ctx.shadowColor = "rgba(0,0,0,0.7)";
-      ctx.shadowBlur = 8;
-      ctx.fillStyle = "#F5F4EF"; // blanc cassé de la charte SDZ
-      const storyParts = platform==="Story" ? headline.split("|").map(x=>x.trim()).filter(Boolean) : [];
-      if(storyParts.length>1){
-        const title = storyParts[0].toUpperCase();
-        const subtitle = storyParts.slice(1).join(" ").toUpperCase();
-        const centerY = canvas.height * (zone.y/100);
-        ctx.font = `700 ${Math.round(titleFontSize*1.25)}px Georgia, 'Times New Roman', serif`;
-        wrapText(ctx, title, maxWidth).forEach((line,i)=> ctx.fillText(line, canvas.width/2, centerY + i*titleFontSize*1.45));
-        ctx.fillStyle = "#C9A227";
-        ctx.font = `500 ${Math.round(titleFontSize*0.64)}px Georgia, 'Times New Roman', serif`;
-        ctx.fillText(subtitle, canvas.width/2, centerY + titleFontSize*2.1);
-      }else{
-        ctx.font = `700 ${titleFontSize}px Georgia, 'Times New Roman', serif`;
-        const lines = wrapText(ctx, headline.toUpperCase(), maxWidth);
-        const lineHeight = titleFontSize * 1.25;
-        const totalHeight = lines.length * lineHeight;
-        const startY = (canvas.height * (zone.y/100)) - totalHeight/2 + lineHeight/2;
-        lines.forEach((line,i)=>{ ctx.fillText(line, canvas.width/2, startY + i*lineHeight); });
-      }
-      ctx.shadowBlur = 0;
+      headlineMetrics=drawPremiumHeadline(ctx,headline,textBox,platform);
+      if(headlineMetrics.titleSize<canvas.width*.035) report.warnings.push("Accroche trop longue : corps minimal atteint.");
     }
-
-    if(logoResult.applied){
-    const logoW = canvas.width * (state.logoOverlay.size/100);
-    const cx = (state.logoOverlay.x/100) * canvas.width;
-    const logoBottomY = (state.logoOverlay.y/100) * canvas.height + logoW/2;
-
-    const brandFontSize = Math.max(14, Math.round(canvas.width * 0.026));
-    const cityFontSize = Math.max(10, Math.round(canvas.width * 0.016));
-
-    ctx.textAlign = "center";
-    ctx.textBaseline = "top";
-    ctx.shadowColor = "rgba(0,0,0,0.65)";
-    ctx.shadowBlur = 5;
-
-    ctx.fillStyle = "#F5F4EF"; // blanc cassé de la charte SDZ
-    ctx.font = `600 ${brandFontSize}px Georgia, 'Times New Roman', serif`;
-    ctx.fillText("LA SANTÉ DES ZÈBRES", cx, logoBottomY + 8);
-
-    ctx.fillStyle = "#C9A227"; // or officiel SDZ
-    ctx.font = `${cityFontSize}px Georgia, 'Times New Roman', serif`;
-    ctx.fillText("RAISMES", cx, logoBottomY + 8 + brandFontSize + 6);
+    if(logoImg){
+      logoMetrics=drawOfficialSignature(ctx,logoImg,logoBox,platform);
     }
-
-    ctx.shadowBlur = 0;
-    return { dataUrl: canvas.toDataURL("image/png"), applied:true };
+    report.headline=headlineMetrics; report.signature=logoMetrics;
+    return { dataUrl:canvas.toDataURL("image/png"), applied:!!logoImg,
+      headlineApplied:!!headline, layoutReport:report };
   }catch(e){
-    return logoResult.applied ? logoResult : { applied:false, dataUrl: baseDataUrl }; // dégradation propre
+    return { applied:false, headlineApplied:false, dataUrl:baseDataUrl,
+      layoutReport:{version:"canvas-layout-v2",blockingError:`Composition Canvas impossible : ${e.message||e}`} };
   }
 }
 
@@ -3459,7 +3645,7 @@ function resizeDataUrlForAnalysis(dataUrl, maxDim, quality){
 async function analyzeGeneratedImage(dataUrl, brief){
   const provider = state.apiProviders.find(p=>p.id===state.selectedProviderId) || DEFAULT_OPENAI_PROVIDER;
   const analysisImage = await resizeDataUrlForAnalysis(dataUrl, 1024, 0.7);
-  const systemPrompt = "Tu décris uniquement ce qui est visuellement présent dans l'image fournie, jamais ce qui était prévu ou souhaité. Ne complète jamais par supposition (pas de bon cadeau, huile ou accessoire non visible). Si un élément du brief n'apparaît pas dans l'image, note-le dans briefMismatch.";
+  const systemPrompt = "Tu décris uniquement ce qui est visuellement présent dans l'image fournie, jamais ce qui était prévu ou souhaité. Ne complète jamais par supposition (pas de bon cadeau, huile ou accessoire non visible). Si un élément du brief n'apparaît pas dans l'image, note-le dans briefMismatch. RÈGLE DE PRODUCTION : l'image brute doit être vierge de toute typographie et identité de marque. Si tu vois le moindre mot, lettre, URL, slogan, logo, emblème, sceau, monogramme ou zèbre de marque, décris-le explicitement dans visibleObjects ET ajoute un briefMismatch commençant par « Overlay IA interdit : ».";
   const userPrompt = `Décris précisément ce qui est visible dans cette image, en la comparant à ce qui était prévu (sans jamais inventer ce qui manque) :\nScène prévue : ${brief.ideeVisuelle}\nSujet prévu : ${brief.sujetPrincipal}\nAction prévue : ${brief.action}`;
   const res = await fetch("/.netlify/functions/generate-text", {
     method:"POST", headers:{ "Content-Type":"application/json" },
@@ -3471,6 +3657,14 @@ async function analyzeGeneratedImage(dataUrl, brief){
   if(!res.ok || data.error) throw new Error(data.error || `Erreur ${res.status}`);
   try{ return JSON.parse(data.text); }
   catch(e){ throw new Error("L'analyseur d'image n'a pas renvoyé un JSON exploitable."); }
+}
+
+function findGeneratedOverlayViolation(analysis){
+  if(!analysis) return "";
+  const mismatches=Array.isArray(analysis.briefMismatch)?analysis.briefMismatch:[];
+  const explicit=mismatches.find(x=>/^overlay ia interdit\s*:/i.test(String(x||"").trim()));
+  if(explicit) return String(explicit);
+  return "";
 }
 
 
@@ -3850,6 +4044,10 @@ async function prepareCreativeBrief(inputs){
    l'exécuteur du Banc n'écrit rien. Une seule implémentation du post-traitement pour les deux. */
 async function finalizeGeneratedImage(flow){
   const platform = flow.inputs.platform;
+  const generatedOverlayViolation=findGeneratedOverlayViolation(flow.analysis);
+  if(generatedOverlayViolation){
+    throw new Error(`Image brute refusée avant Canvas : ${generatedOverlayViolation.replace(/^overlay ia interdit\s*:\s*/i,"")}. Le texte et le logo officiels doivent être ajoutés uniquement par Canvas.`);
+  }
   /* Une référence utilisée ne prouve jamais que le logo officiel est présent et exact.
      Seule la signature ajoutée par Canvas est considérée comme valide. */
   const logoInScene = false;
@@ -3867,12 +4065,21 @@ async function finalizeGeneratedImage(flow){
         deux besoins — aucune duplication, aucun chemin parallèle. */
   const needLogo = logoRequiredFor(platform) && !logoInScene;
   let logoApplied = false;
+  let headlineApplied = false;
+  let layoutReport = { version:"canvas-layout-v2", skipped:true };
   if(needLogo || headline){
-    const composited = await compositeBrandSignature(dataUrl, platform, { headline, withLogo: needLogo });
+    const composited = await compositeBrandSignature(dataUrl, platform, {
+      headline, withLogo:needLogo, brief:flow.brief||null, analysis:flow.analysis||null
+    });
+    layoutReport = composited.layoutReport || layoutReport;
+    if(layoutReport.blockingError) throw new Error(layoutReport.blockingError);
     dataUrl = composited.dataUrl;
     logoApplied = composited.applied && needLogo;
+    headlineApplied = composited.headlineApplied===true;
   }
-  return { dataUrl, logoApplied, logoInScene, headlineApplied: !!headline };
+  if(needLogo && !logoApplied) throw new Error("Composition Canvas bloquée : la signature officielle SDZ n'a pas pu être appliquée.");
+  if(headline && !headlineApplied) throw new Error("Composition Canvas bloquée : l'accroche n'a pas pu être rendue lisiblement.");
+  return { dataUrl, logoApplied, logoInScene, headlineApplied, layoutReport };
 }
 
 /* P1 — Applique l'accroche à une image de campagne DÉJÀ finalisée (format + logo posés lors de la
@@ -3884,9 +4091,11 @@ async function applyHeadlineToItem(item){
   if(!item || !item.imageDataUrl || item.headlineApplied) return false;
   const headline = item.contentData && typeof item.contentData.imageHeadline==="string" ? item.contentData.imageHeadline.trim() : "";
   if(!headline || PLATFORM_OVERLAY[item.platform]!=="accroche") return false;
-  const composited = await compositeBrandSignature(item.imageDataUrl, item.platform, { headline, withLogo:false });
-  if(!composited.applied) return false;
-  item.imageDataUrl = composited.dataUrl; item.headlineApplied = true;
+  const composited = await compositeBrandSignature(item.imageDataUrl, item.platform, {
+    headline, withLogo:false, brief:item.creativeBrief||null, analysis:item.analysis||null
+  });
+  if(!composited.headlineApplied || (composited.layoutReport&&composited.layoutReport.blockingError)) return false;
+  item.imageDataUrl = composited.dataUrl; item.headlineApplied = true; item.layoutReport = composited.layoutReport||null;
   /* Facebook réutilise EXACTEMENT l'image Instagram : la copie est mise à jour au même instant. */
   if(item.platform==="Instagram"){
     state.scheduled.filter(p=> p.campaignId===item.campaignId && p.platform==="Facebook" && p.reusedFrom==="Instagram")
@@ -5845,7 +6054,8 @@ function buildPostTab(){
         vfTrace("5-ajout-bibliotheque", { newId: id, imagesAvant: state.images.length });
         state.images.push({ id, name:`${platform}-${nowStr()}.png`, dataUrl, tags:[platform], favorite:false,
           logoApplied, usedReference: flow.usedReference, referenceFallbackReason: flow.referenceFallbackReason,
-          creativeBrief: flow.brief, creativeContent: flow.content, altText: flow.content ? flow.content.altText : (flow.analysis && flow.analysis.altText) });
+          creativeBrief: flow.brief, creativeContent: flow.content, layoutReport:finalized.layoutReport||null,
+          altText: flow.content ? flow.content.altText : (flow.analysis && flow.analysis.altText) });
         LS.set("vf-images", state.images);
         updateCount();
         state.selectedId = id; setPostImageId(id);
@@ -5873,6 +6083,9 @@ function buildPostTab(){
         else if(flow.referenceFallbackReason) referenceLabel = "Référence non utilisée — génération standard de secours.";
         else referenceLabel = "Génération standard — aucune référence visuelle fournie.";
         const parts = [logoRequiredFor(platform) ? (logoApplied?"Image générée, logo appliqué ✓":"Image générée — aucun logo marqué comme actif de marque.") : "Image générée et ajoutée à ta bibliothèque ✓", referenceLabel];
+        if(finalized.layoutReport && !finalized.layoutReport.skipped){
+          parts.push(`Composition Canvas premium ✓ (texte : ${finalized.layoutReport.textZone||"aucun"} · logo : ${finalized.layoutReport.logoZone||"aucun"})`);
+        }
         if(flow.content) parts.push("Texte inséré dans la zone de publication ci-dessous ✓");
         if(flow.analysisError) parts.push("⚠ "+flow.analysisError);
         if(flow.textError) parts.push("⚠ "+flow.textError+" — utilise \"Régénérer uniquement le texte\".");
@@ -5964,7 +6177,7 @@ function buildPostTab(){
       textMods: txtDetail.kept, textIgnored: txtDetail.ignored, imageMods: imgDetail.kept, imageIgnored: imgDetail.ignored,
       duplicatesRemoved: txtDetail.duplicatesRemoved + imgDetail.duplicatesRemoved,
       aspect: PLATFORM_ASPECT[platform],
-      overlayRule: platform==="Story" ? "4-5 phrases fortes, tailles variées + logo bas centré" : (PLATFORM_OVERLAY[platform]==="aucun" ? "aucun texte sur l'image" : PLATFORM_OVERLAY[platform]==="fiche" ? `fiche explicative élégante (${PLATFORM_MAXCHARS[platform]} car. max)` : `1-2 phrases courtes (${PLATFORM_MAXCHARS[platform]} car. max)`),
+      overlayRule: platform==="Story" ? "titre de prestation + sous-ligne courte, composition Canvas adaptative + signature officielle" : (PLATFORM_OVERLAY[platform]==="aucun" ? "aucun texte sur l'image ; signature officielle Canvas uniquement" : `accroche courte + signature officielle, composition Canvas adaptative (${PLATFORM_MAXCHARS[platform]} car. max)`),
     }));
 
     const risks = currentRiskFlags();
@@ -6177,20 +6390,16 @@ function buildPostTab(){
       frag.appendChild(el("button",{class:"btn-secondary", style:"margin-bottom:10px;", onclick: async ()=>{
         logoMsg.style.color = "var(--muted2)"; logoMsg.textContent = "Ajout du logo en cours...";
         try{
-          const baseImg = await loadImage(previewImgForPost.dataUrl);
-          const logoImg = await loadImage(logoAsset.dataUrl);
-          const canvas = document.createElement("canvas");
-          canvas.width = baseImg.width; canvas.height = baseImg.height;
-          const ctx = canvas.getContext("2d");
-          ctx.drawImage(baseImg, 0, 0);
-          const logoW = canvas.width * (state.logoOverlay.size/100);
-          const logoH = logoW * (logoImg.height/logoImg.width);
-          const lx = (state.logoOverlay.x/100)*canvas.width - logoW/2;
-          const ly = (state.logoOverlay.y/100)*canvas.height - logoH/2;
-          ctx.drawImage(logoImg, lx, ly, logoW, logoH);
-          const newDataUrl = canvas.toDataURL("image/png");
+          const composited = await compositeBrandSignature(previewImgForPost.dataUrl, platform, {
+            withLogo:true, headline:"", brief:previewImgForPost.creativeBrief||null
+          });
+          if(!composited.applied || (composited.layoutReport&&composited.layoutReport.blockingError)){
+            throw new Error(composited.layoutReport&&composited.layoutReport.blockingError || "Signature officielle indisponible");
+          }
+          const newDataUrl = composited.dataUrl;
           const id = uid();
-          state.images.push({ id, name:`${previewImgForPost.name.replace(/\.png$/,"")}-logo.png`, dataUrl:newDataUrl, tags:[platform,"logo-ajouté"], favorite:false });
+          state.images.push({ id, name:`${previewImgForPost.name.replace(/\.png$/,"")}-logo.png`, dataUrl:newDataUrl,
+            tags:[platform,"logo-ajouté"], favorite:false, logoApplied:true, layoutReport:composited.layoutReport||null });
           LS.set("vf-images", state.images);
           updateCount();
           setPostImageId(id);
@@ -6202,7 +6411,7 @@ function buildPostTab(){
       }}, [svgIcon(ICONS.sparkles,14), el("span",{},"Ajouter mon logo sur cette image")]));
       frag.appendChild(logoMsg);
       frag.appendChild(el("p",{style:"font-size:11px;color:var(--muted2);margin:-4px 0 10px;text-align:center;"},
-        "Utilise la position/taille réglées dans l'onglet Éditeur. Crée une nouvelle image, l'originale reste intacte."));
+        "Canvas choisit automatiquement une zone calme et sûre. Une nouvelle image est créée ; l'originale reste intacte."));
     } else {
       frag.appendChild(el("p",{style:"font-size:12px;color:var(--muted2);margin:0 0 10px;"},
         "Aucun logo enregistré comme actif de marque — marque une image \"Logo\" dans l'onglet Bibliothèque pour pouvoir l'ajouter automatiquement ici."));
@@ -6402,6 +6611,7 @@ function buildCalendarCard(item, inCampaign){
           let dataUrl = finalizedItem.dataUrl;
           const logoApplied = finalizedItem.logoApplied;
           item.imageDataUrl = dataUrl; item.logoApplied = logoApplied; item.usedReference = usedReference; item.referenceFallbackReason = referenceFallbackReason;
+          item.layoutReport = finalizedItem.layoutReport||null;
           item.analysis = phaseB.analysis || null; item.analysisError = phaseB.analysisError || null;
           item.contentData = phaseB.content || item.contentData || null; item.textError = phaseB.textError || null;
           if(item.contentData && item.platform!=="Story"){
@@ -6418,7 +6628,9 @@ function buildCalendarCard(item, inCampaign){
           else referenceLabel = "Génération standard — aucune référence visuelle fournie.";
           imgApiStatus.textContent = (!saved ? "Générée, mais échec d'enregistrement (stockage plein ?)."
             : logoRequiredFor(item.platform) ? (logoApplied ? "Image générée, logo réel appliqué ✓" : "Image générée — aucun logo marqué comme actif de marque, rien n'a été ajouté.")
-            : "Image générée ✓") + " — " + referenceLabel;
+            : "Image générée ✓") + " — " + referenceLabel +
+            (finalizedItem.layoutReport&&!finalizedItem.layoutReport.skipped
+              ? ` — Canvas premium ✓ (${finalizedItem.layoutReport.textZone||"sans texte"} / ${finalizedItem.layoutReport.logoZone||"sans logo"})` : "");
           renderMain();
         }catch(err){
           const cancelled = String(err.message||err)==="__CANCELLED__";
@@ -6437,8 +6649,12 @@ function buildCalendarCard(item, inCampaign){
       let dataUrl = await normalizeToPlatformFormat(await resizeImageFile(file), item.platform); // V1.0 : format officiel
       let logoApplied = false;
       if(logoRequiredFor(item.platform)){
-        const composited = await compositeBrandSignature(dataUrl, item.platform);
+        const composited = await compositeBrandSignature(dataUrl, item.platform, {
+          brief:item.creativeBrief||null, analysis:item.analysis||null
+        });
+        if(composited.layoutReport&&composited.layoutReport.blockingError) throw new Error(composited.layoutReport.blockingError);
         dataUrl = composited.dataUrl; logoApplied = composited.applied;
+        item.layoutReport = composited.layoutReport||null;
       }
       item.imageDataUrl = dataUrl; item.logoApplied = logoApplied;
       const saved = LS.set("vf-scheduled", state.scheduled);
@@ -6908,7 +7124,7 @@ function buildApiTab(){
 ============================================================ */
 
 /* ---- Versionnage ---- */
-const VF_VERSION = "2.1.1-psio"; // semver manuelle : à incrémenter à chaque déploiement touchant le moteur
+const VF_VERSION = "2.2.0-canvas"; // semver manuelle : à incrémenter à chaque déploiement touchant le moteur
 /* Hash déterministe de l'état des règles : deux runs au même hash = strictement les mêmes règles.
    Couvre : modules (contenu+état), UNIVERS_SDZ, charte condensée, garde-fou sécurité. */
 function computeModulesHash(){
