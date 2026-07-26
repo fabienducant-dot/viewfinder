@@ -1,57 +1,87 @@
-/* Fonction serveur SDZ App — récupération de l'image finale d'un travail de génération terminé.
-   Séparée de get-image-job pour que le polling de statut reste léger (jamais de base64 dans le
-   JSON de statut). Renvoie directement l'image binaire (PNG), jamais un JSON. */
-const { getStore } = require("@netlify/blobs");
+/* Fonction serveur SDZ App — récupération STREAMÉE de l'image finale.
+   Le PNG peut dépasser la limite d'une réponse Functions mise en mémoire tampon. Un
+   ReadableStream permet à Netlify de livrer jusqu'à 20 Mo sans couper la connexion,
+   tout en conservant le résultat OpenAI existant dans Blobs : aucune régénération. */
+import { getStore } from "@netlify/blobs";
 
 function openJobStore(){
   const opts = { consistency: "strong" };
-  if(process.env.BLOBS_SITE_ID && process.env.BLOBS_TOKEN){
-    return getStore({ name: "viewfinder-image-jobs", siteID: process.env.BLOBS_SITE_ID, token: process.env.BLOBS_TOKEN, ...opts });
+  const siteID = Netlify.env.get("BLOBS_SITE_ID");
+  const token = Netlify.env.get("BLOBS_TOKEN");
+  if(siteID && token){
+    return getStore({ name: "viewfinder-image-jobs", siteID, token, ...opts });
   }
   return getStore({ name: "viewfinder-image-jobs", ...opts });
 }
 
-exports.handler = async (event) => {
-  if (event.httpMethod !== "GET") {
-    return { statusCode: 405, body: "Method Not Allowed" };
-  }
-  const jobId = (event.queryStringParameters || {}).jobId;
-  if (!jobId) {
-    return { statusCode: 400, headers: { "Content-Type": "application/json" }, body: JSON.stringify({ error: "jobId manquant" }) };
+function jsonResponse(payload, status){
+  return new Response(JSON.stringify(payload), {
+    status,
+    headers: { "Content-Type": "application/json; charset=utf-8" },
+  });
+}
+
+function streamBuffer(buffer){
+  const chunkSize = 64 * 1024;
+  let offset = 0;
+  return new ReadableStream({
+    pull(controller){
+      if(offset >= buffer.length){
+        controller.close();
+        return;
+      }
+      const end = Math.min(offset + chunkSize, buffer.length);
+      controller.enqueue(new Uint8Array(buffer.subarray(offset, end)));
+      offset = end;
+    },
+  });
+}
+
+export default async (request) => {
+  if(request.method !== "GET"){
+    return jsonResponse({ error: "Method Not Allowed" }, 405);
   }
 
-  try {
+  const jobId = new URL(request.url).searchParams.get("jobId");
+  if(!jobId){
+    return jsonResponse({ error: "jobId manquant" }, 400);
+  }
+
+  try{
     const store = openJobStore();
     const jobRaw = await store.get(`jobs/${jobId}`);
-    if (!jobRaw) {
-      return { statusCode: 404, headers: { "Content-Type": "application/json" }, body: JSON.stringify({ error: "Travail introuvable" }) };
+    if(!jobRaw){
+      return jsonResponse({ error: "Travail introuvable" }, 404);
     }
+
     const job = JSON.parse(jobRaw);
-    if (job.status !== "completed" || !job.resultKey) {
-      return { statusCode: 409, headers: { "Content-Type": "application/json" }, body: JSON.stringify({ error: `Travail pas encore terminé (statut actuel : ${job.status})` }) };
+    if(job.status !== "completed" || !job.resultKey){
+      return jsonResponse({ error: `Travail pas encore terminé (statut actuel : ${job.status})` }, 409);
     }
 
     const resultRaw = await store.get(job.resultKey);
-    if (!resultRaw) {
-      return { statusCode: 404, headers: { "Content-Type": "application/json" }, body: JSON.stringify({ error: "Résultat introuvable malgré un statut terminé." }) };
+    if(!resultRaw){
+      return jsonResponse({ error: "Résultat introuvable malgré un statut terminé." }, 404);
     }
     const result = JSON.parse(resultRaw);
 
-    if (result.b64) {
-      return {
-        statusCode: 200,
-        headers: { "Content-Type": "image/png" },
-        isBase64Encoded: true,
-        body: result.b64,
-      };
+    if(result.b64){
+      const imageBuffer = Buffer.from(result.b64, "base64");
+      return new Response(streamBuffer(imageBuffer), {
+        status: 200,
+        headers: {
+          "Content-Type": "image/png",
+          "Content-Length": String(imageBuffer.length),
+          "Cache-Control": "private, no-store",
+          "Content-Disposition": `inline; filename="viewfinder-${jobId}.png"`,
+        },
+      });
     }
-    if (result.url) {
-      // Le fournisseur a renvoyé une URL plutôt qu'un base64 (cas rare) — on redirige plutôt que
-      // de re-télécharger l'image côté serveur, cela reste hors du périmètre de cette correction.
-      return { statusCode: 302, headers: { Location: result.url } };
+    if(result.url){
+      return Response.redirect(result.url, 302);
     }
-    return { statusCode: 404, headers: { "Content-Type": "application/json" }, body: JSON.stringify({ error: "Aucune image disponible pour ce travail." }) };
-  } catch (err) {
-    return { statusCode: 500, headers: { "Content-Type": "application/json" }, body: JSON.stringify({ error: String(err.message || err) }) };
+    return jsonResponse({ error: "Aucune image disponible pour ce travail." }, 404);
+  }catch(err){
+    return jsonResponse({ error: String(err && err.message || err) }, 500);
   }
 };
