@@ -957,7 +957,7 @@ function wrapText(ctx, text, maxWidth){
   return lines;
 }
 
-/* ---------- Canvas Layout Engine V2 ----------
+/* ---------- Canvas Layout Engine V3 ----------
    Le modèle image ne dessine jamais le texte ni la signature. Ce moteur observe les pixels de
    l'image finale, choisit la zone la plus calme parmi des zones sûres propres à la plateforme,
    puis compose la vraie signature et l'accroche sans masquer le sujet central. */
@@ -974,12 +974,12 @@ function brandLayoutCandidates(platform, kind){
   const isLandscape = platform==="Google Business" || platform==="Article Blog Wix";
   if(kind==="text"){
     if(isStory) return [
-      {id:"top-center", x:.10,y:.145,w:.80,h:.20,align:"center",pref:"top"},
-      {id:"top-left",   x:.075,y:.15,w:.56,h:.19,align:"left",pref:"top"},
-      {id:"top-right",  x:.365,y:.15,w:.56,h:.19,align:"right",pref:"top"},
-      {id:"bottom-center",x:.10,y:.655,w:.80,h:.18,align:"center",pref:"bottom"},
-      {id:"bottom-left",x:.075,y:.65,w:.56,h:.19,align:"left",pref:"bottom"},
-      {id:"bottom-right",x:.365,y:.65,w:.56,h:.19,align:"right",pref:"bottom"},
+      {id:"top-center", x:.09,y:.135,w:.82,h:.205,align:"center",pref:"top"},
+      {id:"top-left",   x:.065,y:.14,w:.54,h:.205,align:"left",pref:"top"},
+      {id:"top-right",  x:.395,y:.14,w:.54,h:.205,align:"right",pref:"top"},
+      {id:"bottom-center",x:.09,y:.625,w:.82,h:.205,align:"center",pref:"bottom"},
+      {id:"bottom-left",x:.065,y:.625,w:.54,h:.205,align:"left",pref:"bottom"},
+      {id:"bottom-right",x:.395,y:.625,w:.54,h:.205,align:"right",pref:"bottom"},
     ];
     return [
       {id:"top-center",x:.09,y:.075,w:.82,h:.20,align:"center",pref:"top"},
@@ -997,12 +997,12 @@ function brandLayoutCandidates(platform, kind){
     {id:"bottom-right",x:.695,y:.695,w:.25,h:.23,align:"right",pref:"bottom"},
   ];
   if(isStory) return [
-    {id:"top-center",x:.37,y:.14,w:.26,h:.18,align:"center",pref:"top"},
-    {id:"top-left",x:.065,y:.145,w:.235,h:.18,align:"left",pref:"top"},
-    {id:"top-right",x:.70,y:.145,w:.235,h:.18,align:"right",pref:"top"},
-    {id:"bottom-center",x:.37,y:.665,w:.26,h:.17,align:"center",pref:"bottom"},
-    {id:"bottom-left",x:.065,y:.665,w:.235,h:.17,align:"left",pref:"bottom"},
-    {id:"bottom-right",x:.70,y:.665,w:.235,h:.17,align:"right",pref:"bottom"},
+    {id:"top-center",x:.35,y:.13,w:.30,h:.205,align:"center",pref:"top"},
+    {id:"top-left",x:.055,y:.14,w:.295,h:.205,align:"left",pref:"top"},
+    {id:"top-right",x:.65,y:.14,w:.295,h:.205,align:"right",pref:"top"},
+    {id:"bottom-center",x:.35,y:.625,w:.30,h:.20,align:"center",pref:"bottom"},
+    {id:"bottom-left",x:.055,y:.625,w:.295,h:.20,align:"left",pref:"bottom"},
+    {id:"bottom-right",x:.65,y:.625,w:.295,h:.20,align:"right",pref:"bottom"},
   ];
   return [
     {id:"top-center",x:.37,y:.065,w:.26,h:.21,align:"center",pref:"top"},
@@ -1148,39 +1148,51 @@ function wrapTrackedText(ctx,text,maxWidth,tracking,maxLines){
 }
 function drawPremiumHeadline(ctx,headline,box,platform){
   const W=ctx.canvas.width,H=ctx.canvas.height;
+  const isStory=platform==="Story";
   const parts=String(headline||"").split("|").map(s=>s.trim()).filter(Boolean);
   const preserveOfficialNames = value => String(value||"").toUpperCase().replace(/\bPSIO\b/g,"PSiO");
   const title=preserveOfficialNames(parts.shift()||"");
   const subtitle=preserveOfficialNames(parts.join(" — "));
   const maxWidth=box.w*W;
-  let titleSize=Math.round(W*(platform==="Story"?.061:.052));
-  const minTitle=Math.round(W*.035);
+  /* Sur Story, le titre est un vrai niveau d'affiche lisible sur mobile, pas une légende.
+     Le corps reste adaptatif : les accroches longues diminuent avant de sortir de leur zone sûre. */
+  let titleSize=Math.round(W*(isStory?.078:.052));
+  const minTitle=Math.round(W*(isStory?.044:.035));
   let tracking=Math.max(1,Math.round(titleSize*.075)), lines=[];
   do{
-    ctx.font=`600 ${titleSize}px Georgia, 'Times New Roman', serif`;
+    ctx.font=`500 ${titleSize}px Georgia, 'Times New Roman', serif`;
     tracking=Math.max(1,Math.round(titleSize*.075));
     lines=wrapTrackedText(ctx,title,maxWidth,tracking,2);
     if(lines.every(line=>trackedTextWidth(ctx,line,tracking)<=maxWidth)) break;
     titleSize-=2;
   }while(titleSize>=minTitle);
-  const subtitleSize=Math.max(19,Math.round(titleSize*.43));
-  const lineHeight=titleSize*1.24;
-  const total=lines.length*lineHeight+(subtitle?subtitleSize*2.05:0);
+  let subtitleSize=Math.max(isStory?23:19,Math.round(titleSize*(isStory?.46:.43)));
+  let lineHeight=titleSize*1.22;
+  let total=lines.length*lineHeight+(subtitle?subtitleSize*2.05:0);
+  while(titleSize>minTitle && total>box.h*H*.92){
+    titleSize-=2;
+    ctx.font=`500 ${titleSize}px Georgia, 'Times New Roman', serif`;
+    tracking=Math.max(1,Math.round(titleSize*.075));
+    lines=wrapTrackedText(ctx,title,maxWidth,tracking,2);
+    subtitleSize=Math.max(isStory?23:19,Math.round(titleSize*(isStory?.46:.43)));
+    lineHeight=titleSize*1.22;
+    total=lines.length*lineHeight+(subtitle?subtitleSize*2.05:0);
+  }
   let y=box.y*H+(box.h*H-total)/2+titleSize*.55;
   const anchor=box.align==="left"?box.x*W:box.align==="right"?(box.x+box.w)*W:(box.x+box.w/2)*W;
   ctx.textBaseline="middle";
-  ctx.shadowColor="rgba(0,0,0,.88)"; ctx.shadowBlur=Math.round(W*.009);
-  ctx.fillStyle="#F5F2E9";
-  ctx.font=`600 ${titleSize}px Georgia, 'Times New Roman', serif`;
+  ctx.shadowColor="rgba(0,0,0,.92)"; ctx.shadowBlur=Math.round(W*(isStory?.012:.009));
+  ctx.fillStyle=isStory?officialGoldGradient(ctx,y-titleSize,y+titleSize):"#F5F2E9";
+  ctx.font=`500 ${titleSize}px Georgia, 'Times New Roman', serif`;
   lines.forEach(line=>{ drawTrackedText(ctx,line,anchor,y,tracking,box.align); y+=lineHeight; });
   if(subtitle){
-    const ruleW=Math.min(maxWidth*.24,W*.16), ruleY=y+subtitleSize*.05;
-    ctx.strokeStyle="rgba(201,162,39,.78)"; ctx.lineWidth=Math.max(1,W*.0014);
+    const ruleW=Math.min(maxWidth*(isStory?.32:.24),W*(isStory?.19:.16)), ruleY=y+subtitleSize*.05;
+    ctx.strokeStyle="rgba(224,197,106,.86)"; ctx.lineWidth=Math.max(1,W*.0014);
     ctx.beginPath(); ctx.moveTo(anchor-ruleW/2,ruleY); ctx.lineTo(anchor+ruleW/2,ruleY); ctx.stroke();
     y+=subtitleSize*.88;
-    ctx.fillStyle=officialGoldGradient(ctx,y-subtitleSize,y+subtitleSize*1.8);
+    ctx.fillStyle=isStory?"#F5F2E9":officialGoldGradient(ctx,y-subtitleSize,y+subtitleSize*1.8);
     ctx.font=`500 ${subtitleSize}px Georgia, 'Times New Roman', serif`;
-    const subTracking=Math.max(1,Math.round(subtitleSize*.13));
+    const subTracking=Math.max(1,Math.round(subtitleSize*(isStory?.14:.13)));
     const subLines=wrapTrackedText(ctx,subtitle,maxWidth,subTracking,2);
     subLines.forEach(line=>{ drawTrackedText(ctx,line,anchor,y,subTracking,box.align); y+=subtitleSize*1.35; });
   }
@@ -1189,16 +1201,30 @@ function drawPremiumHeadline(ctx,headline,box,platform){
 }
 function drawOfficialSignature(ctx,logoImg,box,platform){
   const W=ctx.canvas.width,H=ctx.canvas.height;
+  const isStory=platform==="Story";
   const blockCenterX=(box.x+box.w/2)*W;
-  const maxLogoW=Math.min(box.w*W, W*(platform==="Story"?.155:.13));
+  const extraHeight=W*(isStory?.082:.068);
+  const heightLimitedWidth=Math.max(W*.08,(box.h*H-extraHeight)*(logoImg.width/logoImg.height));
+  const maxLogoW=Math.min(box.w*W, W*(isStory?.205:.13),heightLimitedWidth);
   const logoH=maxLogoW*(logoImg.height/logoImg.width);
-  const top=box.y*H+Math.max(0,(box.h*H-(logoH+W*.068))/2);
+  const top=box.y*H+Math.max(0,(box.h*H-(logoH+extraHeight))/2);
+  ctx.shadowColor="rgba(224,197,106,.24)";
+  ctx.shadowBlur=Math.round(W*(isStory?.014:.008));
   ctx.drawImage(logoImg,blockCenterX-maxLogoW/2,top,maxLogoW,logoH);
-  const brandSize=Math.max(15,Math.round(W*.0225)), citySize=Math.max(11,Math.round(W*.0135));
-  const brandY=top+logoH+Math.round(W*.010);
+  ctx.shadowBlur=0;
+  let brandSize=Math.max(15,Math.round(W*(isStory?.0285:.0225)));
+  let citySize=Math.max(11,Math.round(W*(isStory?.0158:.0135)));
+  const brandTracking=()=>Math.max(1,brandSize*.08);
+  ctx.font=`500 ${brandSize}px Georgia, 'Times New Roman', serif`;
+  while(brandSize>15 && trackedTextWidth(ctx,"LA SANTÉ DES ZÈBRES",brandTracking())>box.w*W*.98){
+    brandSize--;
+    ctx.font=`500 ${brandSize}px Georgia, 'Times New Roman', serif`;
+  }
+  citySize=Math.min(citySize,Math.max(11,Math.round(brandSize*.56)));
+  const brandY=top+logoH+Math.round(W*(isStory?.012:.010));
   ctx.textBaseline="top"; ctx.shadowColor="rgba(0,0,0,.88)"; ctx.shadowBlur=Math.round(W*.006);
-  ctx.fillStyle="#F5F2E9"; ctx.font=`600 ${brandSize}px Georgia, 'Times New Roman', serif`;
-  drawTrackedText(ctx,"LA SANTÉ DES ZÈBRES",blockCenterX,brandY,Math.max(1,brandSize*.08),"center");
+  ctx.fillStyle="#F5F2E9"; ctx.font=`500 ${brandSize}px Georgia, 'Times New Roman', serif`;
+  drawTrackedText(ctx,"LA SANTÉ DES ZÈBRES",blockCenterX,brandY,brandTracking(),"center");
   ctx.fillStyle=officialGoldGradient(ctx,brandY+brandSize,brandY+brandSize*2.4);
   ctx.font=`500 ${citySize}px Georgia, 'Times New Roman', serif`;
   drawTrackedText(ctx,"RAISMES",blockCenterX,brandY+brandSize*1.38,Math.max(1,citySize*.22),"center");
@@ -1207,16 +1233,16 @@ function drawOfficialSignature(ctx,logoImg,box,platform){
 }
 
 async function compositeBrandSignature(baseDataUrl, platform, options){
-  /* V2.0 — composition adaptative fondée sur les pixels réels. Le Planner ne fait qu'indiquer une
+  /* V3.0 — composition adaptative fondée sur les pixels réels. Le Planner ne fait qu'indiquer une
      préférence de zone ; Canvas conserve le dernier mot pour protéger lisibilité et sujet. */
   const opts = options || {};
   const headline = String(opts.headline !== undefined ? opts.headline : (state.visualAccroche || "")).trim();
   const withLogo = opts.withLogo !== false;
   const logoAsset = withLogo ? await getOfficialLogoAsset() : null;
   if(withLogo && !logoAsset) return { applied:false, headlineApplied:false, dataUrl:baseDataUrl,
-    layoutReport:{version:"canvas-layout-v2",blockingError:"Logo officiel SDZ indisponible."} };
+    layoutReport:{version:"canvas-layout-v3",blockingError:"Logo officiel SDZ indisponible."} };
   if(!withLogo && !headline) return { applied:false, headlineApplied:false, dataUrl:baseDataUrl,
-    layoutReport:{version:"canvas-layout-v2",skipped:true} };
+    layoutReport:{version:"canvas-layout-v3",skipped:true} };
   try{
     const img = await loadImage(baseDataUrl);
     const logoImg = logoAsset ? await getAutoTransparentLogo(logoAsset) : null;
@@ -1232,7 +1258,7 @@ async function compositeBrandSignature(baseDataUrl, platform, options){
       ? selectBrandLayoutPair(pixels,platform,preferredText,preferredLogo,protectedZones) : null;
     const textBox=headline ? (pair?pair.text:selectBrandRegion(pixels,platform,"text",preferredText,null,protectedZones)) : null;
     const logoBox=logoImg ? (pair?pair.logo:selectBrandRegion(pixels,platform,"logo",preferredLogo,textBox,protectedZones)) : null;
-    const report={version:"canvas-layout-v2",platform,
+    const report={version:"canvas-layout-v3",platform,
       textZone:textBox&&textBox.id||null,logoZone:logoBox&&logoBox.id||null,
       preferredText:normalizeOverlayZonePreference(preferredText),
       preferredLogo:normalizeOverlayZonePreference(preferredLogo),
@@ -1262,7 +1288,7 @@ async function compositeBrandSignature(baseDataUrl, platform, options){
       headlineApplied:!!headline, layoutReport:report };
   }catch(e){
     return { applied:false, headlineApplied:false, dataUrl:baseDataUrl,
-      layoutReport:{version:"canvas-layout-v2",blockingError:`Composition Canvas impossible : ${e.message||e}`} };
+      layoutReport:{version:"canvas-layout-v3",blockingError:`Composition Canvas impossible : ${e.message||e}`} };
   }
 }
 
@@ -4302,7 +4328,7 @@ async function finalizeGeneratedImage(flow){
   const needLogo = logoRequiredFor(platform) && !logoInScene;
   let logoApplied = false;
   let headlineApplied = false;
-  let layoutReport = { version:"canvas-layout-v2", skipped:true };
+  let layoutReport = { version:"canvas-layout-v3", skipped:true };
   if(needLogo || headline){
     const composited = await compositeBrandSignature(dataUrl, platform, {
       headline, withLogo:needLogo, brief:flow.brief||null, analysis:flow.analysis||null
@@ -7469,7 +7495,7 @@ function buildApiTab(){
 ============================================================ */
 
 /* ---- Versionnage ---- */
-const VF_VERSION = "2.2.13-psio-evidence-gate"; // semver manuelle : à incrémenter à chaque déploiement touchant le moteur
+const VF_VERSION = "2.2.14-canvas-premium-scale"; // semver manuelle : à incrémenter à chaque déploiement touchant le moteur
 /* Hash déterministe de l'état des règles : deux runs au même hash = strictement les mêmes règles.
    Couvre : modules (contenu+état), UNIVERS_SDZ, charte condensée, garde-fou sécurité. */
 function computeModulesHash(){
