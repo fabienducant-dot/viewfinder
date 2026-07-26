@@ -2151,6 +2151,22 @@ function contientMotifV2EnPause(value){
   const norm = normalizeForContainmentCheck(value);
   return V2_MOTIF_PATTERNS.some(pattern => pattern.test(norm));
 }
+function buildActiveRegistryDecorContract(registres){
+  const actifs = [...new Set((Array.isArray(registres) ? registres : [])
+    .filter(r=>KNOWN_REGISTRES.includes(r)))];
+  if(!actifs.length) return "";
+  const directions = [];
+  if(actifs.includes("cinematographie")){
+    directions.push("profondeur cinématographique nettement lisible sur trois plans, avec premier plan sombre texturé, sujet parfaitement détaché au plan principal et arrière-plan éclairé par une lumière latérale");
+  }
+  if(actifs.includes("architecture")){
+    directions.push("architecture intérieure abstraite visible en pierre noire satinée : hautes parois sculptées, nervures verticales, panneaux minéraux et volumes géométriques non culturels dont les arêtes accrochent des reflets d'or noble");
+  }
+  if(actifs.includes("fantastique")){
+    directions.push("dimension fantastique portée uniquement par une perspective légèrement impossible, une échelle majestueuse et des reflets dorés fluides intégrés aux surfaces, sans symbole, portail, halo, particules ni phénomène occulte");
+  }
+  return `Décor noir et or visible, détaillé et habité, jamais fond noir uni ni vide : ${directions.join(" ; ")}. Les détails du décor restent lisibles dans les ombres sans concurrencer le sujet ni le matériel réel`;
+}
 
 /* ---------- 2. CALCUL DÉTERMINISTE DES OPTIONS AUTORISÉES (avant tout appel au Planner) ---------- */
 /* state.imageHistory : historique structuré dédié à l'image (distinct de state.history, qui reste
@@ -2373,6 +2389,10 @@ Plateforme : ${platform}
 Sujet demandé par l'utilisateur : ${topic}
 
 ${typeCreationInstructions}
+
+REGISTRES VISUELS ACTIFS — ils doivent tous être visibles dans l'image, et pas seulement mentionnés :
+${(registres||[]).map(r=>`- ${r}`).join("\n") || "- aucun registre supplémentaire"}
+${buildActiveRegistryDecorContract(registres) ? `CONTRAT DE DÉCOR DÉTERMINISTE : ${buildActiveRegistryDecorContract(registres)}.` : ""}
 
 Principes visuels indispensables de la marque SDZ (à respecter impérativement) :
 ${socle}
@@ -2728,9 +2748,11 @@ function pointDeVueRabatLeSujet(value){
     || (/\bplong(?:e|ee|ant)\b/.test(norm) && !/\bcontre plonge/.test(norm));
 }
 
-function validateAndFixBriefV2(brief, allowed, exclusions, typeCreationImpose, prestation, platform){
+function validateAndFixBriefV2(brief, allowed, exclusions, typeCreationImpose, prestation, platform, registres){
   const allowedIds = allowed.map(a=>a.id);
   const fixed = { ...brief };
+  fixed.registresActifs = [...new Set((Array.isArray(registres) ? registres : [])
+    .filter(r=>KNOWN_REGISTRES.includes(r)))];
   let corrected = false;
 
   // 5. Confinement archétype — correction silencieuse, même mécanique que l'archétype narratif V1.
@@ -2832,6 +2854,17 @@ function validateAndFixBriefV2(brief, allowed, exclusions, typeCreationImpose, p
     if(platform==="Story" && fixed.niveauLuminosite!=="lumineux_eclatant"){
       fixed.niveauLuminosite = "lumineux_eclatant";
       corrected = true;
+    }
+    const registryDecorContract = buildActiveRegistryDecorContract(fixed.registresActifs);
+    if(registryDecorContract){
+      const plannerDecor = String(fixed.decor||"").trim();
+      const plannerDecorUtile = plannerDecor
+        && !contientMotifV2EnPause(plannerDecor)
+        && !/^(?:espace|fond) noir profond abstrait\b/i.test(plannerDecor);
+      const decorAvecRegistres = plannerDecorUtile
+        ? `${registryDecorContract}. Détail spécifique du brief : ${plannerDecor}`
+        : registryDecorContract;
+      if(fixed.decor!==decorAvecRegistres){ fixed.decor = decorAvecRegistres; corrected = true; }
     }
     const negative = [String(fixed.negativePrompt||"").trim(),
       "mutation physique, transfiguration du visage, corps fragmenté, ambiance d'horreur, symboles occultes, faux logo, zèbre décoratif"]
@@ -2966,7 +2999,7 @@ async function generateCreativeBriefV2(mission, prestation, platform, topic, typ
     console.error("[Creative Planner V2] JSON.parse a échoué — contenu brut reçu :", data.text);
     throw new Error(`Creative Planner V2 — erreur JSON.parse :\n${e.message}\n\nRéponse brute :\n${String(data.text||"").slice(0,1500)}`);
   }
-  const { brief, corrected, blockingError, aucuneRaisonDetre, filiationConflitMomentFaible } = validateAndFixBriefV2(rawBrief, allowed, exclusions, typeCreationImpose, prestation, platform);
+  const { brief, corrected, blockingError, aucuneRaisonDetre, filiationConflitMomentFaible } = validateAndFixBriefV2(rawBrief, allowed, exclusions, typeCreationImpose, prestation, platform, registres);
   const usage = data.usage ? { promptTokens: data.usage.prompt_tokens ?? null, completionTokens: data.usage.completion_tokens ?? null, model: provider.model } : null;
   return { brief, corrected, blockingError, aucuneRaisonDetre, filiationConflitMomentFaible, allowed, exclusions, usage, plannerNetworkRetryUsed };
 }
@@ -3511,7 +3544,8 @@ function buildFixedGuardrailBlocks(brief, platform){
   const psioProductGuard = isPsio
     ? "RÉFÉRENCE PRODUIT PSiO® OBLIGATOIRE : la seule image de référence fournie sert uniquement à reproduire exactement la géométrie des lunettes officielles — silhouette, proportions, grande surface optique incurvée, boîtiers latéraux, petit écran rectangulaire, commandes et câbles. Recolore le dispositif en noir profond et or métallique noble SDZ ; les couleurs blanche, bleue et cyan de la photo ne sont pas à conserver. Ignore entièrement le visage, l'identité, les cheveux, la pose, le siège, le fond blanc, le cercle et le cadrage de la photo de référence. Aucun autre type de lunettes, masque, casque ou visière n'est admis. Ne modifie, ne simplifie, ne stylise et ne réinterprète jamais la forme du dispositif."
     : "";
-  return `${charte} ${soinPhrase} Noir profond comme écrin, jamais comme sous-exposition. Sujet, geste et matériel lisibles au premier regard. Or métallique noble, jamais orange, ambre, feu ou incendie. Énergie ascendante et désirable. L'ombre ou la fragmentation ne peuvent exister qu'en opposition secondaire clairement dépassée par le sujet ; jamais horreur, menace, désespoir sans issue, personnage encapuchonné menaçant, visage central mutilé, crypte, rituel, sorcellerie, astrologie ou signes zodiacaux. Aucun texte n'est incrusté dans l'image ; une zone visuellement calme reste prête à recevoir le texte ajouté ensuite. ${storyGuard} ${psioProductGuard} ${logoPhrase}${eviter ? ` À éviter absolument : ${eviter}.` : ""}
+  const registryGuard = buildActiveRegistryDecorContract(brief.registresActifs);
+  return `${charte} ${soinPhrase} Noir profond comme écrin, jamais comme sous-exposition. Sujet, geste et matériel lisibles au premier regard. Or métallique noble, jamais orange, ambre, feu ou incendie. Énergie ascendante et désirable. ${registryGuard ? `CONTRAT DE VISIBILITÉ DES REGISTRES : ${registryGuard}. Le décor doit être immédiatement perceptible derrière et autour du sujet ; une grande surface noire uniforme ou vide constitue un échec.` : ""} L'ombre ou la fragmentation ne peuvent exister qu'en opposition secondaire clairement dépassée par le sujet ; jamais horreur, menace, désespoir sans issue, personnage encapuchonné menaçant, visage central mutilé, crypte, rituel, sorcellerie, astrologie ou signes zodiacaux. Aucun texte n'est incrusté dans l'image ; une zone visuellement calme reste prête à recevoir le texte ajouté ensuite. ${storyGuard} ${psioProductGuard} ${logoPhrase}${eviter ? ` À éviter absolument : ${eviter}.` : ""}
 
 ${SAFETY_GUARDRAIL}`;
 }
@@ -4042,6 +4076,7 @@ function mapBriefV2ToV1Shape(briefV2){
     referenceFamily: briefV2.referenceFamily, texteImage: briefV2.texteImage,
     zoneTexte: briefV2.zoneTexte, zoneLogo: briefV2.zoneLogo, messageCentral: briefV2.messageCentral,
     raisonDifferenceAvecHistorique: briefV2.raisonDetre,
+    registresActifs: Array.isArray(briefV2.registresActifs) ? [...briefV2.registresActifs] : [],
   };
 }
 
@@ -7266,7 +7301,7 @@ function buildApiTab(){
 ============================================================ */
 
 /* ---- Versionnage ---- */
-const VF_VERSION = "2.2.4-overlay-guard"; // semver manuelle : à incrémenter à chaque déploiement touchant le moteur
+const VF_VERSION = "2.2.5-register-depth"; // semver manuelle : à incrémenter à chaque déploiement touchant le moteur
 /* Hash déterministe de l'état des règles : deux runs au même hash = strictement les mêmes règles.
    Couvre : modules (contenu+état), UNIVERS_SDZ, charte condensée, garde-fou sécurité. */
 function computeModulesHash(){
