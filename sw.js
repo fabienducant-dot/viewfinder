@@ -7,7 +7,7 @@
    au lieu de rester bloqué sur une version mise en cache. Seuls les fichiers statiques qui ne
    changent presque jamais (icônes) utilisent une stratégie cache-d'abord. */
 
-const CACHE_NAME = "viewfinder-cache-v8";
+const CACHE_NAME = "viewfinder-cache-v9";
 const APP_SHELL = [
   "./",
   "./index.html",
