@@ -191,14 +191,14 @@ const PLATFORM_NOTE = {
   "Instagram": "Format portrait 4:5. Aucun texte dans l'image : le tiers inférieur reste calme, une accroche y sera incrustée ensuite en post-traitement.",
   "Facebook": "Utilise exactement la même image qu'Instagram (4:5) — aucune génération distincte. Aucun texte dans l'image.",
   "Google Business": "Aucun texte sur l'image (recommandation Google) — le texte porte tout le SEO.",
-  "Article Blog Wix": "Image de couverture avec un texte court façon fiche explicative, élégant et sobre — jamais de faux logo, badge ou icône générés par l'IA.",
+  "Article Blog Wix": "Image de couverture éditoriale, sans texte incrusté (les moteurs de recherche ne lisent pas le texte dans une image) — jamais de faux logo, badge ou icône générés par l'IA. Le SEO de l'image passe par un alt text descriptif riche, généré avec le texte de l'article.",
   "Story": "Format vertical plein écran. Une accroche forte et une courte sous-ligne sont composées par Canvas avec une hiérarchie typographique nette ; le vrai logo SDZ est ajouté séparément. Aucun élément de l'interface Instagram ne fait partie du visuel.",
 };
 const TEXT_STRUCTURE = {
-  "Instagram": "Réponds avec :\n1) Légende structurée : accroche, développement, bénéfice, CTA\n2) Maximum 5 hashtags\n3) Une suggestion d'alt text (accessibilité)",
-  "Facebook": "Réponds avec :\n1) Texte du post (accroche, développement, bénéfice, CTA)\n2) Maximum 5 hashtags\n3) Une suggestion d'alt text",
-  "Google Business": "Réponds avec :\n1) Texte du post de 100 à 150 mots, structuré ainsi : accroche, explication, bénéfices, prise de contact. Sans hashtags, sans slogan publicitaire, mots-clés SEO locaux intégrés naturellement\n2) Un bouton d'action suggéré (Réserver, En savoir plus, Acheter...)\n3) Un alt text descriptif SEO pour l'image",
-  "Article Blog Wix": "Réponds avec :\n1) Titre SEO (H1)\n2) Meta description (155 caractères max)\n3) Slug d'URL suggéré\n4) Introduction\n5) 2 à 3 sections avec sous-titres H2\n6) Conclusion avec appel à l'action\n7) 5 mots-clés SEO\n8) Catégorie suggérée",
+  "Instagram": "Réponds avec :\n1) Légende structurée : accroche, développement, bénéfice, CTA. Maximum 1 à 2 emojis pertinents utilisés comme points d'accent (jamais en rafale, jamais en substitut des mots)\n2) Maximum 5 hashtags\n3) Une suggestion d'alt text (accessibilité)",
+  "Facebook": "Réponds avec :\n1) Texte du post (accroche, développement, bénéfice, CTA). Maximum 1 à 2 emojis pertinents utilisés comme points d'accent (jamais en rafale, jamais en substitut des mots)\n2) Maximum 5 hashtags\n3) Une suggestion d'alt text",
+  "Google Business": "Réponds avec :\n1) Texte du post de 100 à 150 mots, structuré ainsi : accroche, explication, bénéfices, prise de contact. Aucun hashtag (non fonctionnel et non recommandé sur Google Business), mots-clés SEO locaux intégrés naturellement. Maximum 1 à 2 emojis pertinents utilisés comme points d'accent, jamais en rafale\n2) Un bouton d'action suggéré (Réserver, En savoir plus, Acheter...)\n3) Un alt text descriptif SEO pour l'image",
+  "Article Blog Wix": "Réponds avec :\n1) Titre SEO (H1)\n2) Meta description (155 caractères max)\n3) Slug d'URL suggéré\n4) Introduction\n5) 2 à 3 sections avec sous-titres H2\n6) Conclusion avec appel à l'action\n7) 5 mots-clés SEO\n8) Catégorie suggérée\n9) Alt text de l'image de couverture : descriptif, riche, incluant naturellement le mot-clé principal (l'image ne porte aucun texte incrusté, donc l'alt text est le seul signal SEO côté image)",
 };
 /* MASTER SDZ et CODEX SDZ sont les documents de plus haute autorité : toujours injectés,
    quelle que soit la plateforme ou la mission — c'est le socle non négociable de la marque. */
@@ -1182,8 +1182,9 @@ function drawPremiumHeadline(ctx,headline,box,platform){
   const maxWidth=box.w*W;
   /* Sur Story, le titre est un vrai niveau d'affiche lisible sur mobile, pas une légende.
      Le corps reste adaptatif : les accroches longues diminuent avant de sortir de leur zone sûre. */
-  let titleSize=Math.round(W*(isStory?.078:.052));
-  const minTitle=Math.round(W*(isStory?.044:.035));
+  /* Accroche x3 (demande explicite), pour rester cohérent avec le verrou unifié. */
+  let titleSize=Math.round(W*(isStory?.234:.156));
+  const minTitle=Math.round(W*(isStory?.132:.105));
   let tracking=Math.max(1,Math.round(titleSize*.075)), lines=[];
   do{
     ctx.font=`500 ${titleSize}px Georgia, 'Times New Roman', serif`;
@@ -1233,7 +1234,8 @@ function drawOfficialSignature(ctx,logoImg,box,platform){
   const blockCenterX=(box.x+box.w/2)*W;
   const extraHeight=W*(isStory?.082:.068);
   const heightLimitedWidth=Math.max(W*.08,(box.h*H-extraHeight)*(logoImg.width/logoImg.height));
-  const maxLogoW=Math.min(box.w*W, W*(isStory?.205:.13),heightLimitedWidth);
+  /* Logo x2 (demande explicite). */
+  const maxLogoW=Math.min(box.w*W, W*(isStory?.410:.260),heightLimitedWidth);
   const logoH=maxLogoW*(logoImg.height/logoImg.width);
   const top=box.y*H+Math.max(0,(box.h*H-(logoH+extraHeight))/2);
   ctx.shadowColor="rgba(224,197,106,.24)";
@@ -1275,8 +1277,9 @@ function drawPremiumBrandLockup(ctx,headline,logoImg,box,platform){
   let scale=1,layout=null;
 
   do{
-    const titleSize=Math.max(Math.round(W*(isStory?.043:.040)),Math.round(W*(isStory?.061:.056)*scale));
-    const subtitleSize=Math.max(Math.round(W*(isStory?.032:.029)),Math.round(W*(isStory?.041:.038)*scale));
+    /* Accroche x3 (demande explicite) : planchers et cibles triplés. */
+    const titleSize=Math.max(Math.round(W*(isStory?.129:.120)),Math.round(W*(isStory?.183:.168)*scale));
+    const subtitleSize=Math.max(Math.round(W*(isStory?.096:.087)),Math.round(W*(isStory?.123:.114)*scale));
     const titleTracking=Math.max(1,Math.round(titleSize*.15));
     const subtitleTracking=Math.max(1,Math.round(subtitleSize*.13));
     ctx.font=`500 ${titleSize}px Georgia, 'Times New Roman', serif`;
@@ -1286,7 +1289,8 @@ function drawPremiumBrandLockup(ctx,headline,logoImg,box,platform){
     const titleLineHeight=titleSize*1.18;
     const subtitleLineHeight=subtitleSize*1.34;
     const ruleW=Math.min(maxWidth*.38,W*.28);
-    const logoW=Math.min(box.w*W*.22,W*(isStory?.135:.12)*scale);
+    /* Logo x2 (demande explicite) : plafond extérieur doublé également, sinon il écrêterait silencieusement le doublement. */
+    const logoW=Math.min(box.w*W*.44,W*(isStory?.270:.240)*scale);
     const logoH=logoW*logoRatio;
     let brandSize=Math.max(16,Math.round(W*(isStory?.0245:.022)*scale));
     ctx.font=`500 ${brandSize}px Georgia, 'Times New Roman', serif`;
@@ -1385,7 +1389,9 @@ async function compositeBrandSignature(baseDataUrl, platform, options){
     const ctx = canvas.getContext("2d");
     ctx.drawImage(img, 0, 0);
     const pixels=ctx.getImageData(0,0,canvas.width,canvas.height);
-    const preferredText=opts.brief && opts.brief.zoneTexte;
+    /* Story : position forcée en bas (demande explicite), qu'importe ce que le Planner a choisi
+       pour zoneTexte — c'est ce qui la distingue d'Instagram/Facebook, restées adaptatives. */
+    const preferredText=platform==="Story" ? "bottom" : (opts.brief && opts.brief.zoneTexte);
     const preferredLogo=opts.brief && opts.brief.zoneLogo;
     const protectedZones=normalizedProtectedZones(opts.analysis,opts.brief);
     const useUnifiedLockup=["Story","Instagram","Facebook"].includes(platform)&&!!headline&&!!logoImg;
@@ -1879,7 +1885,7 @@ function styleBlock(style){
    Politique générale de sécurité — jamais de description visuelle détaillée générée automatiquement
    pour un sujet sensible : c'est à l'utilisateur de rédiger le champ "Scène visuelle" de la fiche
    prestation (base de connaissances) s'il le souhaite ; ce garde-fou s'applique dans tous les cas. */
-const SAFETY_GUARDRAIL = `CONTRAINTE DE SÉCURITÉ PERMANENTE : toute personne représentée doit être habillée de façon appropriée et professionnelle. Si la scène implique un mineur, il doit être entièrement habillé et accompagné visuellement d'un adulte responsable, dans un contexte familial explicite et non ambigu, sans aucune connotation. Si la scène implique une grossesse, la personne doit être habillée de façon pudique, sans exposition du corps. Si la scène implique un contact corporel (réflexologie, massage des pieds...), le cadrage doit rester professionnel, respectueux et éditorial, jamais suggestif. Si la scène évoque une pratique énergétique (reiki...), rester sobre et crédible, sans effets surnaturels exagérés. Aucune promesse médicale ou thérapeutique ne doit être suggérée visuellement. Aucune nudité, aucune sexualisation, aucune violence.`;
+const SAFETY_GUARDRAIL = `CONTRAINTE DE SÉCURITÉ PERMANENTE : toute personne représentée doit être habillée de façon appropriée et professionnelle. Si la scène implique un mineur, il doit être entièrement habillé et accompagné visuellement d'un adulte responsable, dans un contexte familial explicite et non ambigu, sans aucune connotation. Si la scène implique une grossesse, la personne doit être habillée de façon pudique, sans exposition du corps. Si la scène implique un contact corporel (massage, réflexologie...), la personne recevant le soin est TOUJOURS drapée d'un tissu ou d'un drap sobre couvrant le corps au moins jusqu'à la taille ; seule la zone strictement nécessaire au geste (épaules, dos, mains, pieds selon le soin) reste dégagée. Le cadrage reste professionnel, respectueux et éditorial, jamais suggestif. Si la scène évoque une pratique énergétique (reiki...), rester sobre et crédible, sans effets surnaturels exagérés. Aucune promesse médicale ou thérapeutique ne doit être suggérée visuellement. Aucune nudité, aucune sexualisation, aucune violence.`;
 
 /* Catégories de sujets à traiter avec prudence (pas de description détaillée ici — juste une alerte
    pour inviter l'utilisateur à renseigner un champ "Scène visuelle" dans la fiche de la prestation). */
@@ -2575,6 +2581,7 @@ ${consignePrestation}
 - L'effet fantastique amplifie la prestation réelle ; il ne la remplace jamais. Le sujet reste naturel, habillé, crédible et intact.
 - Reste éditorial, premium et jamais démonstratif ou didactique.
 ${prestation==="Luminothérapie PSIO®" ? `- CAS PSIO® : la personne est déjà confortablement installée, les yeux fermés, avec les lunettes correctement portées et lisibles sur le visage. Elle n'est jamais debout, en attente de commencer, ni en train de tenir les lunettes à la main. La forme, les proportions, la surface optique, l'écran, les commandes et les câbles doivent correspondre strictement à la référence officielle ; seule la couleur peut être adaptée en noir profond et or noble SDZ. Aucun casque VR, halo circulaire, auréole, faisceau ajouté ou geste secondaire inventé.` : ""}
+${prestation==="Biorésonance quantique" ? `- CAS BIORÉSONANCE (Healy) : le boîtier Healy est visiblement posé sur la peau ou tenu à proximité immédiate du corps, jamais rangé ou hors champ. La forme (carré à coins arrondis, base élargie), les proportions, l'écran et les commandes doivent correspondre strictement à la référence officielle ; seule la couleur peut être adaptée en noir profond et or noble SDZ. Aucune inscription ou marque du fabricant reproduite, aucun autre dispositif électronique, aucun halo, auréole, faisceau ajouté ou geste secondaire inventé.` : ""}
 
 ${platform==="Story" ? `DIRECTION VISUELLE DE RÉFÉRENCE — STORIES SDZ :
 - composition verticale 9:16 dense et éditoriale, sujet héroïque central, profondeur en plusieurs plans, énergie dorée ascendante ;
@@ -2874,11 +2881,17 @@ function getServiceVisualMoment(prestation){
   if(prestation==="Luminothérapie PSIO®"){
     return "l'instant calme où les lunettes PSiO® portées sur le visage deviennent le centre visuel";
   }
+  if(prestation==="Biorésonance quantique"){
+    return "l'instant précis où le boîtier Healy, posé sur la peau ou tenu à proximité du corps, devient le centre visuel";
+  }
   return "l'instant où le geste ou le matériel distinctif de la prestation devient clairement lisible";
 }
 function getServiceHeroAction(prestation){
   if(prestation==="Luminothérapie PSIO®"){
     return "rester confortablement installé, les yeux fermés pendant la séance, lunettes PSiO® bien visibles";
+  }
+  if(prestation==="Biorésonance quantique"){
+    return "rester confortablement installé pendant la séance, le boîtier Healy correctement positionné sur ou à proximité du corps, bien visible";
   }
   return "recevoir ou utiliser la prestation, avec son geste ou son matériel distinctif clairement visible";
 }
@@ -2886,17 +2899,26 @@ function getServiceHeroSubject(prestation){
   if(prestation==="Luminothérapie PSIO®"){
     return "une personne adulte confortablement installée, portant les lunettes PSiO® correctement ajustées sur le visage";
   }
+  if(prestation==="Biorésonance quantique"){
+    return "une personne adulte confortablement installée, le boîtier Healy visiblement posé sur la peau ou tenu à proximité du corps";
+  }
   return "";
 }
 function getServiceGoldAccent(prestation){
   if(prestation==="Luminothérapie PSIO®"){
     return "reflets d'or métallique noble sur le visage, le vêtement et les lunettes PSiO® recolorées en noir profond et or noble, sans modifier leur forme officielle";
   }
+  if(prestation==="Biorésonance quantique"){
+    return "reflets d'or métallique noble sur le vêtement et le boîtier Healy recoloré en noir profond et or noble, sans modifier sa forme officielle";
+  }
   return "";
 }
 function getServiceVisibleCharacteristic(prestation){
   if(prestation==="Luminothérapie PSIO®"){
     return "lunettes PSiO® de forme officielle exacte, correctement portées sur le visage et lisibles au premier regard, recolorées en noir profond et or noble SDZ";
+  }
+  if(prestation==="Biorésonance quantique"){
+    return "boîtier Healy de forme officielle exacte (carré à coins arrondis, base élargie), lisible au premier regard, recoloré en noir profond et or noble SDZ";
   }
   return "";
 }
@@ -2908,6 +2930,17 @@ const PSIO_COMPOSITION_INTERDITE = [
   "autres lunettes ou casque que le modèle PSiO® officiel fourni en référence",
   "lunettes PSiO® générées dans une palette autre que noir profond et or noble SDZ",
   "forme, proportions ou commandes des lunettes PSiO® modifiées",
+  "halo circulaire ou auréole autour de la tête",
+  "faisceau lumineux ajouté",
+  "particules dorées, poussière dorée ou halo de poussières",
+  "main ou geste secondaire inventé",
+];
+const HEALY_COMPOSITION_INTERDITE = [
+  "boîtier tenu ou positionné d'une façon qui ne correspond pas à son usage réel",
+  "autre dispositif électronique ou appareil que le modèle Healy officiel fourni en référence",
+  "boîtier Healy généré dans une palette autre que noir profond et or noble SDZ",
+  "forme, proportions ou commandes du boîtier Healy modifiées",
+  "inscriptions, marques ou logos du fabricant reproduits sur le boîtier",
   "halo circulaire ou auréole autour de la tête",
   "faisceau lumineux ajouté",
   "particules dorées, poussière dorée ou halo de poussières",
@@ -2960,24 +2993,27 @@ function validateAndFixBriefV2(brief, allowed, exclusions, typeCreationImpose, p
   fixed.compositionInterdite = [...new Set(compositionSansHistorique)];
   if(fixed.typeCreation !== typeCreationImpose){ fixed.typeCreation = typeCreationImpose; corrected = true; }
 
-  // Le matériel PSiO® doit rester exact quel que soit le registre choisi. Cette normalisation
-  // ne dépend donc pas du type "affiche_fantastique" : Luxe silencieux et tous les futurs styles
-  // bénéficient du même verrou produit, de la même posture de séance et des mêmes exclusions.
+  // Le matériel produit (PSiO®, Healy...) doit rester exact quel que soit le registre choisi. Cette
+  // normalisation ne dépend donc pas du type "affiche_fantastique" : Luxe silencieux et tous les
+  // futurs styles bénéficient du même verrou produit, de la même posture de séance et des mêmes
+  // exclusions. Chaque prestation à verrou produit ajoute sa propre liste d'interdits.
   const isPsio = prestation==="Luminothérapie PSIO®";
+  const isHealy = prestation==="Biorésonance quantique";
   fixed.miseEnScene = fixed.miseEnScene || {};
-  if(isPsio){
-    const sujetPsio = getServiceHeroSubject(prestation);
-    const actionPsio = getServiceHeroAction(prestation);
-    const momentPsio = getServiceVisualMoment(prestation);
-    const orPsio = getServiceGoldAccent(prestation);
-    const caracteristiquePsio = getServiceVisibleCharacteristic(prestation);
-    fixed.compositionInterdite = [...new Set([...fixed.compositionInterdite, ...PSIO_COMPOSITION_INTERDITE])];
-    if(fixed.miseEnScene.sujetPrincipal!==sujetPsio){ fixed.miseEnScene.sujetPrincipal = sujetPsio; corrected = true; }
-    if(fixed.miseEnScene.action!==actionPsio){ fixed.miseEnScene.action = actionPsio; corrected = true; }
-    if(fixed.momentCinematographique!==momentPsio){ fixed.momentCinematographique = momentPsio; corrected = true; }
-    if(fixed.elementOr!==orPsio){ fixed.elementOr = orPsio; corrected = true; }
-    if(fixed.caracteristiquePrestationVisible!==caracteristiquePsio){
-      fixed.caracteristiquePrestationVisible = caracteristiquePsio;
+  if(isPsio || isHealy){
+    const sujetProduit = getServiceHeroSubject(prestation);
+    const actionProduit = getServiceHeroAction(prestation);
+    const momentProduit = getServiceVisualMoment(prestation);
+    const orProduit = getServiceGoldAccent(prestation);
+    const caracteristiqueProduit = getServiceVisibleCharacteristic(prestation);
+    const listeInterdits = isPsio ? PSIO_COMPOSITION_INTERDITE : HEALY_COMPOSITION_INTERDITE;
+    fixed.compositionInterdite = [...new Set([...fixed.compositionInterdite, ...listeInterdits])];
+    if(fixed.miseEnScene.sujetPrincipal!==sujetProduit){ fixed.miseEnScene.sujetPrincipal = sujetProduit; corrected = true; }
+    if(fixed.miseEnScene.action!==actionProduit){ fixed.miseEnScene.action = actionProduit; corrected = true; }
+    if(fixed.momentCinematographique!==momentProduit){ fixed.momentCinematographique = momentProduit; corrected = true; }
+    if(fixed.elementOr!==orProduit){ fixed.elementOr = orProduit; corrected = true; }
+    if(fixed.caracteristiquePrestationVisible!==caracteristiqueProduit){
+      fixed.caracteristiquePrestationVisible = caracteristiqueProduit;
       corrected = true;
     }
     if(fixed.presenceSoin!=="visible_editoriale"){ fixed.presenceSoin = "visible_editoriale"; corrected = true; }
@@ -3700,6 +3736,10 @@ function buildFixedGuardrailBlocks(brief, platform){
     brief.sujetPrincipal, brief.action, brief.caracteristiquePrestationVisible,
     brief.caracteristiqueSourcePrestation,
   ].filter(Boolean).join(" "));
+  const isHealy = /healy/i.test([
+    brief.sujetPrincipal, brief.action, brief.caracteristiquePrestationVisible,
+    brief.caracteristiqueSourcePrestation,
+  ].filter(Boolean).join(" "));
   const charte = CHARTE_SDZ_SYNTHESE;
   const soinPhrase = brief.presenceSoin==="aucune" ? "Aucune scène de soin n'est visible."
     : brief.presenceSoin==="suggeree" ? "La sensation du soin est suggérée, jamais son déroulé technique."
@@ -3723,6 +3763,8 @@ function buildFixedGuardrailBlocks(brief, platform){
     : "";
   const psioProductGuard = isPsio
     ? "VERROU PRODUIT — RETOUCHE À PARTIR DE L'IMAGE 1 : les trois images fournies décrivent ensemble un seul et même dispositif officiel. L'image 1, vue de profil portée, est la photographie de base à transformer : conserve exactement la pose, l'angle de tête, l'ajustement sur le visage, la silhouette, les proportions, la grande surface optique incurvée, les boîtiers latéraux, le petit écran, les commandes et les câbles. Ne recrée pas le dispositif sur une autre personne. Ne change que le décor, l'éclairage éditorial et la couleur des surfaces du dispositif. Image 2 : vue de face portée, référence secondaire pour confirmer la visière incurvée et le pont nasal. Image 3 : produit isolé, référence secondaire pour confirmer l'écran, les commandes et les câbles. Recolore uniquement les surfaces blanches, bleues et cyan du dispositif en noir profond et or métallique noble SDZ, sans modifier leur géométrie, leur perspective ni leur position. Ignore et ne recopie aucune inscription, marque, mot, lettre, chiffre ou pictogramme visible sur le dispositif ou dans les références : toutes les surfaces du produit doivent rester vierges et sans marque dans l'image brute. Aucun autre type de lunettes, masque, casque ou visière n'est admis. Change uniquement le fond, la lumière et la palette ; conserve le sujet et le produit de l'image 1 inchangés dans leur forme et leur placement."
+    : isHealy
+    ? "VERROU PRODUIT — RETOUCHE À PARTIR DE L'IMAGE 1 : les deux images fournies décrivent le même dispositif officiel Healy. L'image 1, vue de face nette sur fond blanc, est la photographie de base à transformer : conserve exactement la forme carrée à coins arrondis, la base élargie, l'écran et les icônes (bluetooth, alimentation, batterie, USB, plus/moins) avec leurs proportions exactes. Image 2 : photographie réelle du dispositif avec son accessoire attaché, référence secondaire pour confirmer le volume et la silhouette complète en trois dimensions. Recolore uniquement les surfaces blanches et les teintes bleues, roses, vertes et turquoise du boîtier en noir profond et or métallique noble SDZ, sans modifier sa géométrie, sa perspective ni sa position. Ignore et ne recopie aucune inscription, marque, mot, lettre, chiffre, logo ou étiquette visible sur le dispositif ou dans les références : toutes les surfaces du produit doivent rester vierges et sans marque dans l'image brute. Aucun autre dispositif électronique n'est admis. Change uniquement le fond, la lumière et la palette ; conserve le produit de l'image 1 inchangé dans sa forme et son placement."
     : "";
   const registryGuard = buildActiveRegistryDecorContract(brief.registresActifs);
   return `${charte} ${soinPhrase} Noir profond comme écrin, jamais comme sous-exposition. Sujet, geste et matériel lisibles au premier regard. Or métallique noble, jamais orange, ambre, feu ou incendie. Énergie ascendante et désirable. ${registryGuard ? `CONTRAT DE VISIBILITÉ DES REGISTRES : ${registryGuard}. Le décor doit être immédiatement perceptible derrière et autour du sujet ; une grande surface noire uniforme ou vide constitue un échec.` : ""} L'ombre ou la fragmentation ne peuvent exister qu'en opposition secondaire clairement dépassée par le sujet ; jamais horreur, menace, désespoir sans issue, personnage encapuchonné menaçant, visage central mutilé, crypte, rituel, sorcellerie, astrologie ou signes zodiacaux. Aucun texte n'est incrusté dans l'image ; une zone visuellement calme reste prête à recevoir le texte ajouté ensuite. ${storyGuard} ${psioProductGuard} ${logoPhrase}${eviter ? ` À éviter absolument : ${eviter}.` : ""}
@@ -3836,12 +3878,43 @@ async function getOfficialPsioReferenceSelections(){
   })));
   return _officialPsioReferencesCache;
 }
+/* Jeu de références produit Healy — même principe que PSiO® : deux vues complémentaires
+   verrouillent la géométrie (face nette + photo réelle avec accessoire). */
+const OFFICIAL_HEALY_REFERENCES = [
+  /* L'ordre est contractuel pour /images/edits : la vue de face nette est la photographie de
+     base, la seconde ne sert qu'à confirmer le volume 3D du dispositif. */
+  { id:"official-healy-front-v1", path:"/assets/healy-official-front.jpg", role:"base_face_nette_a_preserver" },
+  { id:"official-healy-real-v1", path:"/assets/healy-official-real.jpg", role:"controle_volume_3d_accessoire" },
+];
+const OFFICIAL_HEALY_REFERENCE_IDS = new Set(OFFICIAL_HEALY_REFERENCES.map(r=>r.id));
+let _officialHealyReferencesCache = null;
+async function getOfficialHealyReferenceSelections(){
+  if(_officialHealyReferencesCache) return _officialHealyReferencesCache;
+  _officialHealyReferencesCache = await Promise.all(OFFICIAL_HEALY_REFERENCES.map(async ref=>({
+    id: ref.id,
+    dataUrl: await fetchImageAsDataUrl(ref.path),
+    metadata: {
+      productReference: true,
+      prestation: "Biorésonance quantique",
+      referenceRole: ref.role,
+    },
+  })));
+  return _officialHealyReferencesCache;
+}
 async function resolveReferenceSelectionsByIds(ids){
   const resolved = [];
   for(const id of (ids||[])){
     if(OFFICIAL_PSIO_REFERENCE_IDS.has(id)){
       try{
         const official = await getOfficialPsioReferenceSelections();
+        const match = official.find(r=>r.id===id);
+        if(match) resolved.push(match);
+      }catch(e){}
+      continue;
+    }
+    if(OFFICIAL_HEALY_REFERENCE_IDS.has(id)){
+      try{
+        const official = await getOfficialHealyReferenceSelections();
         const match = official.find(r=>r.id===id);
         if(match) resolved.push(match);
       }catch(e){}
@@ -4292,6 +4365,10 @@ function stripPsioBrandFromImagePrompt(prompt){
   return String(prompt||"")
     .replace(/PSiO(?:®)?/gi, "dispositif officiel de luminothérapie");
 }
+function stripHealyBrandFromImagePrompt(prompt){
+  return String(prompt||"")
+    .replace(/Healy/gi, "dispositif officiel de biorésonance");
+}
 
 /* ---------- CREATIVE PLANNER V2 — fonction charnière ----------
    Traduit un brief V2 (validé par validateAndFixBriefV2) vers la forme exacte attendue par tout
@@ -4396,6 +4473,16 @@ async function prepareCreativeBrief(inputs){
       blockingError = blockingError || "Référence produit officielle PSiO® indisponible — génération bloquée avant l'appel image pour éviter d'inventer d'autres lunettes.";
       referenceSelections = [];
     }
+  }else if(prestation==="Biorésonance quantique"){
+    try{
+      // Seules les deux vues produit Healy sont autorisées : aucune référence artistique ou
+      // ancienne génération ne doit influencer la forme du dispositif officiel.
+      referenceSelections = await getOfficialHealyReferenceSelections();
+    }catch(err){
+      referenceError = `Référence officielle Healy indisponible : ${String(err.message||err)}`;
+      blockingError = blockingError || "Référence produit officielle Healy indisponible — génération bloquée avant l'appel image pour éviter d'inventer un autre dispositif.";
+      referenceSelections = [];
+    }
   }else{
     try{ referenceSelections = selectReferencesForBrief(brief, platform, 2) || []; }
     catch(err){ referenceError = `Sélection de référence impossible, génération sans référence : ${String(err.message||err)}`; referenceSelections = []; }
@@ -4406,6 +4493,8 @@ async function prepareCreativeBrief(inputs){
   const built = await buildFinalImagePrompt(brief, platform, aspectKey, !!isCampaign, { blockingError, experimentalMode: inputs.experimentalMode || null });
   const imagePrompt = prestation==="Luminothérapie PSIO®"
     ? stripPsioBrandFromImagePrompt(built.prompt)
+    : prestation==="Biorésonance quantique"
+    ? stripHealyBrandFromImagePrompt(built.prompt)
     : built.prompt;
   const daWriterUsed = built.daWriterUsed;
   const daWriterFallbackReason = built.daWriterFallbackReason;
@@ -4460,14 +4549,14 @@ async function finalizeGeneratedImage(flow){
   const logoInScene = false;
   /* 1) format officiel de la plateforme */
   let dataUrl = await normalizeToPlatformFormat(flow.dataUrl, platform);
-  /* 2) accroche : uniquement là où la spec V1.0 l'autorise (Instagram/Facebook), uniquement si le
-        Planner a jugé utile de la remplir. Le texte vient du contenu généré, jamais de GPT-image. */
-  const contentHeadline = flow.content && typeof flow.content.imageHeadline==="string"
-    ? flow.content.imageHeadline.trim() : "";
-  const storyHeadline = platform==="Story" && flow.brief && typeof flow.brief.texteImage==="string"
+  /* 2) accroche : généralisée (demande explicite) à Instagram/Facebook/Story pour TOUTE prestation,
+        sur le même modèle structuré "NOM COURT | sous-ligne" que PSiO/Story — plus de contentHeadline
+        générique pour Instagram/Facebook. Le texte vient du brief créatif (texteImage), jamais de
+        GPT-image. Repli identique si texteImage est vide. */
+  const structuredHeadline = flow.brief && typeof flow.brief.texteImage==="string"
     ? (flow.brief.texteImage.trim() || `${String(flow.brief.messageCentral||"RÉVÉLEZ-VOUS").split(/\s+/).slice(0,5).join(" ")} | UNE EXPÉRIENCE TRANSFORMATRICE`) : "";
-  const headline = PLATFORM_OVERLAY[platform]==="accroche" ? contentHeadline
-    : PLATFORM_OVERLAY[platform]==="fort" ? storyHeadline : "";
+  const headline = (PLATFORM_OVERLAY[platform]==="accroche" || PLATFORM_OVERLAY[platform]==="fort")
+    ? structuredHeadline : "";
   /* 3) logo : appliqué sauf s'il est déjà dans la scène. Un seul appel, même fonction pour les
         deux besoins — aucune duplication, aucun chemin parallèle. */
   const needLogo = logoRequiredFor(platform) && !logoInScene;
@@ -4524,8 +4613,9 @@ function storeFinalizedCreativeFlow(flow, finalized){
    Garde-fou : une accroche déjà incrustée n'est jamais superposée une seconde fois. */
 async function applyHeadlineToItem(item){
   if(!item || !item.imageDataUrl || item.headlineApplied) return false;
-  const headline = item.contentData && typeof item.contentData.imageHeadline==="string" ? item.contentData.imageHeadline.trim() : "";
-  if(!headline || PLATFORM_OVERLAY[item.platform]!=="accroche") return false;
+  const headline = item.creativeBrief && typeof item.creativeBrief.texteImage==="string" ? item.creativeBrief.texteImage.trim() : "";
+  const overlayKind = PLATFORM_OVERLAY[item.platform];
+  if(!headline || (overlayKind!=="accroche" && overlayKind!=="fort")) return false;
   const composited = await compositeBrandSignature(item.imageDataUrl, item.platform, {
     headline, withLogo:false, brief:item.creativeBrief||null, analysis:item.analysis||null
   });
@@ -4543,6 +4633,8 @@ async function confirmAndGenerateImage(prepared, onStatus, cancelToken){
   const { inputs, brief, referenceSelections } = prepared;
   const { platform, mission, size } = inputs;
   const psioReferenceRequired = inputs.prestation==="Luminothérapie PSIO®";
+  const healyReferenceRequired = inputs.prestation==="Biorésonance quantique";
+  const productReferenceRequired = psioReferenceRequired || healyReferenceRequired;
 
   if(prepared.blockingError){
     return {
@@ -4555,6 +4647,13 @@ async function confirmAndGenerateImage(prepared, onStatus, cancelToken){
     return {
       ...prepared, phase:"image_failed", ok:false, stage:"preflight",
       error:"Référence produit officielle PSiO® absente : génération bloquée avant l'appel image. Aucun crédit image n'a été consommé.",
+    };
+  }
+  const healyReferenceCount=(referenceSelections||[]).filter(r=>OFFICIAL_HEALY_REFERENCE_IDS.has(r.id)&&r.dataUrl).length;
+  if(healyReferenceRequired && healyReferenceCount!==OFFICIAL_HEALY_REFERENCES.length){
+    return {
+      ...prepared, phase:"image_failed", ok:false, stage:"preflight",
+      error:"Référence produit officielle Healy absente : génération bloquée avant l'appel image. Aucun crédit image n'a été consommé.",
     };
   }
 
@@ -4575,9 +4674,9 @@ async function confirmAndGenerateImage(prepared, onStatus, cancelToken){
   try{
     const genResult = await callProviderImage(prepared.imagePrompt, size, undefined, onStatus, cancelToken, {
       smartReferenceDataUrls,
-      referenceRequired: psioReferenceRequired,
-      model: psioReferenceRequired ? "gpt-image-2" : undefined,
-      quality: psioReferenceRequired ? "high" : undefined,
+      referenceRequired: productReferenceRequired,
+      model: productReferenceRequired ? "gpt-image-2" : undefined,
+      quality: productReferenceRequired ? "high" : undefined,
       onJobCreated: prepared.onImageJobCreated,
     });
     dataUrl = genResult.dataUrl; usedReference = genResult.usedReference; referenceFallbackReason = genResult.referenceFallbackReason; logoSentAsReference = !!genResult.logoSentAsReference; imageUsage = genResult.imageUsage || null;
@@ -4586,17 +4685,17 @@ async function confirmAndGenerateImage(prepared, onStatus, cancelToken){
     // automatique d'un appel image payant).
     return { ...prepared, phase:"image_failed", ok:false, stage:"image", error:`Échec de la génération d'image : ${String(err.message||err)}` };
   }
-  if(psioReferenceRequired && !usedReference){
+  if(productReferenceRequired && !usedReference){
     return {
       ...prepared, phase:"image_failed", ok:false, stage:"image",
-      error:`Image PSiO® refusée : la référence produit officielle n'a pas été utilisée${referenceFallbackReason ? ` (${referenceFallbackReason})` : ""}.`,
+      error:`Image refusée : la référence produit officielle (${psioReferenceRequired ? "PSiO®" : "Healy"}) n'a pas été utilisée${referenceFallbackReason ? ` (${referenceFallbackReason})` : ""}.`,
     };
   }
 
   onStatus && onStatus("Analyse de l'image obtenue...");
   let analysis, analysisError = null;
   try{
-    const productReferences=(referenceSelections||[]).filter(r=>OFFICIAL_PSIO_REFERENCE_IDS.has(r.id)&&r.dataUrl);
+    const productReferences=(referenceSelections||[]).filter(r=>(OFFICIAL_PSIO_REFERENCE_IDS.has(r.id)||OFFICIAL_HEALY_REFERENCE_IDS.has(r.id))&&r.dataUrl);
     analysis = await analyzeGeneratedImage(dataUrl, brief, {
       productReferenceDataUrls:productReferences.map(r=>r.dataUrl),
     });
@@ -6432,8 +6531,13 @@ function buildPostTab(){
           (flow.referenceSelections||[]).filter(r=>OFFICIAL_PSIO_REFERENCE_IDS.has(r.id)).length===OFFICIAL_PSIO_REFERENCES.length
             ? "3 vues chargées et obligatoires ✓" : "Jeu incomplet — génération bloquée"));
       }
+      if(flow.inputs && flow.inputs.prestation==="Biorésonance quantique"){
+        body.appendChild(row("Référence produit Healy officielle",
+          (flow.referenceSelections||[]).filter(r=>OFFICIAL_HEALY_REFERENCE_IDS.has(r.id)).length===OFFICIAL_HEALY_REFERENCES.length
+            ? "2 vues chargées et obligatoires ✓" : "Jeu incomplet — génération bloquée"));
+      }
       if(flow.phase!=="prepared") body.appendChild(row("Référence réellement utilisée", flow.usedReference ? "Oui ✓" : (flow.referenceFallbackReason ? "Non — repli : "+flow.referenceFallbackReason : "Non demandée")));
-      body.appendChild(row("Modèle", flow.inputs?.prestation==="Luminothérapie PSIO®"
+      body.appendChild(row("Modèle", (flow.inputs?.prestation==="Luminothérapie PSIO®"||flow.inputs?.prestation==="Biorésonance quantique")
         ? "gpt-image-2 · retouche produit verrouillée · qualité haute"
         : "gpt-image-1"));
       body.appendChild(row("Rédacteur DA", flow.daWriterUsed ? "Utilisé ✓ (prompt narratif)" : (flow.daWriterFallbackReason ? "Repli sur l'assemblage classique — "+flow.daWriterFallbackReason : "Désactivé")));
@@ -6516,7 +6620,7 @@ function buildPostTab(){
         const flow = await confirmAndGenerateImage(state.lastCreativeFlow, (label)=>{ imgApiStatus.textContent = label; }, cancelToken);
         state.lastCreativeFlow = flow;
         if(!flow.ok){
-          logToLab({ provider:"OpenAI", model:flow.inputs?.prestation==="Luminothérapie PSIO®"?"gpt-image-2":"gpt-image-1", type:"image", prompt: flow.imagePrompt, promptHash: hashPrompt(flow.imagePrompt||""), cost:null, durationMs: Date.now()-t0, status:"refused", reason: flow.error });
+          logToLab({ provider:"OpenAI", model:(flow.inputs?.prestation==="Luminothérapie PSIO®"||flow.inputs?.prestation==="Biorésonance quantique")?"gpt-image-2":"gpt-image-1", type:"image", prompt: flow.imagePrompt, promptHash: hashPrompt(flow.imagePrompt||""), cost:null, durationMs: Date.now()-t0, status:"refused", reason: flow.error });
           imgApiStatus.textContent = flow.error;
           renderCreativeInspector();
           confirmBtn.disabled = false; imgCancelBtn.style.display = "none"; activeCancelToken = null;
@@ -6528,7 +6632,7 @@ function buildPostTab(){
         const logoApplied=finalized.logoApplied;
         vfTrace("6-postImageId-ecrit", { postImageId: stored.id, imagesApres: state.images.length,
           persiste: LS.get("vf-post-image-id", null) });
-        logToLab({ provider:"OpenAI", model:flow.inputs?.prestation==="Luminothérapie PSIO®"?"gpt-image-2":"gpt-image-1", type:"image", prompt: flow.imagePrompt, promptHash: hashPrompt(flow.imagePrompt), cost:null, durationMs: Date.now()-t0, status:"accepted" });
+        logToLab({ provider:"OpenAI", model:(flow.inputs?.prestation==="Luminothérapie PSIO®"||flow.inputs?.prestation==="Biorésonance quantique")?"gpt-image-2":"gpt-image-1", type:"image", prompt: flow.imagePrompt, promptHash: hashPrompt(flow.imagePrompt), cost:null, durationMs: Date.now()-t0, status:"accepted" });
 
         let referenceLabel;
         if(flow.usedReference) referenceLabel = "Référence visuelle utilisée ✓";
@@ -6581,7 +6685,7 @@ function buildPostTab(){
       relaunchAnalysisBtn.disabled = true;
       try{
         const wasQuarantined=!!flow.finalizationError;
-        const productReferences=(flow.referenceSelections||[]).filter(r=>OFFICIAL_PSIO_REFERENCE_IDS.has(r.id)&&r.dataUrl);
+        const productReferences=(flow.referenceSelections||[]).filter(r=>(OFFICIAL_PSIO_REFERENCE_IDS.has(r.id)||OFFICIAL_HEALY_REFERENCE_IDS.has(r.id))&&r.dataUrl);
         const analysis = await analyzeGeneratedImage(flow.dataUrl, flow.brief, {
           productReferenceDataUrls:productReferences.map(r=>r.dataUrl),
         });
@@ -6616,11 +6720,11 @@ function buildPostTab(){
           reader.onerror=()=>reject(new Error("Lecture de l'image téléchargée impossible."));
           reader.readAsDataURL(file);
         });
-        const productReferences=(flow.referenceSelections||[]).filter(r=>OFFICIAL_PSIO_REFERENCE_IDS.has(r.id)&&r.dataUrl);
+        const productReferences=(flow.referenceSelections||[]).filter(r=>(OFFICIAL_PSIO_REFERENCE_IDS.has(r.id)||OFFICIAL_HEALY_REFERENCE_IDS.has(r.id))&&r.dataUrl);
         imgApiStatus.textContent="Contrôle de l'image brute téléchargée...";
         flow.dataUrl=rawDataUrl;
         flow.importedRaw=true;
-        flow.usedReference=flow.inputs?.prestation==="Luminothérapie PSIO®";
+        flow.usedReference=(flow.inputs?.prestation==="Luminothérapie PSIO®"||flow.inputs?.prestation==="Biorésonance quantique");
         flow.referenceFallbackReason=null;
         flow.analysis=await analyzeGeneratedImage(rawDataUrl,flow.brief,{
           productReferenceDataUrls:productReferences.map(r=>r.dataUrl),
