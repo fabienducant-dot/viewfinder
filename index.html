@@ -6338,10 +6338,9 @@ function buildPostTab(){
       confirmBtn.style.display = "none"; regenTextBtn.style.display = "none";
       relaunchAnalysisBtn.style.display = "none"; recoverRawBtn.style.display = "none";
       if(!flow) return;
-      const isPsio=flow.inputs&&flow.inputs.prestation==="Luminothérapie PSIO®";
       if(flow.phase==="prepared" && !flow.blockingError){
         confirmBtn.style.display = "inline-block";
-        if(isPsio) recoverRawBtn.style.display = "inline-block";
+        recoverRawBtn.style.display = "inline-block";
       }
       if(flow.phase==="completed"){
         regenTextBtn.style.display = "inline-block";
@@ -6619,7 +6618,8 @@ function buildPostTab(){
         const productReferences=(flow.referenceSelections||[]).filter(r=>OFFICIAL_PSIO_REFERENCE_IDS.has(r.id)&&r.dataUrl);
         imgApiStatus.textContent="Contrôle de l'image brute téléchargée...";
         flow.dataUrl=rawDataUrl;
-        flow.usedReference=true;
+        flow.importedRaw=true;
+        flow.usedReference=flow.inputs?.prestation==="Luminothérapie PSIO®";
         flow.referenceFallbackReason=null;
         flow.analysis=await analyzeGeneratedImage(rawDataUrl,flow.brief,{
           productReferenceDataUrls:productReferences.map(r=>r.dataUrl),
@@ -7639,7 +7639,7 @@ function buildApiTab(){
 ============================================================ */
 
 /* ---- Versionnage ---- */
-const VF_VERSION = "2.2.18-lockup-seamless-scrim"; // semver manuelle : à incrémenter à chaque déploiement touchant le moteur
+const VF_VERSION = "2.2.19-raw-finalizer"; // semver manuelle : à incrémenter à chaque déploiement touchant le moteur
 /* Hash déterministe de l'état des règles : deux runs au même hash = strictement les mêmes règles.
    Couvre : modules (contenu+état), UNIVERS_SDZ, charte condensée, garde-fou sécurité. */
 function computeModulesHash(){
