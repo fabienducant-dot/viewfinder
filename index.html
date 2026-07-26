@@ -7554,7 +7554,6 @@ function buildCalendarTab(){
       return (cb.createdAt||0)-(ca.createdAt||0);
     });
 
-  const CAMPAIGN_GENERATION_ORDER = ["Instagram","Facebook","Google Business","Story","Article Blog Wix"];
   campaignIds.forEach(cid=>{
     const items = state.scheduled.filter(p=>p.campaignId===cid);
     const topic = items[0].campaignTopic || items[0].topic || "(sans thème)";
@@ -7562,41 +7561,69 @@ function buildCalendarTab(){
 
     const batchBtn = el("button",{class:"btn-secondary", style:"margin:4px 0 8px;"}, [svgIcon(ICONS.wand,14), el("span",{},"🚀 Générer les 5 (images + textes)")]);
     const batchCancelBtn = el("button",{class:"btn-secondary", style:"margin:4px 0 8px 8px;display:none;"}, "Annuler");
-    const batchStatus = el("p",{style:"font-size:12px;color:var(--muted2);margin:0 0 8px;min-height:16px;"},"");
+    const statusLines = {};
+    const batchStatusBox = el("div",{style:"font-size:12px;color:var(--muted2);margin:0 0 8px;"});
     let batchCancelToken = null;
+    function renderBatchStatus(){
+      batchStatusBox.innerHTML = "";
+      PLATFORMS.forEach(p=>{
+        if(statusLines[p]) batchStatusBox.appendChild(el("div",{}, `${p} : ${statusLines[p]}`));
+      });
+    }
     batchCancelBtn.addEventListener("click", ()=>{ if(batchCancelToken) batchCancelToken.cancelled = true; });
     batchBtn.addEventListener("click", async ()=>{
-      const missing = items.filter(it=> !it.imageDataUrl || (it.textPrompt && it.platform!=="Story" && (!it.textFinal||!it.textFinal.trim())));
-      if(!missing.length){ batchStatus.textContent = "Tout est déjà généré pour cette campagne ✓"; return; }
-      if(!confirm(`Lancer la génération de ce qui manque pour les ${items.length} formats de cette campagne ? Ceci consomme du crédit API.`)) return;
+      const needsWork = it => !it.imageDataUrl || (it.textPrompt && it.platform!=="Story" && (!it.textFinal||!it.textFinal.trim()));
+      const missing = items.filter(needsWork);
+      if(!missing.length){ statusLines._all = "Tout est déjà généré pour cette campagne ✓"; renderBatchStatus(); return; }
+      if(!confirm(`Lancer en parallèle la génération de ce qui manque pour les ${items.length} formats de cette campagne ? Ceci consomme du crédit API.`)) return;
       batchBtn.disabled = true; batchCancelBtn.style.display = "inline-block";
       const cancelToken = { cancelled:false };
       batchCancelToken = cancelToken;
-      const ordered = items.slice().sort((a,b)=> CAMPAIGN_GENERATION_ORDER.indexOf(a.platform)-CAMPAIGN_GENERATION_ORDER.indexOf(b.platform));
-      let doneCount = 0;
-      for(const it of ordered){
-        if(cancelToken.cancelled){ batchStatus.textContent = `Annulé après ${doneCount}/${ordered.length}.`; break; }
+      Object.keys(statusLines).forEach(k=>delete statusLines[k]);
+      renderBatchStatus();
+
+      /* Traite un post : image (si besoin) puis texte (si besoin), MÊMES fonctions que le bouton
+         individuel. Chaque post a sa propre ligne de statut, mise à jour en direct. */
+      async function processItem(it){
         try{
           if(!it.imageDataUrl){
-            await generateImageForCampaignItem(it, (label)=>{ batchStatus.textContent = `${it.platform} : ${label}`; }, cancelToken);
+            await generateImageForCampaignItem(it, (label)=>{ statusLines[it.platform] = label; renderBatchStatus(); }, cancelToken);
           }
           if(it.textPrompt && it.platform!=="Story" && (!it.textFinal||!it.textFinal.trim())){
-            batchStatus.textContent = `${it.platform} : génération du texte...`;
+            statusLines[it.platform] = "génération du texte..."; renderBatchStatus();
             await generateTextForCampaignItem(it);
           }
-          doneCount++;
-          batchStatus.textContent = `${it.platform} traité ✓ (${doneCount}/${ordered.length})`;
+          statusLines[it.platform] = "terminé ✓";
         }catch(err){
           const cancelled = String(err.message||err)==="__CANCELLED__";
-          if(cancelled){ batchStatus.textContent = `Annulé après ${doneCount}/${ordered.length}.`; break; }
-          batchStatus.textContent = `${it.platform} : échec (${err.message||err}) — passage au suivant.`;
+          statusLines[it.platform] = cancelled ? "annulé." : `échec (${err.message||err})`;
         }
+        renderBatchStatus();
       }
-      if(!cancelToken.cancelled) batchStatus.textContent = `Terminé : ${doneCount}/${ordered.length} formats traités ✓`;
+
+      const instagramItem = items.find(it=>it.platform==="Instagram");
+      const facebookItem = items.find(it=>it.platform==="Facebook");
+      const independentItems = items.filter(it=> it.platform!=="Instagram" && it.platform!=="Facebook" && needsWork(it));
+
+      /* Instagram + les 3 formats indépendants (Google Business, Story, Wix) partent EN MÊME
+         TEMPS. Facebook ne dépend que d'Instagram — il démarre dès qu'Instagram est terminé, sans
+         attendre les 3 autres, qui continuent en parallèle de leur côté. */
+      const independentTasks = independentItems.map(it=>processItem(it));
+      let instagramThenFacebook = Promise.resolve();
+      if(instagramItem && needsWork(instagramItem)){
+        instagramThenFacebook = processItem(instagramItem).then(async ()=>{
+          if(facebookItem && needsWork(facebookItem)) await processItem(facebookItem);
+        });
+      }else if(facebookItem && needsWork(facebookItem)){
+        instagramThenFacebook = processItem(facebookItem);
+      }
+
+      await Promise.allSettled([instagramThenFacebook, ...independentTasks]);
+
       batchBtn.disabled = false; batchCancelBtn.style.display = "none"; batchCancelToken = null;
       renderMain();
     });
-    frag.appendChild(batchBtn); frag.appendChild(batchCancelBtn); frag.appendChild(batchStatus);
+    frag.appendChild(batchBtn); frag.appendChild(batchCancelBtn); frag.appendChild(batchStatusBox);
 
     items.forEach(item=> frag.appendChild(buildCalendarCard(item, true)));
   });
