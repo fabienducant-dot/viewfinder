@@ -2777,7 +2777,16 @@ function validateAndFixBriefV2(brief, allowed, exclusions, typeCreationImpose, p
     corrected = true;
   }
   if(!Array.isArray(fixed.compositionInterdite)) fixed.compositionInterdite = [];
-  fixed.compositionInterdite = [...new Set([...fixed.compositionInterdite, ...exclusions])];
+  /* Les exclusions d'historique servent uniquement à demander de la diversité au Planner.
+     Elles décrivent souvent une ancienne scène complète et peuvent contenir des invariants de la
+     prestation (posture PSiO, cadrage Story, geste réel). Elles ne doivent donc jamais devenir un
+     negative prompt final. On retire aussi les copies que le Planner aurait recopiées telles quelles. */
+  const exclusionHistoriqueKeys = new Set((exclusions||[]).map(normalizeForContainmentCheck).filter(Boolean));
+  const compositionSansHistorique = fixed.compositionInterdite.filter(item=>
+    !exclusionHistoriqueKeys.has(normalizeForContainmentCheck(item))
+  );
+  if(compositionSansHistorique.length!==fixed.compositionInterdite.length) corrected = true;
+  fixed.compositionInterdite = [...new Set(compositionSansHistorique)];
   if(fixed.typeCreation !== typeCreationImpose){ fixed.typeCreation = typeCreationImpose; corrected = true; }
 
   // Le matériel PSiO® doit rester exact quel que soit le registre choisi. Cette normalisation
@@ -7301,7 +7310,7 @@ function buildApiTab(){
 ============================================================ */
 
 /* ---- Versionnage ---- */
-const VF_VERSION = "2.2.5-register-depth"; // semver manuelle : à incrémenter à chaque déploiement touchant le moteur
+const VF_VERSION = "2.2.6-negative-clean"; // semver manuelle : à incrémenter à chaque déploiement touchant le moteur
 /* Hash déterministe de l'état des règles : deux runs au même hash = strictement les mêmes règles.
    Couvre : modules (contenu+état), UNIVERS_SDZ, charte condensée, garde-fou sécurité. */
 function computeModulesHash(){
