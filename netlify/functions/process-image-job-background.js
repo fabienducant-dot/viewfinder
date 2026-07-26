@@ -14,6 +14,7 @@
    complète également ce garde-fou : un job déjà completed/failed/processing-récent n'est jamais
    retraité. */
 const { getStore } = require("@netlify/blobs");
+const { applyImageEditOptions } = require("./_shared/openai-image-edit-options");
 
 const PROCESSING_RECENT_THRESHOLD_MS = 14 * 60 * 1000; // en dessous, on suppose qu'une autre
                                                           // invocation traite déjà ce job
@@ -58,16 +59,12 @@ function dataUrlToBlob(dataUrl){
   return new Blob([binary], { type: contentType });
 }
 
-async function generateWithReferenceImages({ key, prompt, size, model, referenceImageUrls, referenceImageData }){
+async function generateWithReferenceImages({ key, prompt, size, model, quality, referenceImageUrls, referenceImageData }){
   const form = new FormData();
-  form.append("model", model || "gpt-image-1");
   form.append("prompt", prompt);
   form.append("size", size || "1024x1024");
   form.append("n", "1");
-  // input_fidelity "high" : paramètre documenté par OpenAI pour préserver les détails distinctifs
-  // des images de référence (logos, visages) avec gpt-image-1 sur /v1/images/edits — indispensable
-  // au prototype logo-référence : sans lui, le logo officiel risque d'être approximé.
-  form.append("input_fidelity", "high");
+  applyImageEditOptions(form, { model, quality });
   const urls = (referenceImageUrls || []).slice(0, 3);
   const dataUrls = (referenceImageData || []).slice(0, 3 - urls.length);
   for(const url of urls){
@@ -90,7 +87,7 @@ async function generateWithReferenceImages({ key, prompt, size, model, reference
   return res.json();
 }
 
-async function generateStandard({ key, prompt, size, model }){
+async function generateStandard({ key, prompt, size, model, quality }){
   const res = await fetch("https://api.openai.com/v1/images/generations", {
     method: "POST",
     headers: { "Content-Type": "application/json", Authorization: `Bearer ${key}` },
@@ -98,6 +95,7 @@ async function generateStandard({ key, prompt, size, model }){
       model: model || "gpt-image-1",
       prompt,
       size: size || "1024x1024",
+      ...(quality ? { quality } : {}),
       n: 1,
     }),
   });
@@ -164,7 +162,8 @@ exports.handler = async (event) => {
       await safeSetJobStatus(store, jobId, { status: "failed", error: { message: "Entrée du job introuvable en Blobs.", source: "storage" } });
       return { statusCode: 200, body: JSON.stringify({ ok: false, error: "Entrée introuvable" }) };
     }
-    const { prompt, size, model, referenceImageUrls, referenceImageData } = input;
+    const { prompt, size, model, quality, referenceImageUrls, referenceImageData } = input;
+    const referenceRequired = input.referenceRequired === true;
 
     const key = process.env.OPENAI_API_KEY;
     if (!key) {
@@ -180,17 +179,19 @@ exports.handler = async (event) => {
     try {
       if (hasUrls || hasData) {
         try {
-          data = await generateWithReferenceImages({ key, prompt, size, model, referenceImageUrls, referenceImageData });
+          data = await generateWithReferenceImages({ key, prompt, size, model, quality, referenceImageUrls, referenceImageData });
           usedReference = true;
         } catch (refErr) {
-          // dégradation propre : on retombe sur la génération standard, mais on garde la raison
-          // exacte pour que le client sache que l'image B n'est pas valide pour un comparatif A/B
           referenceFallbackReason = String(refErr.message || refErr);
-          data = await generateStandard({ key, prompt, size, model });
+          if(referenceRequired){
+            throw new Error(`Référence produit obligatoire non utilisée : ${referenceFallbackReason}`);
+          }
+          // Dégradation propre pour les références artistiques facultatives uniquement.
+          data = await generateStandard({ key, prompt, size, model, quality });
           usedReference = false;
         }
       } else {
-        data = await generateStandard({ key, prompt, size, model });
+        data = await generateStandard({ key, prompt, size, model, quality });
       }
     } catch (genErr) {
       await safeSetJobStatus(store, jobId, { status: "failed", error: { message: String(genErr.message || genErr), source: "openai" }, usedReference: false, referenceFallbackReason });

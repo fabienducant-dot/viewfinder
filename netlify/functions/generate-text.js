@@ -88,34 +88,13 @@ exports.handler = async (event) => {
       if (hasResponseSchema) {
         body.response_format = { type: "json_schema", json_schema: responseSchema };
       }
-      // --- DIAGNOSTIC TEMPORAIRE (uniquement si responseSchema est fourni) ---
-      // Vérifie la requête RÉELLEMENT exécutée, pas seulement reconstruite depuis le code.
-      // Ne journalise jamais la clé API ni les prompts complets.
-      if (hasResponseSchema) {
-        console.log("[DIAG generate-text] kind reçu :", kind);
-        console.log("[DIAG generate-text] model reçu :", model);
-        console.log("[DIAG generate-text] baseUrl reçu :", baseUrl);
-        console.log("[DIAG generate-text] URL finale appelée :", url);
-        console.log("[DIAG generate-text] response_format présent :", !!body.response_format);
-        console.log("[DIAG generate-text] response_format.type :", body.response_format && body.response_format.type);
-        console.log("[DIAG generate-text] response_format.json_schema.name :", body.response_format && body.response_format.json_schema && body.response_format.json_schema.name);
-      }
       const res = await fetch(url, {
         method: "POST",
         headers: { "Content-Type": "application/json", Authorization: `Bearer ${key}` },
         body: JSON.stringify(body),
       });
-      if (hasResponseSchema) {
-        console.log("[DIAG generate-text] statut HTTP retourné par OpenAI :", res.status);
-      }
       if (!res.ok) throw new Error(`Le fournisseur a répondu ${res.status} : ${(await res.text()).slice(0, 200)}`);
       const data = await res.json();
-      if (hasResponseSchema) {
-        const choice = data.choices?.[0];
-        console.log("[DIAG generate-text] finish_reason :", choice?.finish_reason);
-        console.log("[DIAG generate-text] présence de message.refusal :", !!(choice?.message?.refusal));
-        console.log("[DIAG generate-text] 300 premiers caractères de message.content :", String(choice?.message?.content || "").slice(0, 300));
-      }
       text = data.choices?.[0]?.message?.content || "";
       // usage réel OpenAI (tokens) : transmis tel quel au client pour l'archivage des coûts mesurés.
       // Additif et rétrocompatible : les consommateurs existants ne lisent que { text }.

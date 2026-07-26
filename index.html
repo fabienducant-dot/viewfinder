@@ -192,7 +192,7 @@ const PLATFORM_NOTE = {
   "Facebook": "Utilise exactement la même image qu'Instagram (4:5) — aucune génération distincte. Aucun texte dans l'image.",
   "Google Business": "Aucun texte sur l'image (recommandation Google) — le texte porte tout le SEO.",
   "Article Blog Wix": "Image de couverture avec un texte court façon fiche explicative, élégant et sobre — jamais de faux logo, badge ou icône générés par l'IA.",
-  "Story": "Format vertical plein écran, 4 à 5 phrases fortes disposées avec des tailles de police variées (hiérarchie visuelle, jamais uniforme) et le logo en bas, centré — publiée simultanément sur Instagram et Facebook.",
+  "Story": "Format vertical plein écran. Une accroche forte et une courte sous-ligne sont composées par Canvas avec une hiérarchie typographique nette ; le vrai logo SDZ est ajouté séparément. Aucun élément de l'interface Instagram ne fait partie du visuel.",
 };
 const TEXT_STRUCTURE = {
   "Instagram": "Réponds avec :\n1) Légende structurée : accroche, développement, bénéfice, CTA\n2) Maximum 5 hashtags\n3) Une suggestion d'alt text (accessibilité)",
@@ -694,9 +694,10 @@ function normalizeCampaignHistoryEntry(h){
 /* Point d'entrée unique : à appeler après tout chargement externe (localStorage au démarrage,
    restauration Netlify Blobs, import JSON, restauration de sauvegarde) et avant chaque rendu/génération. */
 /* ============ TRACE TEMPORAIRE D'EXÉCUTION (diagnostic Phase B) ============
-   VF_TRACE=true : chaque étape du workflow image est journalisée en mémoire et copiable
-   depuis l'écran de création. À retirer une fois le point d'arrêt identifié. */
-const VF_TRACE = true;
+   VF_TRACE=false : le point d'arrêt diagnostiqué en Phase B est résolu — journalisation
+   coupée. Le mécanisme reste en place (aucune ligne supprimée) au cas où un futur diagnostic
+   similaire soit utile ; il suffira de repasser ce flag à true. */
+const VF_TRACE = false;
 window.__VF_TRACE = window.__VF_TRACE || [];
 function vfTrace(step, data){
   if(!VF_TRACE) return;
@@ -887,8 +888,36 @@ async function getAutoTransparentLogo(logoAsset){
   return canvas;
 }
 
+/* La Bibliothèque d'images reste locale et peut être vide sur une Deploy Preview. Le logo officiel,
+   lui, est déjà conservé séparément dans Netlify Blobs et servi par /logo.png : on le récupère
+   automatiquement pour que le Canvas reste fiable sur tous les appareils. */
+let _serverLogoAssetCache = null;
+async function getOfficialLogoAsset(){
+  const localAsset = state.images.find(i=>i.assetType==="logo");
+  if(localAsset) return localAsset;
+  if(_serverLogoAssetCache) return _serverLogoAssetCache;
+  try{
+    const publicUrl = state.logoPublicUrl || `${location.origin}/logo.png`;
+    const res = await fetch(publicUrl, { cache:"no-store" });
+    if(!res.ok) return null;
+    const blob = await res.blob();
+    const dataUrl = await new Promise((resolve,reject)=>{
+      const reader = new FileReader();
+      reader.onload = ()=>resolve(reader.result);
+      reader.onerror = reject;
+      reader.readAsDataURL(blob);
+    });
+    _serverLogoAssetCache = { id:"official-logo-server", dataUrl, assetType:"logo" };
+    state.logoPublicUrl = publicUrl;
+    return _serverLogoAssetCache;
+  }catch(e){
+    return null;
+  }
+}
+function resetOfficialLogoAssetCache(){ _serverLogoAssetCache = null; }
+
 async function compositeRealLogo(baseDataUrl){
-  const logoAsset = state.images.find(i=>i.assetType==="logo");
+  const logoAsset = await getOfficialLogoAsset();
   if(!logoAsset) return { dataUrl: baseDataUrl, applied:false };
   try{
     const baseImg = await loadImage(baseDataUrl);
@@ -929,67 +958,482 @@ function wrapText(ctx, text, maxWidth){
   return lines;
 }
 
+/* ---------- Canvas Layout Engine V3 ----------
+   Le modèle image ne dessine jamais le texte ni la signature. Ce moteur observe les pixels de
+   l'image finale, choisit la zone la plus calme parmi des zones sûres propres à la plateforme,
+   puis compose la vraie signature et l'accroche sans masquer le sujet central. */
+function normalizeOverlayZonePreference(value){
+  const v = String(value||"").toLowerCase();
+  if(/haut|sup|top/.test(v)) return "top";
+  if(/bas|inf|bottom/.test(v)) return "bottom";
+  if(/gauch|left/.test(v)) return "left";
+  if(/droit|right/.test(v)) return "right";
+  return "";
+}
+function brandLayoutCandidates(platform, kind){
+  const isStory = platform==="Story";
+  const isMetaFeed = platform==="Instagram" || platform==="Facebook";
+  const isLandscape = platform==="Google Business" || platform==="Article Blog Wix";
+  /* Sur les formats Meta avec texte, l'accroche et la signature forment un seul verrou éditorial
+     centré. Deux positions seulement : bas par défaut, haut si le sujet occupe réellement le bas. */
+  if(kind==="lockup" && isStory) return [
+    {id:"bottom-center-lockup",x:.10,y:.595,w:.80,h:.265,align:"center",pref:"bottom"},
+    {id:"top-center-lockup",x:.10,y:.145,w:.80,h:.275,align:"center",pref:"top"},
+  ];
+  if(kind==="lockup" && isMetaFeed) return [
+    {id:"bottom-center-lockup",x:.09,y:.59,w:.82,h:.31,align:"center",pref:"bottom"},
+    {id:"top-center-lockup",x:.09,y:.075,w:.82,h:.31,align:"center",pref:"top"},
+  ];
+  if(kind==="text"){
+    if(isStory) return [
+      {id:"top-center", x:.09,y:.135,w:.82,h:.205,align:"center",pref:"top"},
+      {id:"top-left",   x:.065,y:.14,w:.54,h:.205,align:"left",pref:"top"},
+      {id:"top-right",  x:.395,y:.14,w:.54,h:.205,align:"right",pref:"top"},
+      {id:"bottom-center",x:.09,y:.625,w:.82,h:.205,align:"center",pref:"bottom"},
+      {id:"bottom-left",x:.065,y:.625,w:.54,h:.205,align:"left",pref:"bottom"},
+      {id:"bottom-right",x:.395,y:.625,w:.54,h:.205,align:"right",pref:"bottom"},
+    ];
+    return [
+      {id:"top-center",x:.09,y:.075,w:.82,h:.20,align:"center",pref:"top"},
+      {id:"top-left",x:.065,y:.08,w:.64,h:.20,align:"left",pref:"top"},
+      {id:"top-right",x:.295,y:.08,w:.64,h:.20,align:"right",pref:"top"},
+      {id:"bottom-center",x:.09,y:.72,w:.82,h:.20,align:"center",pref:"bottom"},
+      {id:"bottom-left",x:.065,y:.71,w:.64,h:.21,align:"left",pref:"bottom"},
+      {id:"bottom-right",x:.295,y:.71,w:.64,h:.21,align:"right",pref:"bottom"},
+    ];
+  }
+  if(isLandscape) return [
+    {id:"top-left",x:.055,y:.075,w:.25,h:.23,align:"left",pref:"top"},
+    {id:"top-right",x:.695,y:.075,w:.25,h:.23,align:"right",pref:"top"},
+    {id:"bottom-left",x:.055,y:.695,w:.25,h:.23,align:"left",pref:"bottom"},
+    {id:"bottom-right",x:.695,y:.695,w:.25,h:.23,align:"right",pref:"bottom"},
+  ];
+  if(isStory) return [
+    {id:"top-center",x:.35,y:.13,w:.30,h:.205,align:"center",pref:"top"},
+    {id:"top-left",x:.055,y:.14,w:.295,h:.205,align:"left",pref:"top"},
+    {id:"top-right",x:.65,y:.14,w:.295,h:.205,align:"right",pref:"top"},
+    {id:"bottom-center",x:.35,y:.625,w:.30,h:.20,align:"center",pref:"bottom"},
+    {id:"bottom-left",x:.055,y:.625,w:.295,h:.20,align:"left",pref:"bottom"},
+    {id:"bottom-right",x:.65,y:.625,w:.295,h:.20,align:"right",pref:"bottom"},
+  ];
+  return [
+    {id:"top-center",x:.37,y:.065,w:.26,h:.21,align:"center",pref:"top"},
+    {id:"top-left",x:.06,y:.07,w:.27,h:.21,align:"left",pref:"top"},
+    {id:"top-right",x:.67,y:.07,w:.27,h:.21,align:"right",pref:"top"},
+    {id:"bottom-center",x:.37,y:.72,w:.26,h:.21,align:"center",pref:"bottom"},
+    {id:"bottom-left",x:.06,y:.72,w:.27,h:.21,align:"left",pref:"bottom"},
+    {id:"bottom-right",x:.67,y:.72,w:.27,h:.21,align:"right",pref:"bottom"},
+  ];
+}
+function boxesOverlap(a,b,padding){
+  if(!a || !b) return false;
+  const p = padding||0;
+  return !(a.x+a.w+p<=b.x || b.x+b.w+p<=a.x || a.y+a.h+p<=b.y || b.y+b.h+p<=a.y);
+}
+function boxOverlapRatio(a,b){
+  if(!a||!b) return 0;
+  const w=Math.max(0,Math.min(a.x+a.w,b.x+b.w)-Math.max(a.x,b.x));
+  const h=Math.max(0,Math.min(a.y+a.h,b.y+b.h)-Math.max(a.y,b.y));
+  return (w*h)/Math.max(.0001,a.w*a.h);
+}
+function normalizedProtectedZones(analysis,brief){
+  const zones=(analysis&&Array.isArray(analysis.protectedZones)?analysis.protectedZones:[]).map(z=>({
+    label:String(z.label||"zone protégée"),
+    x:Math.max(0,Math.min(1,Number(z.x||0)/100)),
+    y:Math.max(0,Math.min(1,Number(z.y||0)/100)),
+    w:Math.max(0,Math.min(1,Number(z.width||0)/100)),
+    h:Math.max(0,Math.min(1,Number(z.height||0)/100)),
+  })).filter(z=>z.w>.01&&z.h>.01);
+  /* Le matériel PSiO® et le visage ne peuvent jamais recevoir la signature. Ce garde-fou
+     géométrique reste actif même si l'analyseur omet ou sous-estime ses protectedZones. */
+  const isPsio=/psio|lunettes/i.test([
+    brief&&brief.caracteristiquePrestationVisible,
+    brief&&brief.sujetPrincipal,
+    brief&&brief.caracteristiqueSourcePrestation,
+  ].filter(Boolean).join(" "));
+  if(isPsio) zones.push({label:"PSiO® + visage (garde-fou)",x:.17,y:.18,w:.66,h:.47});
+  return zones;
+}
+function measureImageRegion(imageData, box){
+  const W=imageData.width, H=imageData.height, d=imageData.data;
+  const x0=Math.max(0,Math.floor(box.x*W)), y0=Math.max(0,Math.floor(box.y*H));
+  const x1=Math.min(W,Math.ceil((box.x+box.w)*W)), y1=Math.min(H,Math.ceil((box.y+box.h)*H));
+  const step=Math.max(3,Math.floor(Math.min(W,H)/150));
+  let sum=0, sum2=0, edges=0, count=0;
+  for(let y=y0;y<y1;y+=step){
+    for(let x=x0;x<x1;x+=step){
+      const i=(y*W+x)*4;
+      const lum=(.2126*d[i]+.7152*d[i+1]+.0722*d[i+2])/255;
+      const nx=Math.min(W-1,x+step), ny=Math.min(H-1,y+step);
+      const ix=(y*W+nx)*4, iy=(ny*W+x)*4;
+      const lx=(.2126*d[ix]+.7152*d[ix+1]+.0722*d[ix+2])/255;
+      const ly=(.2126*d[iy]+.7152*d[iy+1]+.0722*d[iy+2])/255;
+      sum+=lum; sum2+=lum*lum; edges+=Math.abs(lum-lx)+Math.abs(lum-ly); count++;
+    }
+  }
+  const mean=count?sum/count:0, variance=count?Math.max(0,sum2/count-mean*mean):0;
+  return { mean, variance, edge:count?edges/count:0 };
+}
+function scoreBrandRegion(imageData,box,preferred,occupied,protectedZones){
+  const pref=normalizeOverlayZonePreference(preferred);
+  const metrics=measureImageRegion(imageData,box);
+  /* Variations et arêtes signalent généralement visage, mains, matériel ou décor détaillé.
+     Le centre est légèrement pénalisé : les prestations y placent presque toujours le sujet. */
+  const cx=box.x+box.w/2, cy=box.y+box.h/2;
+  const centerPenalty=(Math.abs(cx-.5)<.16 && cy>.28 && cy<.72) ? .30 : 0;
+  /* Une collision texte/logo est toujours pire qu'un placement moins idéal sur l'image. */
+  const overlapPenalty=boxesOverlap(box,occupied,.025) ? 100 : 0;
+  const subjectPenalty=(protectedZones||[]).reduce((sum,z)=>{
+    const ratio=boxOverlapRatio(box,z);
+    return sum+(ratio>0 ? 4+ratio*24 : 0);
+  },0);
+  const prefBonus=pref && (box.pref===pref || box.id.includes(pref)) ? -.18 : 0;
+  return {...box,metrics,score:metrics.variance*3.2+metrics.edge*2.7+metrics.mean*.18+
+    centerPenalty+overlapPenalty+subjectPenalty+prefBonus};
+}
+function selectBrandRegion(imageData,platform,kind,preferred,occupied,protectedZones){
+  let best=null;
+  brandLayoutCandidates(platform,kind).forEach(box=>{
+    const scored=scoreBrandRegion(imageData,box,preferred,occupied,protectedZones);
+    if(!best||scored.score<best.score) best=scored;
+  });
+  return best;
+}
+function selectBrandLayoutPair(imageData,platform,preferredText,preferredLogo,protectedZones){
+  let best=null;
+  brandLayoutCandidates(platform,"text").forEach(text=>{
+    brandLayoutCandidates(platform,"logo").forEach(logo=>{
+      const textScored=scoreBrandRegion(imageData,text,preferredText,logo,protectedZones);
+      const logoScored=scoreBrandRegion(imageData,logo,preferredLogo,text,protectedZones);
+      const score=textScored.score+logoScored.score;
+      if(!best||score<best.score) best={text:textScored,logo:logoScored,score};
+    });
+  });
+  return best;
+}
+function drawSoftScrim(ctx, box, strength){
+  const W=ctx.canvas.width,H=ctx.canvas.height;
+  const x=Math.max(0,(box.x-.035)*W), y=Math.max(0,(box.y-.025)*H);
+  const w=Math.min(W-x,(box.w+.07)*W), h=Math.min(H-y,(box.h+.05)*H);
+  const g=ctx.createLinearGradient(0,y,0,y+h);
+  const a=Math.min(.72,Math.max(.28,strength||.42));
+  g.addColorStop(0,"rgba(0,0,0,0)");
+  g.addColorStop(.22,`rgba(0,0,0,${a})`);
+  g.addColorStop(.78,`rgba(0,0,0,${a})`);
+  g.addColorStop(1,"rgba(0,0,0,0)");
+  ctx.fillStyle=g; ctx.fillRect(x,y,w,h);
+}
+function drawEditorialLockupScrim(ctx, box, strength){
+  const W=ctx.canvas.width,H=ctx.canvas.height;
+  const y=Math.max(0,(box.y-.035)*H);
+  const h=Math.min(H-y,(box.h+.07)*H);
+  const a=Math.min(.68,Math.max(.30,strength||.44));
+  const g=ctx.createLinearGradient(0,y,0,y+h);
+  g.addColorStop(0,"rgba(0,0,0,0)");
+  g.addColorStop(.18,`rgba(0,0,0,${a*.58})`);
+  g.addColorStop(.42,`rgba(0,0,0,${a})`);
+  g.addColorStop(.78,`rgba(0,0,0,${a*.82})`);
+  g.addColorStop(1,"rgba(0,0,0,0)");
+  ctx.fillStyle=g;
+  ctx.fillRect(0,y,W,h);
+}
+function trackedTextWidth(ctx,text,tracking){
+  const chars=[...String(text||"")];
+  return chars.reduce((n,ch)=>n+ctx.measureText(ch).width,0)+Math.max(0,chars.length-1)*tracking;
+}
+function drawTrackedText(ctx,text,x,y,tracking,align){
+  const chars=[...String(text||"")];
+  const total=trackedTextWidth(ctx,text,tracking);
+  let cursor=align==="left"?x:align==="right"?x-total:x-total/2;
+  ctx.textAlign="left";
+  chars.forEach(ch=>{ ctx.fillText(ch,cursor,y); cursor+=ctx.measureText(ch).width+tracking; });
+}
+function officialGoldGradient(ctx,y1,y2){
+  const g=ctx.createLinearGradient(0,y1,0,Math.max(y1+1,y2));
+  g.addColorStop(0,"#8F6B16");
+  g.addColorStop(.34,"#E0C56A");
+  g.addColorStop(.58,"#C9A227");
+  g.addColorStop(1,"#75530C");
+  return g;
+}
+function wrapTrackedText(ctx,text,maxWidth,tracking,maxLines){
+  const words=String(text||"").split(/\s+/).filter(Boolean), lines=[];
+  let current="";
+  words.forEach(word=>{
+    const test=current?current+" "+word:word;
+    if(current && trackedTextWidth(ctx,test,tracking)>maxWidth){ lines.push(current); current=word; }
+    else current=test;
+  });
+  if(current) lines.push(current);
+  if(lines.length>(maxLines||2)){
+    const kept=lines.slice(0,(maxLines||2)-1);
+    kept.push(lines.slice((maxLines||2)-1).join(" "));
+    return kept;
+  }
+  return lines;
+}
+function drawPremiumHeadline(ctx,headline,box,platform){
+  const W=ctx.canvas.width,H=ctx.canvas.height;
+  const isStory=platform==="Story";
+  const parts=String(headline||"").split("|").map(s=>s.trim()).filter(Boolean);
+  const preserveOfficialNames = value => String(value||"").toUpperCase().replace(/\bPSIO\b/g,"PSiO");
+  const title=preserveOfficialNames(parts.shift()||"");
+  const subtitle=preserveOfficialNames(parts.join(" — "));
+  const maxWidth=box.w*W;
+  /* Sur Story, le titre est un vrai niveau d'affiche lisible sur mobile, pas une légende.
+     Le corps reste adaptatif : les accroches longues diminuent avant de sortir de leur zone sûre. */
+  let titleSize=Math.round(W*(isStory?.078:.052));
+  const minTitle=Math.round(W*(isStory?.044:.035));
+  let tracking=Math.max(1,Math.round(titleSize*.075)), lines=[];
+  do{
+    ctx.font=`500 ${titleSize}px Georgia, 'Times New Roman', serif`;
+    tracking=Math.max(1,Math.round(titleSize*.075));
+    lines=wrapTrackedText(ctx,title,maxWidth,tracking,2);
+    if(lines.every(line=>trackedTextWidth(ctx,line,tracking)<=maxWidth)) break;
+    titleSize-=2;
+  }while(titleSize>=minTitle);
+  let subtitleSize=Math.max(isStory?23:19,Math.round(titleSize*(isStory?.46:.43)));
+  let lineHeight=titleSize*1.22;
+  let total=lines.length*lineHeight+(subtitle?subtitleSize*2.05:0);
+  while(titleSize>minTitle && total>box.h*H*.92){
+    titleSize-=2;
+    ctx.font=`500 ${titleSize}px Georgia, 'Times New Roman', serif`;
+    tracking=Math.max(1,Math.round(titleSize*.075));
+    lines=wrapTrackedText(ctx,title,maxWidth,tracking,2);
+    subtitleSize=Math.max(isStory?23:19,Math.round(titleSize*(isStory?.46:.43)));
+    lineHeight=titleSize*1.22;
+    total=lines.length*lineHeight+(subtitle?subtitleSize*2.05:0);
+  }
+  let y=box.y*H+(box.h*H-total)/2+titleSize*.55;
+  const anchor=box.align==="left"?box.x*W:box.align==="right"?(box.x+box.w)*W:(box.x+box.w/2)*W;
+  ctx.textBaseline="middle";
+  ctx.shadowColor="rgba(0,0,0,.92)"; ctx.shadowBlur=Math.round(W*(isStory?.012:.009));
+  ctx.fillStyle=isStory?officialGoldGradient(ctx,y-titleSize,y+titleSize):"#F5F2E9";
+  ctx.font=`500 ${titleSize}px Georgia, 'Times New Roman', serif`;
+  lines.forEach(line=>{ drawTrackedText(ctx,line,anchor,y,tracking,box.align); y+=lineHeight; });
+  if(subtitle){
+    const ruleW=Math.min(maxWidth*(isStory?.32:.24),W*(isStory?.19:.16)), ruleY=y+subtitleSize*.05;
+    ctx.strokeStyle="rgba(224,197,106,.86)"; ctx.lineWidth=Math.max(1,W*.0014);
+    const ruleStart=box.align==="left"?anchor:box.align==="right"?anchor-ruleW:anchor-ruleW/2;
+    const ruleEnd=box.align==="left"?anchor+ruleW:box.align==="right"?anchor:anchor+ruleW/2;
+    ctx.beginPath(); ctx.moveTo(ruleStart,ruleY); ctx.lineTo(ruleEnd,ruleY); ctx.stroke();
+    y+=subtitleSize*.88;
+    ctx.fillStyle=isStory?"#F5F2E9":officialGoldGradient(ctx,y-subtitleSize,y+subtitleSize*1.8);
+    ctx.font=`500 ${subtitleSize}px Georgia, 'Times New Roman', serif`;
+    const subTracking=Math.max(1,Math.round(subtitleSize*(isStory?.14:.13)));
+    const subLines=wrapTrackedText(ctx,subtitle,maxWidth,subTracking,2);
+    subLines.forEach(line=>{ drawTrackedText(ctx,line,anchor,y,subTracking,box.align); y+=subtitleSize*1.35; });
+  }
+  ctx.shadowBlur=0;
+  return {titleLines:lines.length,subtitleLines:subtitle?Math.min(2,wrapTrackedText(ctx,subtitle,maxWidth,Math.max(1,Math.round(subtitleSize*.13)),2).length):0,titleSize};
+}
+function drawOfficialSignature(ctx,logoImg,box,platform){
+  const W=ctx.canvas.width,H=ctx.canvas.height;
+  const isStory=platform==="Story";
+  const blockCenterX=(box.x+box.w/2)*W;
+  const extraHeight=W*(isStory?.082:.068);
+  const heightLimitedWidth=Math.max(W*.08,(box.h*H-extraHeight)*(logoImg.width/logoImg.height));
+  const maxLogoW=Math.min(box.w*W, W*(isStory?.205:.13),heightLimitedWidth);
+  const logoH=maxLogoW*(logoImg.height/logoImg.width);
+  const top=box.y*H+Math.max(0,(box.h*H-(logoH+extraHeight))/2);
+  ctx.shadowColor="rgba(224,197,106,.24)";
+  ctx.shadowBlur=Math.round(W*(isStory?.014:.008));
+  ctx.drawImage(logoImg,blockCenterX-maxLogoW/2,top,maxLogoW,logoH);
+  ctx.shadowBlur=0;
+  let brandSize=Math.max(15,Math.round(W*(isStory?.0285:.0225)));
+  let citySize=Math.max(11,Math.round(W*(isStory?.0158:.0135)));
+  const brandTracking=()=>Math.max(1,brandSize*.08);
+  ctx.font=`500 ${brandSize}px Georgia, 'Times New Roman', serif`;
+  while(brandSize>15 && trackedTextWidth(ctx,"LA SANTÉ DES ZÈBRES",brandTracking())>box.w*W*.98){
+    brandSize--;
+    ctx.font=`500 ${brandSize}px Georgia, 'Times New Roman', serif`;
+  }
+  citySize=Math.min(citySize,Math.max(11,Math.round(brandSize*.56)));
+  const brandY=top+logoH+Math.round(W*(isStory?.012:.010));
+  ctx.textBaseline="top"; ctx.shadowColor="rgba(0,0,0,.88)"; ctx.shadowBlur=Math.round(W*.006);
+  ctx.fillStyle="#F5F2E9"; ctx.font=`500 ${brandSize}px Georgia, 'Times New Roman', serif`;
+  drawTrackedText(ctx,"LA SANTÉ DES ZÈBRES",blockCenterX,brandY,brandTracking(),"center");
+  ctx.fillStyle=officialGoldGradient(ctx,brandY+brandSize,brandY+brandSize*2.4);
+  ctx.font=`500 ${citySize}px Georgia, 'Times New Roman', serif`;
+  drawTrackedText(ctx,"RAISMES",blockCenterX,brandY+brandSize*1.38,Math.max(1,citySize*.22),"center");
+  ctx.shadowBlur=0;
+  return {logoWidth:Math.round(maxLogoW),brandSize};
+}
+
+/* Verrou éditorial Meta : accroche, filet lumineux puis signature officielle sur un même axe.
+   Cette composition reprend la logique des affiches SDZ validées en l'adaptant au 9:16 et au 4:5. */
+function drawPremiumBrandLockup(ctx,headline,logoImg,box,platform){
+  const W=ctx.canvas.width,H=ctx.canvas.height;
+  const isStory=platform==="Story";
+  const parts=String(headline||"").split("|").map(s=>s.trim()).filter(Boolean);
+  const preserveOfficialNames=value=>String(value||"").toUpperCase().replace(/\bPSIO\b/g,"PSiO");
+  const title=preserveOfficialNames(parts.shift()||"");
+  const subtitle=preserveOfficialNames(parts.join(" — "));
+  const centerX=(box.x+box.w/2)*W;
+  const maxWidth=box.w*W*(isStory?.84:.78);
+  const logoRatio=logoImg.height/logoImg.width;
+  let scale=1,layout=null;
+
+  do{
+    const titleSize=Math.max(Math.round(W*(isStory?.043:.040)),Math.round(W*(isStory?.061:.056)*scale));
+    const subtitleSize=Math.max(Math.round(W*(isStory?.032:.029)),Math.round(W*(isStory?.041:.038)*scale));
+    const titleTracking=Math.max(1,Math.round(titleSize*.15));
+    const subtitleTracking=Math.max(1,Math.round(subtitleSize*.13));
+    ctx.font=`500 ${titleSize}px Georgia, 'Times New Roman', serif`;
+    const titleLines=wrapTrackedText(ctx,title,maxWidth,titleTracking,2);
+    ctx.font=`500 ${subtitleSize}px Georgia, 'Times New Roman', serif`;
+    const subtitleLines=subtitle?wrapTrackedText(ctx,subtitle,maxWidth,subtitleTracking,2):[];
+    const titleLineHeight=titleSize*1.18;
+    const subtitleLineHeight=subtitleSize*1.34;
+    const ruleW=Math.min(maxWidth*.38,W*.28);
+    const logoW=Math.min(box.w*W*.22,W*(isStory?.135:.12)*scale);
+    const logoH=logoW*logoRatio;
+    let brandSize=Math.max(16,Math.round(W*(isStory?.0245:.022)*scale));
+    ctx.font=`500 ${brandSize}px Georgia, 'Times New Roman', serif`;
+    while(brandSize>16&&trackedTextWidth(ctx,"LA SANTÉ DES ZÈBRES",Math.max(1,brandSize*.09))>maxWidth*.64){
+      brandSize--; ctx.font=`500 ${brandSize}px Georgia, 'Times New Roman', serif`;
+    }
+    const citySize=Math.max(11,Math.round(brandSize*.55));
+    const total=titleLines.length*titleLineHeight+
+      (subtitleLines.length?W*.010*scale+subtitleLines.length*subtitleLineHeight:0)+
+      W*.023*scale+Math.max(2,W*.0016)+W*.021*scale+
+      logoH+W*.010*scale+brandSize*1.18+citySize*1.48;
+    const widthOk=titleLines.every(line=>trackedTextWidth(ctx,line,titleTracking)<=maxWidth)&&
+      subtitleLines.every(line=>trackedTextWidth(ctx,line,subtitleTracking)<=maxWidth);
+    layout={titleSize,subtitleSize,titleTracking,subtitleTracking,titleLines,subtitleLines,
+      titleLineHeight,subtitleLineHeight,ruleW,logoW,logoH,brandSize,citySize,total,scale};
+    if(total<=box.h*H*.94&&widthOk) break;
+    scale-=.025;
+  }while(scale>.70);
+
+  const l=layout;
+  let y=box.y*H+(box.h*H-l.total)/2;
+  ctx.textAlign="left"; ctx.textBaseline="middle";
+  ctx.shadowColor="rgba(0,0,0,.94)"; ctx.shadowBlur=Math.round(W*.012);
+  ctx.fillStyle="#F5F2E9";
+  ctx.font=`500 ${l.titleSize}px Georgia, 'Times New Roman', serif`;
+  l.titleLines.forEach((line,index)=>{
+    /* Sans sous-ligne séparée, la seconde ligne devient naturellement le niveau or, comme dans
+       les affiches SDZ de référence : une seule phrase, deux niveaux de lecture. */
+    ctx.fillStyle=!l.subtitleLines.length&&l.titleLines.length>1&&index===l.titleLines.length-1
+      ? officialGoldGradient(ctx,y,y+l.titleLineHeight) : "#F5F2E9";
+    drawTrackedText(ctx,line,centerX,y+l.titleSize*.54,l.titleTracking,"center");
+    y+=l.titleLineHeight;
+  });
+
+  if(l.subtitleLines.length){
+    y+=W*.010*l.scale;
+    ctx.fillStyle=officialGoldGradient(ctx,y,y+l.subtitleLines.length*l.subtitleLineHeight);
+    ctx.font=`500 ${l.subtitleSize}px Georgia, 'Times New Roman', serif`;
+    l.subtitleLines.forEach(line=>{
+      drawTrackedText(ctx,line,centerX,y+l.subtitleSize*.54,l.subtitleTracking,"center");
+      y+=l.subtitleLineHeight;
+    });
+  }
+
+  y+=W*.023*l.scale;
+  const ruleH=Math.max(2,W*.0016);
+  const ruleGradient=ctx.createLinearGradient(centerX-l.ruleW/2,0,centerX+l.ruleW/2,0);
+  ruleGradient.addColorStop(0,"rgba(117,83,12,0)");
+  ruleGradient.addColorStop(.36,"rgba(201,162,39,.82)");
+  ruleGradient.addColorStop(.5,"rgba(245,242,233,.98)");
+  ruleGradient.addColorStop(.64,"rgba(201,162,39,.82)");
+  ruleGradient.addColorStop(1,"rgba(117,83,12,0)");
+  ctx.shadowColor="rgba(224,197,106,.52)"; ctx.shadowBlur=Math.round(W*.008);
+  ctx.fillStyle=ruleGradient;
+  ctx.fillRect(centerX-l.ruleW/2,y,l.ruleW,ruleH);
+  ctx.shadowBlur=0;
+  y+=ruleH+W*.021*l.scale;
+
+  ctx.shadowColor="rgba(224,197,106,.24)"; ctx.shadowBlur=Math.round(W*.014);
+  ctx.drawImage(logoImg,centerX-l.logoW/2,y,l.logoW,l.logoH);
+  ctx.shadowBlur=0;
+  y+=l.logoH+W*.010*l.scale;
+
+  ctx.textBaseline="top"; ctx.shadowColor="rgba(0,0,0,.90)"; ctx.shadowBlur=Math.round(W*.006);
+  ctx.fillStyle="#F5F2E9";
+  ctx.font=`500 ${l.brandSize}px Georgia, 'Times New Roman', serif`;
+  drawTrackedText(ctx,"LA SANTÉ DES ZÈBRES",centerX,y,Math.max(1,l.brandSize*.09),"center");
+  y+=l.brandSize*1.18;
+  ctx.fillStyle=officialGoldGradient(ctx,y,y+l.citySize*1.5);
+  ctx.font=`500 ${l.citySize}px Georgia, 'Times New Roman', serif`;
+  drawTrackedText(ctx,"RAISMES",centerX,y,Math.max(1,l.citySize*.24),"center");
+  ctx.shadowBlur=0;
+  return {
+    headline:{titleLines:l.titleLines.length,subtitleLines:l.subtitleLines.length,titleSize:l.titleSize},
+    signature:{logoWidth:Math.round(l.logoW),brandSize:l.brandSize},
+    composition:"unified-centered-lockup",
+  };
+}
+
 async function compositeBrandSignature(baseDataUrl, platform, options){
-  /* V1.0 — options.headline : accroche incrustée, passée EXPLICITEMENT (plus de lecture d'état
-     global). options.withLogo=false permet d'incruster l'accroche seule quand le logo est déjà
-     dans la scène. Sans accroche ni logo, l'image ressort inchangée. */
+  /* V4.0 — composition adaptative fondée sur les pixels réels. Le Planner ne fait qu'indiquer une
+     préférence de zone ; Canvas conserve le dernier mot pour protéger lisibilité et sujet. */
   const opts = options || {};
   const headline = String(opts.headline !== undefined ? opts.headline : (state.visualAccroche || "")).trim();
   const withLogo = opts.withLogo !== false;
-  const logoResult = withLogo ? await compositeRealLogo(baseDataUrl) : { applied:false, dataUrl:baseDataUrl };
-  if(!logoResult.applied && !headline) return { applied:false, dataUrl: baseDataUrl };
+  const logoAsset = withLogo ? await getOfficialLogoAsset() : null;
+  if(withLogo && !logoAsset) return { applied:false, headlineApplied:false, dataUrl:baseDataUrl,
+    layoutReport:{version:"canvas-layout-v4",blockingError:"Logo officiel SDZ indisponible."} };
+  if(!withLogo && !headline) return { applied:false, headlineApplied:false, dataUrl:baseDataUrl,
+    layoutReport:{version:"canvas-layout-v4",skipped:true} };
   try{
-    const img = await loadImage(logoResult.applied ? logoResult.dataUrl : baseDataUrl);
+    const img = await loadImage(baseDataUrl);
+    const logoImg = logoAsset ? await getAutoTransparentLogo(logoAsset) : null;
     const canvas = document.createElement("canvas");
     canvas.width = img.width; canvas.height = img.height;
     const ctx = canvas.getContext("2d");
     ctx.drawImage(img, 0, 0);
+    const pixels=ctx.getImageData(0,0,canvas.width,canvas.height);
+    const preferredText=opts.brief && opts.brief.zoneTexte;
+    const preferredLogo=opts.brief && opts.brief.zoneLogo;
+    const protectedZones=normalizedProtectedZones(opts.analysis,opts.brief);
+    const useUnifiedLockup=["Story","Instagram","Facebook"].includes(platform)&&!!headline&&!!logoImg;
+    const lockupBox=useUnifiedLockup
+      ? selectBrandRegion(pixels,platform,"lockup",preferredText||"bottom",null,protectedZones) : null;
+    const pair=!useUnifiedLockup&&headline&&logoImg
+      ? selectBrandLayoutPair(pixels,platform,preferredText,preferredLogo,protectedZones) : null;
+    const textBox=headline ? (lockupBox||(pair?pair.text:selectBrandRegion(pixels,platform,"text",preferredText,null,protectedZones))) : null;
+    const logoBox=logoImg ? (lockupBox||(pair?pair.logo:selectBrandRegion(pixels,platform,"logo",preferredLogo,textBox,protectedZones))) : null;
+    const report={version:"canvas-layout-v4",platform,
+      textZone:textBox&&textBox.id||null,logoZone:logoBox&&logoBox.id||null,
+      composition:useUnifiedLockup?"unified-centered-lockup":"adaptive-separated",
+      preferredText:normalizeOverlayZonePreference(preferredText),
+      preferredLogo:normalizeOverlayZonePreference(preferredLogo),
+      protectedZones:protectedZones.map(z=>z.label),scrimApplied:[],warnings:[]};
 
-    // --- Accroche / titre visuel : texte saisi par Fabien, jamais généré par l'IA (fiabilité à 100%) ---
-    if(headline){
-      const zone = state.textOverlayZone || { y: 60, maxWidthPct: 82 };
-      const maxWidth = canvas.width * (zone.maxWidthPct/100);
-      const titleFontSize = Math.max(20, Math.round(canvas.width * 0.052));
-      ctx.textAlign = "center";
-      ctx.textBaseline = "middle";
-      ctx.shadowColor = "rgba(0,0,0,0.7)";
-      ctx.shadowBlur = 8;
-      ctx.fillStyle = "#F5F4EF"; // blanc cassé de la charte SDZ
-      ctx.font = `700 ${titleFontSize}px Georgia, 'Times New Roman', serif`;
-      const lines = wrapText(ctx, headline.toUpperCase(), maxWidth);
-      const lineHeight = titleFontSize * 1.25;
-      const totalHeight = lines.length * lineHeight;
-      const startY = (canvas.height * (zone.y/100)) - totalHeight/2 + lineHeight/2;
-      lines.forEach((line,i)=>{ ctx.fillText(line, canvas.width/2, startY + i*lineHeight); });
-      ctx.shadowBlur = 0;
+    /* Un voile dégradé est local et progressif : il sécurise la lecture sans fabriquer une carte,
+       un bandeau opaque ou une esthétique de flyer. */
+    if(lockupBox){
+      const strength=.36+Math.min(.26,lockupBox.metrics.mean*.28+lockupBox.metrics.edge*.48);
+      drawEditorialLockupScrim(ctx,lockupBox,strength); report.scrimApplied.push("lockup-full-width");
+    }else if(textBox){
+      const strength=.34+Math.min(.28,textBox.metrics.mean*.30+textBox.metrics.edge*.55);
+      drawSoftScrim(ctx,textBox,strength); report.scrimApplied.push("text");
+    }
+    if(logoBox&&!lockupBox){
+      const strength=.30+Math.min(.24,logoBox.metrics.mean*.25+logoBox.metrics.edge*.45);
+      drawSoftScrim(ctx,logoBox,strength); report.scrimApplied.push("logo");
     }
 
-    if(logoResult.applied){
-    const logoW = canvas.width * (state.logoOverlay.size/100);
-    const cx = (state.logoOverlay.x/100) * canvas.width;
-    const logoBottomY = (state.logoOverlay.y/100) * canvas.height + logoW/2;
-
-    const brandFontSize = Math.max(14, Math.round(canvas.width * 0.026));
-    const cityFontSize = Math.max(10, Math.round(canvas.width * 0.016));
-
-    ctx.textAlign = "center";
-    ctx.textBaseline = "top";
-    ctx.shadowColor = "rgba(0,0,0,0.65)";
-    ctx.shadowBlur = 5;
-
-    ctx.fillStyle = "#F5F4EF"; // blanc cassé de la charte SDZ
-    ctx.font = `600 ${brandFontSize}px Georgia, 'Times New Roman', serif`;
-    ctx.fillText("LA SANTÉ DES ZÈBRES", cx, logoBottomY + 8);
-
-    ctx.fillStyle = "#C9A227"; // or officiel SDZ
-    ctx.font = `${cityFontSize}px Georgia, 'Times New Roman', serif`;
-    ctx.fillText("RAISMES", cx, logoBottomY + 8 + brandFontSize + 6);
+    let headlineMetrics=null, logoMetrics=null;
+    if(lockupBox){
+      const metrics=drawPremiumBrandLockup(ctx,headline,logoImg,lockupBox,platform);
+      headlineMetrics=metrics.headline;
+      logoMetrics=metrics.signature;
+    }else if(headline){
+      headlineMetrics=drawPremiumHeadline(ctx,headline,textBox,platform);
+      if(headlineMetrics.titleSize<canvas.width*.035) report.warnings.push("Accroche trop longue : corps minimal atteint.");
     }
-
-    ctx.shadowBlur = 0;
-    return { dataUrl: canvas.toDataURL("image/png"), applied:true };
+    if(logoImg&&!lockupBox){
+      logoMetrics=drawOfficialSignature(ctx,logoImg,logoBox,platform);
+    }
+    report.headline=headlineMetrics; report.signature=logoMetrics;
+    return { dataUrl:canvas.toDataURL("image/png"), applied:!!logoImg,
+      headlineApplied:!!headline, layoutReport:report };
   }catch(e){
-    return logoResult.applied ? logoResult : { applied:false, dataUrl: baseDataUrl }; // dégradation propre
+    return { applied:false, headlineApplied:false, dataUrl:baseDataUrl,
+      layoutReport:{version:"canvas-layout-v4",blockingError:`Composition Canvas impossible : ${e.message||e}`} };
   }
 }
 
@@ -1015,23 +1459,17 @@ async function normalizeToPlatformFormat(dataUrl, platform){
 
 /* true si cette plateforme/ce réglage exige le vrai logo sur l'image (Story : toujours ; sinon selon la DA). */
 function logoRequiredFor(platform){
-  return platform==="Story" || state.da.presenceLogo;
+  /* Chaque visuel publié porte la signature SDZ officielle, ajoutée après génération. */
+  return PLATFORMS.includes(platform);
 }
 
 /* ---------- Logo comme véritable image de référence pour les générations API compatibles ---------- */
 let _brandRefUrlCache = null; // ne recalcule/re-télécharge jamais deux fois dans la même session
 function getBrandReferenceImages(){
-  if(_brandRefUrlCache) return _brandRefUrlCache;
-  /* PROTOTYPE LOGO-RÉFÉRENCE (réactivation) : cette fonction avait été volontairement neutralisée
-     (risque de faux médaillons dérivés du logo). Un test externe concluant (logo officiel en
-     référence + prompt court) constitue une contre-preuve : on réactive pour mesurer.
-     Le logo n'est transmis que s'il est marqué actif dans la Bibliothèque ET déjà synchronisé
-     vers son URL publique stable (syncOfficialLogoToServer). Critère d'évaluation du test :
-     surveiller la réapparition de faux médaillons/variantes du logo dans les images. */
-  const logoAsset = state.images.find(i=>i.assetType==="logo");
-  const urls = (logoAsset && state.logoPublicUrl) ? [state.logoPublicUrl] : [];
-  _brandRefUrlCache = urls;
-  return urls;
+  /* Le logo est une signature, pas une référence créative. Le transmettre au modèle produisait
+     des zèbres, sceaux et médaillons inventés. Canvas est désormais l'unique source. */
+  _brandRefUrlCache = [];
+  return _brandRefUrlCache;
 }
 function resetBrandReferenceCache(){ _brandRefUrlCache = null; }
 /* Images de la Bibliothèque explicitement marquées comme référence visuelle validée
@@ -1054,6 +1492,7 @@ async function syncOfficialLogoToServer(){
   const already = LS.get("vf-logo-sync", null);
   if(already && already.assetId===logoAsset.id && already.dataUrlHash===hashPrompt(logoAsset.dataUrl)){
     state.logoPublicUrl = already.publicUrl;
+    resetOfficialLogoAssetCache();
     resetBrandReferenceCache();
     return { ok:true, alreadySynced:true, publicUrl: already.publicUrl };
   }
@@ -1066,6 +1505,7 @@ async function syncOfficialLogoToServer(){
     const publicUrl = `${location.origin}/logo.png`;
     LS.set("vf-logo-sync", { assetId: logoAsset.id, dataUrlHash: hashPrompt(logoAsset.dataUrl), publicUrl, syncedAt: Date.now() });
     state.logoPublicUrl = publicUrl;
+    resetOfficialLogoAssetCache();
     resetBrandReferenceCache();
     return { ok:true, alreadySynced:false, publicUrl };
   }catch(e){
@@ -1439,7 +1879,7 @@ function styleBlock(style){
    Politique générale de sécurité — jamais de description visuelle détaillée générée automatiquement
    pour un sujet sensible : c'est à l'utilisateur de rédiger le champ "Scène visuelle" de la fiche
    prestation (base de connaissances) s'il le souhaite ; ce garde-fou s'applique dans tous les cas. */
-const SAFETY_GUARDRAIL = `CONTRAINTE DE SÉCURITÉ PERMANENTE : toute personne représentée doit être habillée de façon appropriée et professionnelle. Si la scène implique un mineur, il doit être entièrement habillé et accompagné visuellement d'un adulte responsable, dans un contexte familial explicite et non ambigu, sans aucune connotation. Si la scène implique une grossesse, la personne doit être habillée de façon pudique, sans exposition du corps. Si la scène implique un contact corporel (réflexologie, massage des pieds...), le cadrage doit rester professionnel et clinique, jamais suggestif. Si la scène évoque une pratique énergétique (reiki...), rester sobre et crédible, sans effets surnaturels exagérés. Aucune promesse médicale ou thérapeutique ne doit être suggérée visuellement. Aucune nudité, aucune sexualisation, aucune violence.`;
+const SAFETY_GUARDRAIL = `CONTRAINTE DE SÉCURITÉ PERMANENTE : toute personne représentée doit être habillée de façon appropriée et professionnelle. Si la scène implique un mineur, il doit être entièrement habillé et accompagné visuellement d'un adulte responsable, dans un contexte familial explicite et non ambigu, sans aucune connotation. Si la scène implique une grossesse, la personne doit être habillée de façon pudique, sans exposition du corps. Si la scène implique un contact corporel (réflexologie, massage des pieds...), le cadrage doit rester professionnel, respectueux et éditorial, jamais suggestif. Si la scène évoque une pratique énergétique (reiki...), rester sobre et crédible, sans effets surnaturels exagérés. Aucune promesse médicale ou thérapeutique ne doit être suggérée visuellement. Aucune nudité, aucune sexualisation, aucune violence.`;
 
 /* Catégories de sujets à traiter avec prudence (pas de description détaillée ici — juste une alerte
    pour inviter l'utilisateur à renseigner un champ "Scène visuelle" dans la fiche de la prestation). */
@@ -1693,46 +2133,46 @@ const ARCHETYPE_CATALOG = [
    contradiction avec un photomontage à plusieurs plans, un symbole monumental et une transformation
    visible — d'où ce catalogue distinct, jamais mélangé avec le premier dans une même sélection. */
 const ARCHETYPE_CATALOG_FANTASTIQUE = [
-  { id:"renaissance_monumentale", label:"Renaissance monumentale",
-    emotion:"renaissance", dramaturgie:"une présence monumentale qui atteste d'une renaissance en cours", rythme:"ascendant, grandiose", sensation:"vertige, embrasement doré",
-    scenesCompatibles:["sujet transformé face à une présence monumentale (phénix, statue, architecture géante) qui incarne la renaissance en cours"],
+  { id:"renaissance_monumentale", label:"Renaissance héroïque",
+    emotion:"élan retrouvé", dramaturgie:"le geste ou le matériel distinctif de la prestation devient le moteur d'une montée lumineuse", rythme:"ascendant, ample", sensation:"puissance calme, élévation",
+    scenesCompatibles:["sujet naturel et intact, cadré avec le geste ou le matériel réel de la prestation parfaitement lisible ; la profondeur et la lumière donnent l'ampleur, sans monument ni créature ajoutés"],
     missionsCompatibles:["toutes"], prestationsCompatibles:["toutes"],
-    cadrages:["vertical d'affiche de film","très large, sujet petit face au symbole monumental"],
-    lumieres:["grande source dramatique traversant ou révélant le symbole monumental"],
-    interdits:["fantasy enfantine","illustration plate","rendu 3D lisse"],
-    presenceSoin:"suggeree", referenceFamily:"monumental" },
-  { id:"passage_symbolique", label:"Passage symbolique",
-    emotion:"passage", dramaturgie:"un seuil ou un cercle qui marque un changement d'état", rythme:"suspendu, juste au seuil", sensation:"souffle, vertige du passage",
-    scenesCompatibles:["seuil, éclipse ou cercle de lumière marquant le passage d'un état à un autre"],
+    cadrages:["vertical d'affiche de film, plan trois-quarts centré sur le matériel ou le geste","plan large vertical à plusieurs plans, sujet et prestation au centre"],
+    lumieres:["source chaude unique latérale ou arrière, sculptant le sujet et le matériel réel sans axe lumineux central"],
+    interdits:["fantasy enfantine","illustration plate","rendu 3D lisse","phénix","statue géante","portail","seuil","transformation physique du visage"],
+    presenceSoin:"visible_editoriale", referenceFamily:"monumental" },
+  { id:"passage_symbolique", label:"Bascule sensorielle",
+    emotion:"prise de distance", dramaturgie:"le bruit visuel recule autour du sujet tandis que la prestation devient le point de netteté", rythme:"suspendu, précis", sensation:"respiration, profondeur retrouvée",
+    scenesCompatibles:["transition rendue par la profondeur, la netteté et le mouvement périphérique autour du geste ou du matériel réel ; aucune porte, aucun seuil, aucun cercle"],
     missionsCompatibles:["toutes"], prestationsCompatibles:["toutes"],
-    cadrages:["vertical d'affiche de film","cadrage centré sur le seuil ou le cercle"],
-    lumieres:["cercle ou halo de lumière froide et noble, jamais un halo de bougie"],
-    interdits:["fantasy enfantine","illustration plate","décor sans profondeur"],
-    presenceSoin:"aucune", referenceFamily:"monumental" },
-  { id:"dualite_interieure", label:"Dualité intérieure",
-    emotion:"tension résolue entre deux vérités", dramaturgie:"une façade qui se fissure pour révéler autre chose", rythme:"contrasté, en tension", sensation:"clair-obscur tranché",
-    scenesCompatibles:["masque fissuré, reflet ou double exposition opposant une façade et une vérité intérieure"],
+    cadrages:["vertical d'affiche de film, composition décentrée avec profondeur marquée","plan rapproché trois-quarts sur le sujet et le matériel"],
+    lumieres:["source chaude unique guidant le regard par contraste de netteté et de matière, sans halo ni axe vertical"],
+    interdits:["fantasy enfantine","illustration plate","décor sans profondeur","portail","seuil","arche","cercle lumineux","silhouette seule"],
+    presenceSoin:"visible_editoriale", referenceFamily:"intime" },
+  { id:"dualite_interieure", label:"Contraste intérieur résolu",
+    emotion:"clarté gagnée", dramaturgie:"deux densités visuelles entourent un sujet intact, la partie lumineuse prenant clairement le dessus", rythme:"contrasté puis apaisé", sensation:"clair-obscur maîtrisé",
+    scenesCompatibles:["sujet naturel et intact avec le geste ou le matériel de la prestation au centre ; la tension reste uniquement dans deux plans d'environnement, jamais sur le corps ni le visage"],
     missionsCompatibles:["toutes"], prestationsCompatibles:["toutes"],
     cadrages:["plan rapproché à mi-corps, composition verticale d'affiche"],
-    lumieres:["contraste marqué entre une moitié éclairée et une moitié dans l'ombre"],
-    interdits:["fantasy enfantine","symétrie parfaite sans tension"],
-    presenceSoin:"suggeree", referenceFamily:"intime" },
-  { id:"liberation_matiere", label:"Libération de la matière",
-    emotion:"libération", dramaturgie:"une matière qui se défait de sa contrainte", rythme:"éclatant, en expansion", sensation:"poussière dorée, éclats",
-    scenesCompatibles:["chaînes, argent ou matière contraignante qui se rompt ou se dissout vers la lumière ou la nature"],
+    lumieres:["source chaude unique en trois-quarts révélant le sujet intact et laissant l'arrière-plan sombre reculer"],
+    interdits:["fantasy enfantine","symétrie parfaite sans tension","visage fissuré","masque","double visage","mutilation","silhouette menaçante"],
+    presenceSoin:"visible_editoriale", referenceFamily:"intime" },
+  { id:"liberation_matiere", label:"Déploiement",
+    emotion:"ampleur retrouvée", dramaturgie:"la posture, le tissu ou l'espace se déploie autour du geste réel de la prestation", rythme:"fluide, en expansion", sensation:"souffle, mouvement ascendant",
+    scenesCompatibles:["geste professionnel ou matériel distinctif au centre, mouvement ample dans le tissu, la lumière ou l'espace environnant ; aucun corps ne se désagrège"],
     missionsCompatibles:["toutes"], prestationsCompatibles:["toutes"],
     cadrages:["vertical d'affiche de film","plan large montrant l'ampleur de la libération"],
-    lumieres:["lumière qui gagne du terrain sur l'obscurité, jamais un flash artificiel"],
-    interdits:["fantasy enfantine","illustration plate","rendu 3D lisse"],
+    lumieres:["source chaude unique qui révèle progressivement le geste et gagne l'espace, sans explosion ni incendie"],
+    interdits:["fantasy enfantine","illustration plate","rendu 3D lisse","chaînes","corps fragmenté","fissures","explosion","poussière de débris"],
     presenceSoin:"visible_editoriale", referenceFamily:"monumental" },
-  { id:"gardien_sdz", label:"Gardien SDZ",
-    emotion:"protection silencieuse", dramaturgie:"une présence veille sans intervenir", rythme:"immobile, imposant", sensation:"poids, permanence",
-    scenesCompatibles:["un véritable animal zèbre réaliste, en tant que gardien symbolique et singularité de la marque — jamais une forme de logo ou d'insigne"],
-    missionsCompatibles:["toutes"], prestationsCompatibles:["toutes"],
+  { id:"gardien_sdz", label:"Présence SDZ",
+    emotion:"assurance", dramaturgie:"une présence humaine professionnelle affirme le soin tandis que la signature officielle reste réservée à Canvas", rythme:"stable, imposant", sensation:"confiance, maîtrise",
+    scenesCompatibles:["praticien ou bénéficiaire habillé, posture assurée, geste ou matériel réel visible ; espace sobre réservé à la signature officielle ajoutée après génération"],
+    missionsCompatibles:["Humaniser le cabinet","Rassurer les nouveaux clients","Annoncer une actualité","Créer une campagne complète"], prestationsCompatibles:["toutes"],
     cadrages:["vertical d'affiche de film","plan large intégrant le décor monumental"],
-    lumieres:["lumière dramatique unique qui sculpte la silhouette du zèbre et le décor"],
-    interdits:["fantasy enfantine","zèbre stylisé en médaillon ou en logo","illustration plate"],
-    presenceSoin:"aucune", referenceFamily:"monumental" },
+    lumieres:["lumière dramatique unique qui sculpte la présence humaine, le geste et le matériel réel"],
+    interdits:["fantasy enfantine","animal zèbre généré","zèbre stylisé en médaillon ou en logo","illustration plate","personnage encapuchonné"],
+    presenceSoin:"visible_editoriale", referenceFamily:"monumental" },
 ];
 
 /* ====== MASTER_UNIVERS_SDZ v0 — AJOUT CIBLÉ MODE PRODUCTION V1 (ne pas étendre hors périmètre) ======
@@ -1855,6 +2295,48 @@ function buildUniversSDZBlock(allowed){
     .sort((x,y)=> x.prioriteArtistique - y.prioriteArtistique);
   if(!modules.length) return "";
   return modules.map(m=>`- [${m.categorie}/${m.roleNarratif}] ${m.label} : ${m.content} Interdit : ${m.interdits.join(", ")}.`).join("\n");
+}
+
+/* V2 — pause créative décidée après les deux runs officiels : l'ancien univers symbolique
+   concentrait presque toutes les scènes autour des mêmes raccourcis (seuil/portail, fissure,
+   axe doré, particules). V1 reste intact pour la traçabilité. V2 repart du geste et du matériel
+   réels ; les modules seront réintroduits un par un après validation artistique. */
+const V2_MOTIFS_EN_PAUSE = [
+  "seuil monumental","seuil de passage","portail","porte monumentale","arche",
+  "fissure","structure fracturée","visage fragmenté","masque fissuré",
+  "ligne dorée centrale","axe de lumière","rayon vertical central",
+  "particules dorées comme sujet principal","pluie de particules",
+  "phénix","statue géante","chaînes rompues","personnage encapuchonné",
+];
+const V2_MOTIF_PATTERNS = [
+  /\b(?:seuil|portail|porte monumentale|arche)\b/,
+  /\b(?:fissur\w*|fractur\w*|fragment\w*|masque fissure)\b/,
+  /\b(?:ligne doree centrale|axe de lumiere|rayon vertical central)\b/,
+  /\b(?:particul\w*|pluie de particules)\b/,
+  /\b(?:phenix|statue geante|chaines rompues|personnage encapuchonne)\b/,
+];
+function buildUniversSDZBlockV2(){
+  return "";
+}
+function contientMotifV2EnPause(value){
+  const norm = normalizeForContainmentCheck(value);
+  return V2_MOTIF_PATTERNS.some(pattern => pattern.test(norm));
+}
+function buildActiveRegistryDecorContract(registres){
+  const actifs = [...new Set((Array.isArray(registres) ? registres : [])
+    .filter(r=>KNOWN_REGISTRES.includes(r)))];
+  if(!actifs.length) return "";
+  const directions = [];
+  if(actifs.includes("cinematographie")){
+    directions.push("profondeur cinématographique nettement lisible sur trois plans, avec premier plan sombre texturé, sujet parfaitement détaché au plan principal et arrière-plan éclairé par une lumière latérale");
+  }
+  if(actifs.includes("architecture")){
+    directions.push("architecture intérieure abstraite visible en pierre noire satinée : hautes parois sculptées, nervures verticales, panneaux minéraux et volumes géométriques non culturels dont les arêtes accrochent des reflets d'or noble");
+  }
+  if(actifs.includes("fantastique")){
+    directions.push("dimension fantastique portée uniquement par une perspective légèrement impossible, une échelle majestueuse et des reflets dorés fluides intégrés aux surfaces, sans symbole, portail, halo, particules ni phénomène occulte");
+  }
+  return `Décor noir et or visible, détaillé et habité, jamais fond noir uni ni vide : ${directions.join(" ; ")}. Les détails du décor restent lisibles dans les ombres sans concurrencer le sujet ni le matériel réel`;
 }
 
 /* ---------- 2. CALCUL DÉTERMINISTE DES OPTIONS AUTORISÉES (avant tout appel au Planner) ---------- */
@@ -2046,8 +2528,10 @@ Tu raisonnes STRICTEMENT dans cet ordre, chaque champ étant une conséquence du
 7. archetypeEmotionnel — tu CLASSES le moment que tu viens d'imaginer dans un archétype fermé, tu n'en inventes jamais un nouveau. Choisis-le PARMI les options fournies, jamais en dehors.
 8. miseEnScene (sujet, action, cadrage, point de vue) — le cadrage et le point de vue doivent être choisis PARMI l'ensemble associé à l'archétype retenu à l'étape 7, jamais librement.
 9. decor — doit correspondre aux scènes compatibles de l'archétype retenu.
-10. lumiere, elementOr, niveauLuminosite — doivent correspondre à la signature lumineuse propre à l'archétype retenu. N'utilise JAMAIS un connecteur ou un dispositif universel identique quel que soit l'archétype : chaque archétype a sa propre lumière.
-11. symbolePrincipal — vocabulaire MASTER_UNIVERS_SDZ imposé (fourni plus bas), justifié comme conséquence du conflit, pas seulement de la prestation.
+10. lumiere, elementOr, niveauLuminosite — doivent correspondre à la signature lumineuse propre à l'archétype retenu. N'utilise JAMAIS un connecteur ou un dispositif universel identique quel que soit l'archétype : chaque archétype a sa propre lumière. Le noir sert d'écrin à un sujet lisible ; il ne doit jamais produire une image sous-exposée, lugubre ou étouffante.
+11. symbolePrincipal — par défaut "aucun" : le geste, la zone du corps ou le matériel réel de la prestation porte la narration. Un symbole n'est admis que s'il rend CETTE prestation plus reconnaissable et s'il figure dans une liste explicitement fournie. N'invente jamais un symbole pour remplir le champ.
+
+REGISTRE ÉMOTIONNEL SDZ : spectaculaire, héroïque, premium, ascendant et transformateur. La tension ou l'ombre peuvent apparaître dans un plan secondaire comme l'état que le sujet dépasse ; elles ne doivent jamais dominer le visage, le soin ni l'issue de l'image. L'instant principal montre la lumière, la puissance ou l'élan qui reprennent le dessus. Le corps et le visage restent humains, naturels et intacts : "transformation" signifie changement d'ambiance ou de posture, jamais mutation physique. Interdits absolus : horreur, terreur, menace, désespoir sans issue, personnage encapuchonné menaçant, visage central mutilé ou fissuré, corps fragmenté ou captif, crypte, rituel, sorcellerie, astrologie, signes zodiacaux, faux sceau, faux logo, faux emblème de zèbre.
 
 Tu ne rédiges jamais de texte final : tu conçois une scène concrète, précise et jouable par un modèle de génération d'image. Réponds uniquement selon le schéma structuré demandé.`;
 }
@@ -2056,13 +2540,13 @@ function buildCreativePlannerUserPromptV2(allowed, exclusions, mission, prestati
   const socleResult = buildCompactMasterImageSocle(registres);
   const socle = socleResult.text;
   if(trace) trace.moduleIds = socleResult.ids;
-  const universBlock = buildUniversSDZBlock(allowed);
+  const universBlock = buildUniversSDZBlockV2(allowed);
   const prestationBlock = buildPrestationFicheBlock(prestation);
   const info = getSelectedPrestationInfo(prestation);
   const prestationDocumentee = !!(info && !info.generic && info.block);
   const typeCreationInstructions = typeCreationImpose === "affiche_fantastique"
     ? `Type de création imposé : affiche_fantastique — tu ne choisis pas ce type, applique-le tel quel dans "typeCreation".
-Construis un photomontage cinématographique hyperréaliste à plusieurs plans, une atmosphère mythologique mature et spectaculaire. Noir dominant, or noble et lumineux. Jamais une fantasy enfantine, une illustration plate ou un rendu de spa générique.`
+Construis un photomontage cinématographique hyperréaliste à plusieurs plans, héroïque, mature et spectaculaire. Noir profond comme écrin, sujet parfaitement lisible, or métallique noble et lumineux. L'or n'est jamais orange, ambré, couleur feu ou incendie. L'issue visuelle est ascendante et désirable, jamais lugubre.`
     : `Type de création imposé : luxe_silencieux — tu ne choisis pas ce type, applique-le tel quel dans "typeCreation".
 Photographie éditoriale premium, sobre, réaliste et intime.`;
   const consignePrestation = prestationDocumentee
@@ -2077,26 +2561,50 @@ Sujet demandé par l'utilisateur : ${topic}
 
 ${typeCreationInstructions}
 
+REGISTRES VISUELS ACTIFS — ils doivent tous être visibles dans l'image, et pas seulement mentionnés :
+${(registres||[]).map(r=>`- ${r}`).join("\n") || "- aucun registre supplémentaire"}
+${buildActiveRegistryDecorContract(registres) ? `CONTRAT DE DÉCOR DÉTERMINISTE : ${buildActiveRegistryDecorContract(registres)}.` : ""}
+
 Principes visuels indispensables de la marque SDZ (à respecter impérativement) :
 ${socle}
 
 CONSIGNE OBLIGATOIRE SUR LA PRESTATION :
 ${consignePrestation}
+- Le geste, la zone du corps ou le matériel distinctif est le héros visuel et doit être visible au premier regard : une image générique de portail, silhouette, méditation ou lumière abstraite ne suffit jamais.
+- Dans "miseEnScene.action", décris uniquement l'usage réel de la prestation, une posture ou un geste humain crédible. N'y place jamais un effet visuel, des particules, une lumière, une transformation ou un symbole.
+- L'effet fantastique amplifie la prestation réelle ; il ne la remplace jamais. Le sujet reste naturel, habillé, crédible et intact.
 - Reste éditorial, premium et jamais démonstratif ou didactique.
+${prestation==="Luminothérapie PSIO®" ? `- CAS PSIO® : la personne est déjà confortablement installée, les yeux fermés, avec les lunettes correctement portées et lisibles sur le visage. Elle n'est jamais debout, en attente de commencer, ni en train de tenir les lunettes à la main. La forme, les proportions, la surface optique, l'écran, les commandes et les câbles doivent correspondre strictement à la référence officielle ; seule la couleur peut être adaptée en noir profond et or noble SDZ. Aucun casque VR, halo circulaire, auréole, faisceau ajouté ou geste secondaire inventé.` : ""}
+
+${platform==="Story" ? `DIRECTION VISUELLE DE RÉFÉRENCE — STORIES SDZ :
+- composition verticale 9:16 dense et éditoriale, sujet héroïque central, profondeur en plusieurs plans, énergie dorée ascendante ;
+- contraste noir/or spectaculaire, niveau lumineux et éclatant : le noir reste un écrin détaillé, jamais une sous-exposition ;
+- point de vue à hauteur du regard ou en légère contre-plongée valorisante ; aucune vue plongeante qui rapetisse le sujet ;
+- grande zone calme réservée au titre et à la signature officielle ajoutés ensuite par Canvas ;
+- ne reproduis aucun élément d'interface Instagram : barre de story, avatar, date, boutons, réactions, vignettes ou navigation ;
+- ne génère aucun texte, aucun logo, aucun zèbre décoratif et aucun symbole de marque : ils seront ajoutés proprement après génération ;
+- interdiction de retomber sur les automatismes des runs précédents : ${V2_MOTIFS_EN_PAUSE.join(", ")}.` : ""}
 
 Archétypes émotionnels autorisés (choisis-en un seul, exactement tel quel dans "archetypeEmotionnel") — chacun est une identité complète, pas une simple catégorie :
 ${allowed.map(a=>`- ${a.id} (${a.label}) : émotion "${a.emotion||""}", dramaturgie "${a.dramaturgie||""}", rythme "${a.rythme||""}", sensation "${a.sensation||""}" — scènes : ${a.scenesCompatibles.join(" / ")} — cadrages possibles : ${a.cadrages.join(", ")} — lumières possibles : ${a.lumieres.join(", ")} — interdits : ${a.interdits.join(", ")} — scène de soin : ${a.presenceSoin}`).join("\n")}
 ${universBlock ? `
 RÈGLE OFFICIELLE MASTER_UNIVERS_SDZ (à respecter impérativement) :
-- Un seul élément de la liste ci-dessous est autorisé, choisi parmi ceux proposés.
+- Un seul élément de la liste ci-dessous est éventuellement autorisé, choisi dans la section de l'archétype retenu. "aucun" reste préférable si le matériel réel suffit.
 - Cet élément ne peut jamais préexister à la scène : il apparaît uniquement parce que le conflit posé se résout ou se manifeste visuellement.
 - Il constitue la manifestation visuelle du conflit et de la transformation éventuelle — jamais un décor, jamais une décoration.
 
 Vocabulaire symbolique SDZ imposé pour "symbolePrincipal" — n'utilise RIEN d'autre, quelle que soit l'origine géographique ou culturelle évoquée par la prestation (aucun monument réel, aucune figure religieuse, aucune référence culturelle existante) :
 ${universBlock}` : ""}
 
+POLITIQUE SYMBOLIQUE V2 :
+- écris "aucun" dans "symbolePrincipal" lorsque le geste ou le matériel distinctif suffit — c'est le choix attendu pour une prestation identifiable ;
+- ne remplace jamais l'absence de symbole par un seuil, un portail, une arche, une fissure, un masque, une ligne centrale, des particules, un phénix, une statue ou des chaînes ;
+- inscris ces motifs en toutes lettres dans "negativePrompt" afin que le constructeur final les interdise aussi.
+
 Éléments à ne surtout pas répéter (déjà utilisés très récemment sur cette plateforme) :
 ${exclusions.length ? exclusions.map(e=>`- ${e}`).join("\n") : "(aucun historique récent)"}
+
+${platform==="Story" ? `Pour "texteImage", fournis obligatoirement le NOM COURT ET RECONNAISSABLE DE LA PRESTATION en première partie, puis une sous-ligne spécifique de 3 à 7 mots dérivée de sa fiche, séparées par le caractère |. Exemple de structure : "PSIO® | LUMIÈRE ET SON EN HARMONIE". Interdits car trop génériques : "Déconnexion parfaite", "Immersion dans l'instant", "Révélez-vous", "Renaître", "Expérience transformatrice". Réserve "zoneTexte" dans le tiers supérieur ou inférieur selon la scène.` : `Pour "texteImage", reste sobre et conforme aux règles de la plateforme.`}
 
 Conçois une scène originale et précise respectant l'identité noir & or de SDZ (or noble, jamais orangé ; le noir comme espace, jamais comme sous-exposition).`);
 }
@@ -2305,9 +2813,117 @@ function deriveEmotionFromChaine(briefV2){
   return parts.filter(Boolean).join(" — ");
 }
 
-function validateAndFixBriefV2(brief, allowed, exclusions, typeCreationImpose, prestation){
+const STORY_PRESTATION_LABELS = {
+  "Massage Zébré":"MASSAGE ZÉBRÉ",
+  "Massage Ayurvédique Abhyanga":"ABHYANGA",
+  "Massage Balinais":"MASSAGE BALINAIS",
+  "Massage Thaï traditionnel":"MASSAGE THAÏ",
+  "Massage Femme enceinte":"MASSAGE MATERNITÉ",
+  "Massage Enfant":"MASSAGE ENFANT",
+  "Réflexologie plantaire thaïlandaise":"RÉFLEXOLOGIE",
+  "Massage japonais du visage":"MASSAGE VISAGE",
+  "Massage lymphatique expert":"MASSAGE LYMPHATIQUE",
+  "Soin énergétique":"SOIN ÉNERGÉTIQUE",
+  "Reiki":"REIKI",
+  "Luminothérapie PSIO®":"PSIO®",
+  "Biorésonance quantique":"BIORÉSONANCE",
+  "Soin minceur":"SOIN MINCEUR",
+  "Offre Sylver":"OFFRE SYLVER",
+  "Offre Gold":"OFFRE GOLD",
+  "Massage dos/zone":"MASSAGE CIBLÉ",
+  "Prestations en entreprise":"BIEN-ÊTRE EN ENTREPRISE",
+};
+const STORY_PRESTATION_SUBLINES = {
+  "Luminothérapie PSIO®":"LUMIÈRE ET SON, ÉVASION SENSORIELLE",
+};
+const STORY_HEADLINES_TROP_GENERIQUES = [
+  "deconnexion parfaite","immersion dans l instant","revelez vous","renaitre",
+  "renaissance","experience transformatrice","nouvel espace interieur",
+  "retrouvez votre energie","liberez vous","harmonie interieure",
+  "deconnectez vous des ressentis quotidiens",
+];
+function getStoryPrestationLabel(prestation){
+  if(STORY_PRESTATION_LABELS[prestation]) return STORY_PRESTATION_LABELS[prestation];
+  const clean = String(prestation||"").trim();
+  return clean && clean!=="Tous sujets" ? clean.toUpperCase() : "LA SANTÉ DES ZÈBRES";
+}
+function getStoryDiscoveryLine(prestation){
+  const name = String(prestation||"").trim().toUpperCase();
+  if(!name || prestation==="Tous sujets") return "UNE EXPÉRIENCE SIGNÉE SDZ";
+  if(/^MASSAGE\b/.test(name) || /^SOIN\b/.test(name) || prestation==="Reiki") return `DÉCOUVREZ LE ${name}`;
+  if(/^OFFRE\b/.test(name)) return `DÉCOUVREZ L'${name}`;
+  if(/^PRESTATIONS\b/.test(name)) return `DÉCOUVREZ NOS ${name}`;
+  return `DÉCOUVREZ LA ${name}`;
+}
+function ensureStoryHeadline(texteImage, prestation){
+  const label = getStoryPrestationLabel(prestation);
+  const canonicalSubtitle = STORY_PRESTATION_SUBLINES[prestation];
+  if(canonicalSubtitle) return `${label} | ${canonicalSubtitle}`;
+  const parts = String(texteImage||"").split("|").map(x=>x.trim()).filter(Boolean);
+  let subtitle = parts.slice(1).join(" ").trim();
+  const subtitleNorm = normalizeForContainmentCheck(subtitle);
+  const wordCount = subtitle.split(/\s+/).filter(Boolean).length;
+  const tropGenerique = !subtitle || wordCount<3 || wordCount>7 ||
+    STORY_HEADLINES_TROP_GENERIQUES.some(x=> subtitleNorm.includes(normalizeForContainmentCheck(x)));
+  if(tropGenerique){
+    subtitle = getStoryDiscoveryLine(prestation);
+  }
+  return `${label} | ${subtitle}`;
+}
+function getServiceVisualMoment(prestation){
+  if(prestation==="Luminothérapie PSIO®"){
+    return "l'instant calme où les lunettes PSiO® portées sur le visage deviennent le centre visuel";
+  }
+  return "l'instant où le geste ou le matériel distinctif de la prestation devient clairement lisible";
+}
+function getServiceHeroAction(prestation){
+  if(prestation==="Luminothérapie PSIO®"){
+    return "rester confortablement installé, les yeux fermés pendant la séance, lunettes PSiO® bien visibles";
+  }
+  return "recevoir ou utiliser la prestation, avec son geste ou son matériel distinctif clairement visible";
+}
+function getServiceHeroSubject(prestation){
+  if(prestation==="Luminothérapie PSIO®"){
+    return "une personne adulte confortablement installée, portant les lunettes PSiO® correctement ajustées sur le visage";
+  }
+  return "";
+}
+function getServiceGoldAccent(prestation){
+  if(prestation==="Luminothérapie PSIO®"){
+    return "reflets d'or métallique noble sur le visage, le vêtement et les lunettes PSiO® recolorées en noir profond et or noble, sans modifier leur forme officielle";
+  }
+  return "";
+}
+function getServiceVisibleCharacteristic(prestation){
+  if(prestation==="Luminothérapie PSIO®"){
+    return "lunettes PSiO® de forme officielle exacte, correctement portées sur le visage et lisibles au premier regard, recolorées en noir profond et or noble SDZ";
+  }
+  return "";
+}
+const PSIO_COMPOSITION_INTERDITE = [
+  "personne debout pendant la séance",
+  "personne en attente de commencer",
+  "lunettes PSiO® tenues à la main",
+  "lunettes assimilées à un casque VR",
+  "autres lunettes ou casque que le modèle PSiO® officiel fourni en référence",
+  "lunettes PSiO® générées dans une palette autre que noir profond et or noble SDZ",
+  "forme, proportions ou commandes des lunettes PSiO® modifiées",
+  "halo circulaire ou auréole autour de la tête",
+  "faisceau lumineux ajouté",
+  "particules dorées, poussière dorée ou halo de poussières",
+  "main ou geste secondaire inventé",
+];
+function pointDeVueRabatLeSujet(value){
+  const norm = normalizeForContainmentCheck(value);
+  return /\b(?:vue du dessus|angle superieur)\b/.test(norm)
+    || (/\bplong(?:e|ee|ant)\b/.test(norm) && !/\bcontre plonge/.test(norm));
+}
+
+function validateAndFixBriefV2(brief, allowed, exclusions, typeCreationImpose, prestation, platform, registres){
   const allowedIds = allowed.map(a=>a.id);
   const fixed = { ...brief };
+  fixed.registresActifs = [...new Set((Array.isArray(registres) ? registres : [])
+    .filter(r=>KNOWN_REGISTRES.includes(r)))];
   let corrected = false;
 
   // 5. Confinement archétype — correction silencieuse, même mécanique que l'archétype narratif V1.
@@ -2332,13 +2948,128 @@ function validateAndFixBriefV2(brief, allowed, exclusions, typeCreationImpose, p
     corrected = true;
   }
   if(!Array.isArray(fixed.compositionInterdite)) fixed.compositionInterdite = [];
-  fixed.compositionInterdite = [...new Set([...fixed.compositionInterdite, ...exclusions])];
+  /* Les exclusions d'historique servent uniquement à demander de la diversité au Planner.
+     Elles décrivent souvent une ancienne scène complète et peuvent contenir des invariants de la
+     prestation (posture PSiO, cadrage Story, geste réel). Elles ne doivent donc jamais devenir un
+     negative prompt final. On retire aussi les copies que le Planner aurait recopiées telles quelles. */
+  const exclusionHistoriqueKeys = new Set((exclusions||[]).map(normalizeForContainmentCheck).filter(Boolean));
+  const compositionSansHistorique = fixed.compositionInterdite.filter(item=>
+    !exclusionHistoriqueKeys.has(normalizeForContainmentCheck(item))
+  );
+  if(compositionSansHistorique.length!==fixed.compositionInterdite.length) corrected = true;
+  fixed.compositionInterdite = [...new Set(compositionSansHistorique)];
   if(fixed.typeCreation !== typeCreationImpose){ fixed.typeCreation = typeCreationImpose; corrected = true; }
 
-  // 1. Interdits absolus (impactEmotionnelRecherche) — jamais réparé automatiquement, comme la
-  //    caractéristique de prestation en V1 : un échec ici bloque, il n'est pas fabriqué.
+  // Le matériel PSiO® doit rester exact quel que soit le registre choisi. Cette normalisation
+  // ne dépend donc pas du type "affiche_fantastique" : Luxe silencieux et tous les futurs styles
+  // bénéficient du même verrou produit, de la même posture de séance et des mêmes exclusions.
+  const isPsio = prestation==="Luminothérapie PSIO®";
+  fixed.miseEnScene = fixed.miseEnScene || {};
+  if(isPsio){
+    const sujetPsio = getServiceHeroSubject(prestation);
+    const actionPsio = getServiceHeroAction(prestation);
+    const momentPsio = getServiceVisualMoment(prestation);
+    const orPsio = getServiceGoldAccent(prestation);
+    const caracteristiquePsio = getServiceVisibleCharacteristic(prestation);
+    fixed.compositionInterdite = [...new Set([...fixed.compositionInterdite, ...PSIO_COMPOSITION_INTERDITE])];
+    if(fixed.miseEnScene.sujetPrincipal!==sujetPsio){ fixed.miseEnScene.sujetPrincipal = sujetPsio; corrected = true; }
+    if(fixed.miseEnScene.action!==actionPsio){ fixed.miseEnScene.action = actionPsio; corrected = true; }
+    if(fixed.momentCinematographique!==momentPsio){ fixed.momentCinematographique = momentPsio; corrected = true; }
+    if(fixed.elementOr!==orPsio){ fixed.elementOr = orPsio; corrected = true; }
+    if(fixed.caracteristiquePrestationVisible!==caracteristiquePsio){
+      fixed.caracteristiquePrestationVisible = caracteristiquePsio;
+      corrected = true;
+    }
+    if(fixed.presenceSoin!=="visible_editoriale"){ fixed.presenceSoin = "visible_editoriale"; corrected = true; }
+    if(platform==="Story" && pointDeVueRabatLeSujet(fixed.miseEnScene.pointDeVue)){
+      fixed.miseEnScene.pointDeVue = "angle trois-quarts à hauteur du regard, posture valorisante";
+      corrected = true;
+    }
+    if(platform==="Story" && fixed.niveauLuminosite!=="lumineux_eclatant"){
+      fixed.niveauLuminosite = "lumineux_eclatant";
+      corrected = true;
+    }
+  }
+
+  // Pause déterministe des automatismes observés pendant les runs officiels. Le brief V2 place
+  // désormais la prestation réelle au centre et n'impose aucun symbole de substitution.
+  if(typeCreationImpose==="affiche_fantastique"){
+    fixed.compositionInterdite = [...new Set([...fixed.compositionInterdite, ...V2_MOTIFS_EN_PAUSE])];
+    const symboleNorm = normalizeForContainmentCheck(fixed.symbolePrincipal);
+    if(symboleNorm && symboleNorm!=="aucun"){
+      fixed.symbolePrincipal = "aucun";
+      corrected = true;
+    }
+    if(contientMotifV2EnPause(fixed.decor)){
+      fixed.decor = "espace noir profond abstrait, composé en plusieurs plans autour du sujet, du geste et du matériel distinctif";
+      corrected = true;
+    }
+    if(contientMotifV2EnPause(fixed.lumiere) || /symbole monumental|halo|cercle|axe|rayon vertical/i.test(String(fixed.lumiere||""))){
+      fixed.lumiere = (archetypeRetenu && archetypeRetenu.lumieres && archetypeRetenu.lumieres[0])
+        || "source chaude unique latérale révélant le sujet, le geste et le matériel distinctif";
+      corrected = true;
+    }
+    if(contientMotifV2EnPause(fixed.elementOr) || /particul|debris|débris|etincell|étincell/i.test(String(fixed.elementOr||""))){
+      fixed.elementOr = "reflets d'or métallique noble sur le geste et le matériel distinctif";
+      corrected = true;
+    }
+    if(contientMotifV2EnPause(fixed.momentCinematographique)){
+      fixed.momentCinematographique = getServiceVisualMoment(prestation);
+      corrected = true;
+    }
+    if(contientMotifV2EnPause(fixed.miseEnScene.action)
+      || /particul|debris|débris|etincell|étincell|effet visuel|transformation physique/i.test(String(fixed.miseEnScene.action||""))){
+      fixed.miseEnScene.action = getServiceHeroAction(prestation);
+      corrected = true;
+    }
+    if(/^une adulte\b/i.test(String(fixed.miseEnScene.sujetPrincipal||""))){
+      fixed.miseEnScene.sujetPrincipal = String(fixed.miseEnScene.sujetPrincipal)
+        .replace(/^une adulte\b/i, "une personne adulte");
+      corrected = true;
+    }
+    if(platform==="Story" && pointDeVueRabatLeSujet(fixed.miseEnScene.pointDeVue)){
+      fixed.miseEnScene.pointDeVue = "angle trois-quarts à hauteur du regard, posture valorisante";
+      corrected = true;
+    }
+    if(platform==="Story" && fixed.niveauLuminosite!=="lumineux_eclatant"){
+      fixed.niveauLuminosite = "lumineux_eclatant";
+      corrected = true;
+    }
+    const registryDecorContract = buildActiveRegistryDecorContract(fixed.registresActifs);
+    if(registryDecorContract){
+      const plannerDecor = String(fixed.decor||"").trim();
+      const plannerDecorUtile = plannerDecor
+        && !contientMotifV2EnPause(plannerDecor)
+        && !/^(?:espace|fond) noir profond abstrait\b/i.test(plannerDecor);
+      const decorAvecRegistres = plannerDecorUtile
+        ? `${registryDecorContract}. Détail spécifique du brief : ${plannerDecor}`
+        : registryDecorContract;
+      if(fixed.decor!==decorAvecRegistres){ fixed.decor = decorAvecRegistres; corrected = true; }
+    }
+    const negative = [String(fixed.negativePrompt||"").trim(),
+      "mutation physique, transfiguration du visage, corps fragmenté, ambiance d'horreur, symboles occultes, faux logo, zèbre décoratif"]
+      .filter(Boolean).join(", ");
+    if(negative !== fixed.negativePrompt){ fixed.negativePrompt = negative; corrected = true; }
+  }
+
+  if(/transfigur/i.test(String(fixed.momentCinematographique||""))){
+    fixed.momentCinematographique = String(fixed.momentCinematographique)
+      .replace(/transfigur(?:é|ée|és|ées|ation)/gi, "révélé par la lumière sans altération physique");
+    corrected = true;
+  }
+  if(platform==="Story"){
+    const headline = ensureStoryHeadline(fixed.texteImage, prestation);
+    if(headline !== fixed.texteImage){ fixed.texteImage = headline; corrected = true; }
+  }
+
+  // 1. Interdits absolus : correction locale déterministe pour ne pas condamner tout un item
+  //    de campagne sur un seul mot générique ("harmonie" avait bloqué Abhyanga au run 2).
   const impactNorm = normalizeForContainmentCheck(fixed.impactEmotionnelRecherche);
   const violationInterdite = VOCABULAIRE_INTERDIT_ABSOLU.find(mot => impactNorm.includes(normalizeForContainmentCheck(mot)));
+  if(violationInterdite){
+    fixed.impactEmotionnelRecherche = "renaissance lumineuse";
+    corrected = true;
+  }
 
   // 2. Ancrage réel — même contrôle que caracteristiqueSourcePrestation en V1, champ renommé.
   const info = getSelectedPrestationInfo(prestation);
@@ -2346,9 +3077,7 @@ function validateAndFixBriefV2(brief, allowed, exclusions, typeCreationImpose, p
   let blockingError = null;
   let aucuneRaisonDetre = false;
 
-  if(violationInterdite){
-    blockingError = `Vocabulaire interdit dans "impactEmotionnelRecherche" : "${violationInterdite}" ne peut jamais être le moteur créatif de départ (toléré uniquement comme conséquence d'un conflit posé, jamais comme intention).`;
-  } else if(!prestationDocumentee){
+  if(!prestationDocumentee){
     if(!fixed.ancrageReel) fixed.ancrageReel = "aucune prestation précise";
   } else {
     const carac = (fixed.ancrageReel || "").trim();
@@ -2450,7 +3179,7 @@ async function generateCreativeBriefV2(mission, prestation, platform, topic, typ
     console.error("[Creative Planner V2] JSON.parse a échoué — contenu brut reçu :", data.text);
     throw new Error(`Creative Planner V2 — erreur JSON.parse :\n${e.message}\n\nRéponse brute :\n${String(data.text||"").slice(0,1500)}`);
   }
-  const { brief, corrected, blockingError, aucuneRaisonDetre, filiationConflitMomentFaible } = validateAndFixBriefV2(rawBrief, allowed, exclusions, typeCreationImpose, prestation);
+  const { brief, corrected, blockingError, aucuneRaisonDetre, filiationConflitMomentFaible } = validateAndFixBriefV2(rawBrief, allowed, exclusions, typeCreationImpose, prestation, platform, registres);
   const usage = data.usage ? { promptTokens: data.usage.prompt_tokens ?? null, completionTokens: data.usage.completion_tokens ?? null, model: provider.model } : null;
   return { brief, corrected, blockingError, aucuneRaisonDetre, filiationConflitMomentFaible, allowed, exclusions, usage, plannerNetworkRetryUsed };
 }
@@ -2545,7 +3274,7 @@ async function generateCreativeBrief(mission, prestation, platform, topic, typeC
    artistique du Creative Planner (buildCreativePlannerUserPrompt, inchangé) : c'est là qu'ils
    façonnent le brief. Ici, dans le prompt image final, ils n'apparaissent plus en concaténation
    de 2500 caractères mais en une charte condensée — même rôle qu'une mémoire implicite. */
-const CHARTE_SDZ_SYNTHESE = "Charte SDZ : palette exclusivement noir et or (or noble, métallique, satiné — jamais jaune vif, cuivre ou orange) ; clair-obscur dramatique avec une seule source de lumière chaude ; rendu premium d'affiche de cinéma ; aucune imagerie de spa générique, aucun beige, brun ou bois clair dominant ; aucune référence culturelle ou religieuse réelle (ni temple, ni Bouddha, ni monument existant) ; visages jamais frontaux ni exposés ; émotion forte portée par la lumière et la composition, pas par la surcharge.";
+const CHARTE_SDZ_SYNTHESE = "Charte SDZ : palette exclusivement noir et or (or noble, métallique, satiné — jamais jaune vif, cuivre ou orange) ; clair-obscur dramatique avec une seule source de lumière chaude ; rendu premium d'affiche de cinéma ; aucune imagerie de spa générique, aucun beige, brun ou bois clair dominant ; aucune référence culturelle ou religieuse réelle (ni temple, ni Bouddha, ni monument existant) ; visages naturels, intacts et crédibles, cadrés de façon éditoriale ; émotion forte portée par la lumière, la composition et la prestation réelle, pas par la surcharge symbolique.";
 
 /* ============================================================
    T1 — ORCHESTRATEUR + PROMPT VALIDATOR (architecture figée, mode rapport)
@@ -2563,7 +3292,7 @@ function buildOrchestratorPacket(brief, registres, platform, aspectKey){
     sujet: brief.sujetPrincipal || "",
     action: brief.action || "",
     emotion: brief.emotion || "",
-    symbole: brief.symbolePrincipal || "",
+    symbole: symboleBriefUtile(brief.symbolePrincipal) ? brief.symbolePrincipal : "",
     instantChoisi: brief.pointDeTransformation || "",
     lienCausal: brief.caracteristiquePrestationVisible || "",
     registres: Object.freeze([...(registres||[])]),
@@ -2639,6 +3368,11 @@ const USE_DA_WRITER = true;
 const DA_WRITER_MODEL = "gpt-5-mini"; // reformulation pure : mini + reasoning_effort minimal suffit
 const DA_WRITER_MAX_WORDS = 320;      // rejet au-delà (cible demandée : 180-250 mots)
 
+function symboleBriefUtile(value){
+  const symbole = String(value||"").trim();
+  return !!symbole && !/^aucun(?:\b|\s|—|-)/i.test(symbole);
+}
+
 /* Extrait UNIQUEMENT les champs exportables du brief (tri validé). Les champs de raisonnement
    (plansVisuels, structureNarrative, oppositionVisuelle, archetypeNarratif, messageCentral,
    referenceFamily, raisonDifference, zoneLogo, zoneTexte, texteImage...) et les sentinelles
@@ -2646,6 +3380,7 @@ const DA_WRITER_MAX_WORDS = 320;      // rejet au-delà (cible demandée : 180-2
 function extractExportableBriefFields(brief){
   const carac = String(brief.caracteristiquePrestationVisible||"").trim();
   const caracUtile = carac && !/^aucune prestation précise\.?$/i.test(carac);
+  const symboleUtile = symboleBriefUtile(brief.symbolePrincipal);
   return {
     typeCreation: brief.typeCreation,
     ideeVisuelle: brief.ideeVisuelle,
@@ -2659,7 +3394,7 @@ function extractExportableBriefFields(brief){
     elementOr: brief.elementOr,
     emotion: brief.emotion,
     pointDeTransformation: brief.pointDeTransformation,
-    symbolePrincipal: brief.symbolePrincipal,
+    ...(symboleUtile ? { symbolePrincipal: brief.symbolePrincipal } : {}),
     ...(caracUtile ? { caracteristiquePrestationVisible: carac } : {}),
   };
 }
@@ -2676,6 +3411,7 @@ function extractExportableBriefFields(brief){
 function extractExportableBriefFieldsComplet(brief){
   const carac = String(brief.caracteristiquePrestationVisible||"").trim();
   const caracUtile = carac && !/^aucune prestation précise\.?$/i.test(carac);
+  const symboleUtile = symboleBriefUtile(brief.symbolePrincipal);
   return {
     typeCreation: brief.typeCreation,
     ideeVisuelle: brief.ideeVisuelle,
@@ -2689,7 +3425,7 @@ function extractExportableBriefFieldsComplet(brief){
     elementOr: brief.elementOr,
     emotion: brief.emotion,
     pointDeTransformation: brief.pointDeTransformation,
-    symbolePrincipal: brief.symbolePrincipal,
+    ...(symboleUtile ? { symbolePrincipal: brief.symbolePrincipal } : {}),
     plansVisuels: brief.plansVisuels || null,
     ...(caracUtile ? { caracteristiquePrestationVisible: carac } : {}),
   };
@@ -2722,9 +3458,10 @@ function computeCompletTransmissionFlags(exportable){
 function extractExportableBriefFieldsGroupe(brief){
   const carac = String(brief.caracteristiquePrestationVisible||"").trim();
   const caracUtile = carac && !/^aucune prestation précise\.?$/i.test(carac);
+  const symboleUtile = symboleBriefUtile(brief.symbolePrincipal);
   const obligatoire = {
     sujetPrincipal: brief.sujetPrincipal,
-    symbolePrincipal: brief.symbolePrincipal,
+    ...(symboleUtile ? { symbolePrincipal: brief.symbolePrincipal } : {}),
     emotion: brief.emotion,
     pointDeTransformation: brief.pointDeTransformation,
     ...(caracUtile ? { caracteristiquePrestationVisible: carac } : {}),
@@ -2801,9 +3538,9 @@ function serializeBriefToPromptFallbackGroupe(brief, platform, aspectKey, isCamp
   const g = { ...groupe.obligatoire, ...groupe.contexte };
   const ligneObligatoire = [
     ["Sujet", g.sujetPrincipal],
-    ["Symbole central relié au sujet par un unique axe de lumière dorée", g.symbolePrincipal],
+    ["Symbole éventuel explicitement demandé par le brief", g.symbolePrincipal],
     ["Instant unique de la scène", g.pointDeTransformation],
-    ...(g.caracteristiquePrestationVisible ? [["Cause visible du symbole", g.caracteristiquePrestationVisible]] : []),
+    ...(g.caracteristiquePrestationVisible ? [["Caractéristique visible de la prestation", g.caracteristiquePrestationVisible]] : []),
     ["Émotion", g.emotion],
   ].filter(([,v])=> String(v||"").trim()).map(([k,v])=> `${k} : ${s(v)}`).join(" ");
   const ligneContexte = [
@@ -2829,7 +3566,7 @@ function narrativeMissingElements(text, exportable){
   const normText = normalizeForContainmentCheck(text);
   const critical = {
     "sujet": exportable.sujetPrincipal,
-    "symbole": exportable.symbolePrincipal,
+    ...(symboleBriefUtile(exportable.symbolePrincipal) ? { "symbole": exportable.symbolePrincipal } : {}),
     "émotion": exportable.emotion,
     "instant de transformation": exportable.pointDeTransformation,
     ...(exportable.caracteristiquePrestationVisible ? { "caractéristique de la prestation": exportable.caracteristiquePrestationVisible } : {}),
@@ -2855,7 +3592,9 @@ RÈGLES ABSOLUES — tu reformules, tu n'inventes JAMAIS :
 - Décris chaque symbole UNE seule fois. Aucun doublon, aucune répétition de concept.
 - Raconte UN seul instant : la scène est figée à l'instant de transformation indiqué — jamais une séquence d'états (pas de "d'abord... puis...").
 - Une seule lumière dominante, une seule ambiance, une seule idée centrale.
-- Le symbole n'est jamais un décor : il est la conséquence visible du geste de la prestation, relié au sujet par un unique axe de lumière dorée.
+- La prestation réelle prime : son geste, sa zone du corps ou son matériel doit rester lisible. Si le brief ne contient aucun "symbolePrincipal", n'en invente pas. S'il en contient un, décris-le une seule fois sans inventer d'axe, de portail, de halo ou de lien lumineux absent du brief.
+- N'ajoute aucun geste secondaire, aucune main ni aucun accessoire absent du brief. N'ajoute aucun halo, faisceau, rayon, cercle, axe ou particule si le brief ne les demande pas explicitement. Évite toute formulation incertaine comme "peut-être".
+- Le corps et le visage restent humains, naturels et intacts. Ne transforme jamais une évolution émotionnelle en mutation physique.
 - Ignore toute valeur technique ou interne qui semblerait être une donnée de contrôle.
 - Longueur : 180 à 250 mots. Un texte continu en 2 ou 3 paragraphes, sans titres, sans listes, sans étiquettes.
 - N'écris RIEN d'autre que la note elle-même : pas de préambule, pas de commentaire.`;
@@ -2951,22 +3690,42 @@ async function rewriteBriefAsNarrativeComplet(brief){
    Le Rédacteur ne les voit jamais et ne peut donc jamais les réécrire. */
 function buildPromptHeader(brief, platform, aspectKey, isCampaign){
   const typeRendu = brief.typeCreation === "affiche_fantastique"
-    ? "Affiche cinématographique fantastique, photomontage hyperréaliste, ampleur monumentale et narration symbolique."
+    ? "Affiche cinématographique fantastique, photomontage hyperréaliste, composition premium à plusieurs plans et narration centrée sur la prestation réelle."
     : "Photographie éditoriale premium, cinématographique, réaliste, sobre et intime.";
   return `${typeRendu} Format ${platform} ${aspectKey} (${ASPECTS[aspectKey].w}x${ASPECTS[aspectKey].h}).${isCampaign?" L'image appartient à une campagne multi-formats : la scène doit rester reconnaissable comme membre de la même série.":""}`;
 }
 function buildFixedGuardrailBlocks(brief, platform){
   const wantsRealLogo = logoRequiredFor(platform);
-  const usingLogoReference = wantsRealLogo && !!state.logoPublicUrl && !!state.images.find(i=>i.assetType==="logo");
+  const isPsio = /psio/i.test([
+    brief.sujetPrincipal, brief.action, brief.caracteristiquePrestationVisible,
+    brief.caracteristiqueSourcePrestation,
+  ].filter(Boolean).join(" "));
+  const charte = CHARTE_SDZ_SYNTHESE;
   const soinPhrase = brief.presenceSoin==="aucune" ? "Aucune scène de soin n'est visible."
     : brief.presenceSoin==="suggeree" ? "La sensation du soin est suggérée, jamais son déroulé technique."
-    : "Une scène de soin peut être visible si elle reste éditoriale et premium, jamais clinique.";
-  const logoPhrase = usingLogoReference
-    ? "Le logo fourni en référence est le logo officiel de la marque : utilise-le tel quel, sans jamais le redessiner, le déformer ni en inventer des variantes, médaillons ou emblèmes dérivés. Il doit être immédiatement identifiable, intégré naturellement comme un élément architectural majeur de la scène (gravure monumentale, emblème sculpté, portail, sceau architectural...), suffisamment grand pour être perçu immédiatement, sans jamais dominer la composition."
-    : wantsRealLogo ? "Aucun logo dessiné : une zone sobre en bas de l'image reste dégagée pour son ajout ultérieur. Interdiction stricte de générer un faux logo, une tête de zèbre stylisée en médaillon, un monogramme ou un emblème."
+    : "Une scène de soin peut être visible si elle reste professionnelle, respectueuse, éditoriale et premium.";
+  const logoPhrase = wantsRealLogo
+    ? "Aucun logo dessiné : une zone sobre reste dégagée pour l'ajout ultérieur de la signature officielle par Canvas. Interdiction stricte de générer un zèbre décoratif, un faux logo, une tête de zèbre en médaillon, un sceau, un monogramme ou un emblème."
     : "Aucun logo, médaillon ou monogramme inventé.";
-  const eviter = [String(brief.negativePrompt||"").trim(), (brief.compositionInterdite||[]).join(", ")].filter(Boolean).join(" ; ");
-  return `${CHARTE_SDZ_SYNTHESE} ${soinPhrase} Aucun texte n'est incrusté dans l'image ; le tiers inférieur reste visuellement calme, prêt à recevoir un texte ajouté ensuite. ${logoPhrase}${eviter ? ` À éviter absolument : ${eviter}.` : ""}
+  const negativeItems = String(brief.negativePrompt||"")
+    .split(/\s*[,;]\s*/).map(x=>x.trim()).filter(Boolean);
+  const compositionItems = (brief.compositionInterdite||[])
+    .map(x=>String(x||"").trim()).filter(Boolean);
+  const exclusionsVues = new Set();
+  const eviter = [...negativeItems, ...compositionItems].filter(item=>{
+    const key = normalizeForContainmentCheck(item);
+    if(!key || exclusionsVues.has(key)) return false;
+    exclusionsVues.add(key);
+    return true;
+  }).join(", ");
+  const storyGuard = platform==="Story"
+    ? "Story 9:16 : composition dense, héroïque et ascendante, mais sans barre Instagram, avatar, date, boutons, réactions, vignettes ni navigation."
+    : "";
+  const psioProductGuard = isPsio
+    ? "VERROU PRODUIT — RETOUCHE À PARTIR DE L'IMAGE 1 : les trois images fournies décrivent ensemble un seul et même dispositif officiel. L'image 1, vue de profil portée, est la photographie de base à transformer : conserve exactement la pose, l'angle de tête, l'ajustement sur le visage, la silhouette, les proportions, la grande surface optique incurvée, les boîtiers latéraux, le petit écran, les commandes et les câbles. Ne recrée pas le dispositif sur une autre personne. Ne change que le décor, l'éclairage éditorial et la couleur des surfaces du dispositif. Image 2 : vue de face portée, référence secondaire pour confirmer la visière incurvée et le pont nasal. Image 3 : produit isolé, référence secondaire pour confirmer l'écran, les commandes et les câbles. Recolore uniquement les surfaces blanches, bleues et cyan du dispositif en noir profond et or métallique noble SDZ, sans modifier leur géométrie, leur perspective ni leur position. Ignore et ne recopie aucune inscription, marque, mot, lettre, chiffre ou pictogramme visible sur le dispositif ou dans les références : toutes les surfaces du produit doivent rester vierges et sans marque dans l'image brute. Aucun autre type de lunettes, masque, casque ou visière n'est admis. Change uniquement le fond, la lumière et la palette ; conserve le sujet et le produit de l'image 1 inchangés dans leur forme et leur placement."
+    : "";
+  const registryGuard = buildActiveRegistryDecorContract(brief.registresActifs);
+  return `${charte} ${soinPhrase} Noir profond comme écrin, jamais comme sous-exposition. Sujet, geste et matériel lisibles au premier regard. Or métallique noble, jamais orange, ambre, feu ou incendie. Énergie ascendante et désirable. ${registryGuard ? `CONTRAT DE VISIBILITÉ DES REGISTRES : ${registryGuard}. Le décor doit être immédiatement perceptible derrière et autour du sujet ; une grande surface noire uniforme ou vide constitue un échec.` : ""} L'ombre ou la fragmentation ne peuvent exister qu'en opposition secondaire clairement dépassée par le sujet ; jamais horreur, menace, désespoir sans issue, personnage encapuchonné menaçant, visage central mutilé, crypte, rituel, sorcellerie, astrologie ou signes zodiacaux. Aucun texte n'est incrusté dans l'image ; une zone visuellement calme reste prête à recevoir le texte ajouté ensuite. ${storyGuard} ${psioProductGuard} ${logoPhrase}${eviter ? ` À éviter absolument : ${eviter}.` : ""}
 
 ${SAFETY_GUARDRAIL}`;
 }
@@ -2982,8 +3741,8 @@ function serializeBriefToPromptFallback(brief, platform, aspectKey, isCampaign){
     ["Sujet", brief.sujetPrincipal], ["Action", brief.action], ["Décor", brief.decor],
     ["Cadrage", [brief.cadrage, brief.pointDeVue].filter(Boolean).join(", ")],
     ["Instant unique de la scène", brief.pointDeTransformation],
-    ["Symbole central relié au sujet par un unique axe de lumière dorée", brief.symbolePrincipal],
-    ...(caracUtile ? [["Cause visible du symbole", carac]] : []),
+    ...(symboleBriefUtile(brief.symbolePrincipal) ? [["Symbole éventuel explicitement demandé par le brief", brief.symbolePrincipal]] : []),
+    ...(caracUtile ? [["Caractéristique visible de la prestation", carac]] : []),
     ["Lumière", [brief.lumiere, brief.elementOr].filter(Boolean).join(" ")],
     ["Émotion", brief.emotion],
   ].filter(([,v])=> String(v||"").trim());
@@ -3013,8 +3772,8 @@ function serializeBriefToPromptFallbackComplet(brief, platform, aspectKey, isCam
     ["Premier plan", pv.premierPlan], ["Plan principal", pv.planPrincipal],
     ["Plan secondaire", pv.planSecondaire], ["Arrière-plan", pv.arrierePlan],
     ["Instant unique de la scène", brief.pointDeTransformation],
-    ["Symbole central relié au sujet par un unique axe de lumière dorée", brief.symbolePrincipal],
-    ...(caracUtile ? [["Cause visible du symbole", carac]] : []),
+    ...(symboleBriefUtile(brief.symbolePrincipal) ? [["Symbole éventuel explicitement demandé par le brief", brief.symbolePrincipal]] : []),
+    ...(caracUtile ? [["Caractéristique visible de la prestation", carac]] : []),
     ["Lumière", [brief.lumiere, brief.elementOr].filter(Boolean).join(" ")],
     ["Niveau de luminosité", brief.niveauLuminosite],
     ["Émotion", brief.emotion],
@@ -3052,6 +3811,48 @@ function selectReferencesForBrief(brief, platform, maxCount){
   return scored.slice(0, maxCount).map(x=>({ id: x.img.id, dataUrl: x.img.dataUrl, metadata: x.img.referenceMeta || null }));
 }
 
+/* Jeu de références produit PSiO® — distinct des références artistiques de la Bibliothèque.
+   Les trois vues complémentaires verrouillent la géométrie : produit isolé, face portée et profil
+   porté. Visages, poses, fonds et couleurs des photos ne sont jamais des références créatives. */
+const OFFICIAL_PSIO_REFERENCES = [
+  /* L'ordre est contractuel pour /images/edits : l'image portée de profil est la photographie
+     de base, les deux suivantes ne servent qu'à confirmer la géométrie du produit. */
+  { id:"official-psio-profile-v2", path:"/assets/psio-official-reference.jpg", role:"base_profil_portee_a_preserver" },
+  { id:"official-psio-front-v2", path:"/assets/psio-official-front.jpg", role:"controle_face_visiere_pont" },
+  { id:"official-psio-product-v2", path:"/assets/psio-official-product.jpg", role:"controle_commandes_ecran_cables" },
+];
+const OFFICIAL_PSIO_REFERENCE_IDS = new Set(OFFICIAL_PSIO_REFERENCES.map(r=>r.id));
+let _officialPsioReferencesCache = null;
+async function getOfficialPsioReferenceSelections(){
+  if(_officialPsioReferencesCache) return _officialPsioReferencesCache;
+  _officialPsioReferencesCache = await Promise.all(OFFICIAL_PSIO_REFERENCES.map(async ref=>({
+    id: ref.id,
+    dataUrl: await fetchImageAsDataUrl(ref.path),
+    metadata: {
+      productReference: true,
+      prestation: "Luminothérapie PSIO®",
+      referenceRole: ref.role,
+    },
+  })));
+  return _officialPsioReferencesCache;
+}
+async function resolveReferenceSelectionsByIds(ids){
+  const resolved = [];
+  for(const id of (ids||[])){
+    if(OFFICIAL_PSIO_REFERENCE_IDS.has(id)){
+      try{
+        const official = await getOfficialPsioReferenceSelections();
+        const match = official.find(r=>r.id===id);
+        if(match) resolved.push(match);
+      }catch(e){}
+      continue;
+    }
+    const img = state.images.find(x=>x.id===id);
+    if(img) resolved.push({ id:img.id, dataUrl:img.dataUrl, metadata:img.referenceMeta||null });
+  }
+  return resolved;
+}
+
 /* ---------- 6. HISTORIQUE VISUEL STRUCTURÉ ---------- */
 /* N'est appelée qu'après obtention RÉELLE d'une image (voir l'orchestrateur plus bas) — une
    génération échouée avant ce point ne produit jamais d'entrée dans state.imageHistory. */
@@ -3081,8 +3882,37 @@ const IMAGE_ANALYSIS_SCHEMA = {
       visibleObjects: { type:"array", items:{type:"string"} },
       lighting: { type:"string" }, altText: { type:"string" },
       briefMismatch: { type:"array", items:{type:"string"} },
+      protectedZones: { type:"array", items:{ type:"object", additionalProperties:false, properties:{
+        label:{type:"string"}, x:{type:"number"}, y:{type:"number"}, width:{type:"number"}, height:{type:"number"},
+      }, required:["label","x","y","width","height"] } },
+      dominantColorCast: { type:"string", enum:["official_gold","neutral","orange_amber","yellow","copper","other"] },
+      productGeometryConformity: { type:"string", enum:["not_applicable","conforme","non_conforme","incertain"] },
+      productGeometryMismatch: { type:"string" },
+      productGeometryEvidence: { type:"object", additionalProperties:false, properties:{
+        curvedOpticalShield:{type:"string",enum:["present","absent","not_visible"]},
+        deepNoseCutout:{type:"string",enum:["present","absent","not_visible"]},
+        lateralControlHousing:{type:"string",enum:["present","absent","not_visible"]},
+        rectangularScreen:{type:"string",enum:["present","absent","not_visible"]},
+        multipleRoundControls:{type:"string",enum:["present","absent","not_visible"]},
+        deviceCabling:{type:"string",enum:["present","absent","not_visible"]},
+        genericVisorOrVrHeadset:{type:"boolean"},
+      }, required:["curvedOpticalShield","deepNoseCutout","lateralControlHousing","rectangularScreen",
+        "multipleRoundControls","deviceCabling","genericVisorOrVrHeadset"] },
     },
-    required: ["visibleSubjects","visibleAction","visibleSetting","visibleObjects","lighting","altText","briefMismatch"],
+    required: ["visibleSubjects","visibleAction","visibleSetting","visibleObjects","lighting","altText","briefMismatch",
+      "protectedZones","dominantColorCast","productGeometryConformity","productGeometryMismatch","productGeometryEvidence"],
+  },
+};
+const RAW_OVERLAY_ANALYSIS_SCHEMA = {
+  name:"raw_overlay_analysis",
+  strict:true,
+  schema:{
+    type:"object", additionalProperties:false,
+    properties:{
+      rawOverlayDetected:{type:"boolean"},
+      rawOverlayDescription:{type:"string"},
+    },
+    required:["rawOverlayDetected","rawOverlayDescription"],
   },
 };
 /* Analyse l'image RÉELLEMENT obtenue (pas le brief) — c'est cette sortie, pas le brief, qui doit
@@ -3111,21 +3941,117 @@ function resizeDataUrlForAnalysis(dataUrl, maxDim, quality){
     }catch(e){ resolve(dataUrl); }
   });
 }
-async function analyzeGeneratedImage(dataUrl, brief){
+async function buildProductComparisonForAnalysis(generatedDataUrl, referenceDataUrls){
+  const refs=(Array.isArray(referenceDataUrls)?referenceDataUrls:[referenceDataUrls]).filter(Boolean).slice(0,3);
+  if(!refs.length) return resizeDataUrlForAnalysis(generatedDataUrl,1024,.7);
+  try{
+    const [generated,...referenceImages]=await Promise.all([loadImage(generatedDataUrl),...refs.map(loadImage)]);
+    /* La référence principale portée doit rester assez grande pour que l'analyseur voie réellement
+       le pont nasal, l'écran et les commandes. L'ancien empilement en trois bandes de 256 px
+       écrasait ces détails et transformait des produits conformes en faux négatifs. */
+    const canvas=document.createElement("canvas"); canvas.width=1200; canvas.height=900;
+    const ctx=canvas.getContext("2d"); ctx.fillStyle="#161616"; ctx.fillRect(0,0,canvas.width,canvas.height);
+    const drawContain=(img,x,y,w,h)=>{
+      const scale=Math.min(w/img.width,h/img.height);
+      const dw=img.width*scale,dh=img.height*scale;
+      ctx.drawImage(img,x+(w-dw)/2,y+(h-dh)/2,dw,dh);
+    };
+    drawContain(referenceImages[0],0,0,520,450);
+    if(referenceImages[1]) drawContain(referenceImages[1],0,450,260,450);
+    if(referenceImages[2]) drawContain(referenceImages[2],260,450,260,450);
+    drawContain(generated,520,0,680,canvas.height);
+    ctx.strokeStyle="#C9A227"; ctx.lineWidth=4;
+    ctx.beginPath(); ctx.moveTo(520,0); ctx.lineTo(520,900); ctx.stroke();
+    return canvas.toDataURL("image/jpeg",.78);
+  }catch(e){ return resizeDataUrlForAnalysis(generatedDataUrl,1024,.7); }
+}
+async function analyzeGeneratedImage(dataUrl, brief, options){
   const provider = state.apiProviders.find(p=>p.id===state.selectedProviderId) || DEFAULT_OPENAI_PROVIDER;
-  const analysisImage = await resizeDataUrlForAnalysis(dataUrl, 1024, 0.7);
-  const systemPrompt = "Tu décris uniquement ce qui est visuellement présent dans l'image fournie, jamais ce qui était prévu ou souhaité. Ne complète jamais par supposition (pas de bon cadeau, huile ou accessoire non visible). Si un élément du brief n'apparaît pas dans l'image, note-le dans briefMismatch.";
-  const userPrompt = `Décris précisément ce qui est visible dans cette image, en la comparant à ce qui était prévu (sans jamais inventer ce qui manque) :\nScène prévue : ${brief.ideeVisuelle}\nSujet prévu : ${brief.sujetPrincipal}\nAction prévue : ${brief.action}`;
-  const res = await fetch("/.netlify/functions/generate-text", {
-    method:"POST", headers:{ "Content-Type":"application/json" },
-    body: JSON.stringify({ kind: provider.kind, model: provider.model, baseUrl: provider.baseUrl, systemPrompt, userPrompt, responseSchema: IMAGE_ANALYSIS_SCHEMA, imageDataUrl: analysisImage }),
-  });
-  const contentType = res.headers.get("content-type")||"";
-  if(!contentType.includes("application/json")) throw new Error(`Réponse non-JSON de l'analyseur d'image (statut ${res.status}).`);
-  const data = await res.json();
-  if(!res.ok || data.error) throw new Error(data.error || `Erreur ${res.status}`);
-  try{ return JSON.parse(data.text); }
-  catch(e){ throw new Error("L'analyseur d'image n'a pas renvoyé un JSON exploitable."); }
+  const productReferenceDataUrls=(options&&options.productReferenceDataUrls||[]).filter(Boolean);
+  const analysisImage=await buildProductComparisonForAnalysis(dataUrl,productReferenceDataUrls);
+  const comparisonRule=productReferenceDataUrls.length
+    ? "L'image d'analyse est un comparatif : les trois références produit officielles complémentaires sont à GAUCHE (grande vue de profil portée en haut, vue de face et produit isolé en bas) et l'image générée est à DROITE. Décris visibleSubjects, visibleAction, visibleSetting, visibleObjects, lighting et altText uniquement pour l'image générée de droite. Pour productGeometryEvidence, observe séparément chacun des sept critères demandés. « not_visible » signifie seulement que l'angle, les cheveux ou le cadrage empêchent de trancher ; ne transforme jamais une zone cachée en « absent ». La visière PSiO® officielle se reconnaît par la combinaison suivante : grande surface optique incurvée enveloppante, découpe nasale profonde, boîtier de commande latéral large, petit écran rectangulaire, plusieurs commandes rondes et câblage fin. Les détails visibles peuvent se trouver d'un seul côté selon l'angle. IGNORE TOTALEMENT les différences de couleur, de matière, d'éclairage et de décor : le blanc, le bleu et le cyan des références sont volontairement recolorés en noir profond et or noble dans l'image générée. Ignore aussi le changement de personne, de pose, de siège, de fond, d'échelle et de cadrage. Une différence uniquement chromatique ou une pièce masquée par l'angle ne constitue jamais une non-conformité. productGeometryConformity vaut non_conforme seulement si le produit est clairement un casque VR/une visière générique OU si plusieurs éléments structurels visibles contredisent les références. Une visière incurvée accompagnée du boîtier latéral, de l'écran, des boutons et des câbles est conforme même si sa palette est noir/or. productGeometryMismatch doit nommer uniquement les éléments structurels explicitement absents ou contradictoires ; sinon laisse la chaîne vide. Les coordonnées protectedZones restent celles de l'image générée seule, de 0 à 100, indépendamment du comparatif."
+    : "Il n'y a pas de référence produit séparée : productGeometryConformity vaut not_applicable et tous les critères de productGeometryEvidence valent not_visible, genericVisorOrVrHeadset vaut false.";
+  const systemPrompt = `Tu décris uniquement ce qui est visuellement présent dans l'image fournie, jamais ce qui était prévu ou souhaité. Ne complète jamais par supposition. ${comparisonRule} Si un élément du brief n'apparaît pas dans l'image, note-le dans briefMismatch. protectedZones contient les rectangles critiques à ne jamais recouvrir par du texte ou un logo : visage, tête, lunettes ou matériel PSiO®, mains actives et matériel de prestation ; coordonnées x, y, width, height en pourcentage 0-100 de l'image générée. dominantColorCast juge séparément la dominante réellement visible : l'orange ou l'ambre ne sont jamais de l'or officiel. Ne mélange jamais ce verdict chromatique avec productGeometryConformity.`;
+  const userPrompt = `Analyse précisément l'image générée et compare-la au brief :\nScène prévue : ${brief.ideeVisuelle}\nSujet prévu : ${brief.sujetPrincipal}\nAction prévue : ${brief.action}\nMatériel distinctif attendu : ${brief.caracteristiquePrestationVisible||"aucun"}`;
+  const rawImage=await resizeDataUrlForAnalysis(dataUrl,1024,.82);
+  const overlaySystemPrompt=`Tu es un contrôleur OCR et identité de marque. Inspecte uniquement l'image brute fournie, zone par zone, y compris ses bords et son tiers inférieur. rawOverlayDetected vaut true dès qu'un seul élément graphique ajouté apparaît : lettre, mot, nom de produit (y compris « PSiO »), marque, slogan, URL, prix, logo, emblème, sceau, monogramme ou zèbre de marque. Même un nom normalement attendu sur le produit compte comme overlay interdit : toute typographie et toute signature seront ajoutées ensuite par Canvas. Une simple forme géométrique sans lettre ni identité ne compte pas. Décris exactement ce qui est lu ou reconnu dans rawOverlayDescription ; chaîne vide seulement si rien n'est détecté.`;
+  const [res,overlayRes] = await Promise.all([
+    fetch("/.netlify/functions/generate-text", {
+      method:"POST", headers:{ "Content-Type":"application/json" },
+      body: JSON.stringify({ kind:provider.kind,model:provider.model,baseUrl:provider.baseUrl,
+        systemPrompt,userPrompt,responseSchema:IMAGE_ANALYSIS_SCHEMA,imageDataUrl:analysisImage }),
+    }),
+    fetch("/.netlify/functions/generate-text", {
+      method:"POST", headers:{ "Content-Type":"application/json" },
+      body: JSON.stringify({ kind:provider.kind,model:provider.model,baseUrl:provider.baseUrl,
+        systemPrompt:overlaySystemPrompt,userPrompt:"Détecte tout texte, logo ou identité déjà présent dans cette image brute.",
+        responseSchema:RAW_OVERLAY_ANALYSIS_SCHEMA,imageDataUrl:rawImage }),
+    }),
+  ]);
+  for(const response of [res,overlayRes]){
+    const contentType=response.headers.get("content-type")||"";
+    if(!contentType.includes("application/json")) throw new Error(`Réponse non-JSON d'un contrôle d'image (statut ${response.status}).`);
+  }
+  const [data,overlayData]=await Promise.all([res.json(),overlayRes.json()]);
+  if(!res.ok||data.error) throw new Error(data.error||`Erreur analyse ${res.status}`);
+  if(!overlayRes.ok||overlayData.error) throw new Error(overlayData.error||`Erreur contrôle overlay ${overlayRes.status}`);
+  try{
+    return {...JSON.parse(data.text),...JSON.parse(overlayData.text)};
+  }catch(e){ throw new Error("Un contrôleur d'image n'a pas renvoyé un JSON exploitable."); }
+}
+
+function findGeneratedOverlayViolation(analysis){
+  if(!analysis) return "";
+  if(analysis.rawOverlayDetected){
+    return `Overlay IA interdit : ${String(analysis.rawOverlayDescription||"texte ou identité graphique détecté dans l'image brute")}`;
+  }
+  const mismatches=Array.isArray(analysis.briefMismatch)?analysis.briefMismatch:[];
+  const explicit=mismatches.find(x=>/^overlay ia interdit\s*:/i.test(String(x||"").trim()));
+  if(explicit) return String(explicit);
+  return "";
+}
+function findProductReferenceViolation(analysis){
+  if(!analysis) return "";
+  const evidence=analysis.productGeometryEvidence;
+  /* Le verdict du modèle n'est jamais utilisé seul : on bloque sur des faits visuels précis.
+     Cela conserve le verrou anti-visière générique tout en évitant qu'une recoloration, un angle
+     différent ou un détail masqué fasse rejeter un produit qui porte tous les marqueurs PSiO®. */
+  if(evidence){
+    const critical=[
+      ["grande surface optique incurvée","curvedOpticalShield"],
+      ["découpe nasale profonde","deepNoseCutout"],
+      ["boîtier de commande latéral","lateralControlHousing"],
+    ];
+    const supporting=[
+      ["petit écran rectangulaire","rectangularScreen"],
+      ["commandes rondes","multipleRoundControls"],
+      ["câblage du dispositif","deviceCabling"],
+    ];
+    const allMarkers=[...critical,...supporting];
+    const presentCount=allMarkers.filter(([,key])=>evidence[key]==="present").length;
+    /* Un modèle de vision peut employer le mot « générique » par réflexe devant une recoloration.
+       Ce qualificatif ne l'emporte pas sur quatre marqueurs officiels ou plus effectivement vus. */
+    if(evidence.genericVisorOrVrHeadset===true&&presentCount<4){
+      return String(analysis.productGeometryMismatch||"le produit ressemble clairement à une visière générique ou à un casque VR");
+    }
+    const missingCritical=critical.filter(([,key])=>evidence[key]==="absent").map(([label])=>label);
+    const missingSupporting=supporting.filter(([,key])=>evidence[key]==="absent").map(([label])=>label);
+    if(missingCritical.length>=2 || (missingCritical.length>=1&&missingSupporting.length>=2) || missingSupporting.length===3){
+      const missing=[...missingCritical,...missingSupporting];
+      return `éléments structurels officiels absents ou contradictoires : ${missing.join(", ")}`;
+    }
+    return "";
+  }
+  /* Compatibilité avec une ancienne analyse mise en mémoire avant cette version. */
+  if(analysis.productGeometryConformity!=="non_conforme") return "";
+  return String(analysis.productGeometryMismatch||"la géométrie du matériel généré ne correspond pas à la référence officielle");
+}
+function findPaletteViolation(analysis){
+  const cast=analysis&&analysis.dominantColorCast;
+  if(!["orange_amber","yellow","copper"].includes(cast)) return "";
+  const labels={orange_amber:"orange ou ambre",yellow:"jaune vif",copper:"cuivre"};
+  return `dominante ${labels[cast]} incompatible avec l'or officiel SDZ`;
 }
 
 
@@ -3167,6 +4093,7 @@ function buildBrandVoiceSocle(mission, platform){
   return text;
 }
 function buildContentFromBriefUserPrompt(brief, analysis, platform, mission){
+  analysis = analysis || { visibleSubjects:[], visibleAction:"", visibleSetting:"", visibleObjects:[], lighting:"", briefMismatch:[] };
   const brandVoice = buildBrandVoiceSocle(mission, platform);
   return cleanPrompt(`Rédige le contenu texte final pour ${platform}, mission "${mission||"non précisée"}".
 
@@ -3187,10 +4114,11 @@ Analyse de l'image RÉELLEMENT obtenue (fonde l'alt text UNIQUEMENT sur ceci, ja
 ${(analysis.briefMismatch||[]).length ? `- Écarts constatés avec le brief : ${analysis.briefMismatch.join(", ")}` : ""}
 
 La légende (caption) peut s'appuyer sur le brief et sur l'univers de marque ci-dessus. L'alt text doit décrire fidèlement uniquement ce qui est listé comme visible ci-dessus — jamais un élément absent (pas de bon cadeau, huile ou accessoire non constaté). Maximum 5 hashtags pertinents (Instagram et Facebook).
+${platform==="Instagram" ? `RÈGLE INSTAGRAM : termine par le site officiel présent dans les connaissances puis « Réservez votre prestation ! ». N'invente jamais d'URL.` : ""}
+${platform==="Google Business" ? `RÈGLE GOOGLE BUSINESS : la caption doit faire 100 à 150 mots et inclure naturellement l'adresse, le téléphone et le site officiel présents dans les connaissances. Aucun hashtag. N'invente aucune coordonnée.` : ""}
 
 CHAMP imageHeadline (accroche incrustée sur l'image par post-traitement, Instagram et Facebook uniquement) :
-- Par DÉFAUT, renvoie une chaîne vide "". L'image sans texte est le choix normal (environ 7 publications sur 10).
-- Ne renseigne ce champ QUE si une phrase renforce clairement le concept créatif de cette image précise (environ 3 publications sur 10).
+- Sur Instagram et Facebook, ce champ est OBLIGATOIRE : une accroche forte qui renforce le concept créatif de cette image précise.
 - Il est INDÉPENDANT de la légende : ne reprends jamais sa première phrase.
 - Contraintes strictes quand il est rempli : 4 à 9 mots, 1 ligne (2 exceptionnellement), pas de point final, pas d'emoji, pas de hashtag, pas de CTA, lisible en moins de 2 secondes.
 - Sur Google Business, Story et Article Blog Wix : toujours "".`);
@@ -3210,6 +4138,10 @@ async function generateContentFromBrief(brief, analysis, platform, mission){
   let content;
   try{ content = JSON.parse(data.text); } catch(e){ throw new Error("Sortie non exploitable."); }
   if(Array.isArray(content.hashtags)) content.hashtags = content.hashtags.slice(0,5);
+  if((platform==="Instagram" || platform==="Facebook") && !String(content.imageHeadline||"").trim()){
+    const source = String(brief.texteImage || brief.messageCentral || "Révélez votre énergie").replace(/\|/g," ").trim();
+    content.imageHeadline = source.split(/\s+/).slice(0,9).join(" ");
+  }
   return content;
 }
 
@@ -3352,6 +4284,15 @@ ${buildFixedGuardrailBlocks(brief, platform)}`),
   return { prompt: serializeBriefToPromptFallback(brief, platform, aspectKey, isCampaign), daWriterUsed: false, daWriterFallbackReason: null };
 }
 
+/* Le nom commercial est indispensable dans le brief, l'Inspector et le contrôle produit, mais sa
+   répétition dans le prompt image incite le modèle à le dessiner. Pour PSiO®, le générateur ne
+   reçoit donc qu'un alias descriptif neutre ; les trois images restent la source de vérité pour la
+   géométrie. Le vrai nom et le vrai logo ne réapparaissent qu'ensuite, via Canvas. */
+function stripPsioBrandFromImagePrompt(prompt){
+  return String(prompt||"")
+    .replace(/PSiO(?:®)?/gi, "dispositif officiel de luminothérapie");
+}
+
 /* ---------- CREATIVE PLANNER V2 — fonction charnière ----------
    Traduit un brief V2 (validé par validateAndFixBriefV2) vers la forme exacte attendue par tout
    le reste du pipeline (extractExportableBriefFields, serializeBriefToPromptFallback,
@@ -3361,6 +4302,7 @@ function mapBriefV2ToV1Shape(briefV2){
   const ms = briefV2.miseEnScene || {};
   return {
     caracteristiqueSourcePrestation: briefV2.ancrageReel,
+    ideeVisuelle: briefV2.momentCinematographique,
     pointDeTransformation: briefV2.momentCinematographique,
     archetypeNarratif: briefV2.archetypeEmotionnel,
     sujetPrincipal: ms.sujetPrincipal, action: ms.action, cadrage: ms.cadrage, pointDeVue: ms.pointDeVue,
@@ -3372,13 +4314,15 @@ function mapBriefV2ToV1Shape(briefV2){
     compositionInterdite: briefV2.compositionInterdite, negativePrompt: briefV2.negativePrompt,
     referenceFamily: briefV2.referenceFamily, texteImage: briefV2.texteImage,
     zoneTexte: briefV2.zoneTexte, zoneLogo: briefV2.zoneLogo, messageCentral: briefV2.messageCentral,
+    raisonDifferenceAvecHistorique: briefV2.raisonDetre,
+    registresActifs: Array.isArray(briefV2.registresActifs) ? [...briefV2.registresActifs] : [],
   };
 }
 
 async function prepareCreativeBrief(inputs){
   const { mission, platform, prestation, topic, aspectKey, isCampaign, registres } = inputs;
   const steps = {};
-  const plannerVersion = inputs.plannerVersion || "v1"; // additif : absent partout en production aujourd'hui
+  const plannerVersion = inputs.plannerVersion || "v2";
 
   // typeCreation figé ICI, depuis la copie des registres transmise dans inputs (jamais depuis
   // state.registres directement) : le flux préparé reste indépendant de l'état courant de l'interface.
@@ -3442,13 +4386,27 @@ async function prepareCreativeBrief(inputs){
   }
 
   let referenceSelections = [], referenceError = null;
-  try{ referenceSelections = selectReferencesForBrief(brief, platform, 2) || []; }
-  catch(err){ referenceError = `Sélection de référence impossible, génération sans référence : ${String(err.message||err)}`; referenceSelections = []; }
+  if(prestation==="Luminothérapie PSIO®"){
+    try{
+      // Seules les trois vues produit PSiO® sont autorisées : aucune référence artistique ou
+      // ancienne génération ne doit influencer la forme du dispositif officiel.
+      referenceSelections = await getOfficialPsioReferenceSelections();
+    }catch(err){
+      referenceError = `Référence officielle PSiO® indisponible : ${String(err.message||err)}`;
+      blockingError = blockingError || "Référence produit officielle PSiO® indisponible — génération bloquée avant l'appel image pour éviter d'inventer d'autres lunettes.";
+      referenceSelections = [];
+    }
+  }else{
+    try{ referenceSelections = selectReferencesForBrief(brief, platform, 2) || []; }
+    catch(err){ referenceError = `Sélection de référence impossible, génération sans référence : ${String(err.message||err)}`; referenceSelections = []; }
+  }
 
   /* T2 — CONSTRUCTEUR UNIQUE : toute production du prompt image passe par buildFinalImagePrompt.
      prepareCreativeBrief ne construit plus rien lui-même. */
   const built = await buildFinalImagePrompt(brief, platform, aspectKey, !!isCampaign, { blockingError, experimentalMode: inputs.experimentalMode || null });
-  const imagePrompt = built.prompt;
+  const imagePrompt = prestation==="Luminothérapie PSIO®"
+    ? stripPsioBrandFromImagePrompt(built.prompt)
+    : built.prompt;
   const daWriterUsed = built.daWriterUsed;
   const daWriterFallbackReason = built.daWriterFallbackReason;
   const transmissionCheck = built.transmissionCheck || null; // EXPÉRIENCE brief_complet uniquement — null en production
@@ -3471,6 +4429,7 @@ async function prepareCreativeBrief(inputs){
     usedLocalBriefFallback, referenceSelections, referenceError, imagePrompt, steps, blockingError,
     daWriterUsed, daWriterFallbackReason, usage, transmissionCheck, instrumentation,
     paquetOrchestrateur, validatorReport,
+    appVersion: VF_VERSION,
     plannerVersion, aucuneRaisonDetre, filiationConflitMomentFaible, plannerNetworkRetryUsed, // EXPÉRIENCE Planner V2 — null/false en V1
   };
 }
@@ -3484,23 +4443,78 @@ async function prepareCreativeBrief(inputs){
    l'exécuteur du Banc n'écrit rien. Une seule implémentation du post-traitement pour les deux. */
 async function finalizeGeneratedImage(flow){
   const platform = flow.inputs.platform;
-  const logoInScene = !!(flow.logoSentAsReference && flow.usedReference);
+  const generatedOverlayViolation=findGeneratedOverlayViolation(flow.analysis);
+  if(generatedOverlayViolation){
+    throw new Error(`Image brute refusée avant Canvas : ${generatedOverlayViolation.replace(/^overlay ia interdit\s*:\s*/i,"")}. Le texte et le logo officiels doivent être ajoutés uniquement par Canvas.`);
+  }
+  const productViolation=findProductReferenceViolation(flow.analysis);
+  if(productViolation){
+    throw new Error(`Image brute refusée avant Canvas : ${productViolation}. Aucune visière générique ne peut remplacer le produit officiel.`);
+  }
+  const paletteViolation=findPaletteViolation(flow.analysis);
+  if(paletteViolation){
+    throw new Error(`Image brute refusée avant Canvas : ${paletteViolation}. Canvas n'ajoute jamais sa signature sur une image hors charte.`);
+  }
+  /* Une référence utilisée ne prouve jamais que le logo officiel est présent et exact.
+     Seule la signature ajoutée par Canvas est considérée comme valide. */
+  const logoInScene = false;
   /* 1) format officiel de la plateforme */
   let dataUrl = await normalizeToPlatformFormat(flow.dataUrl, platform);
   /* 2) accroche : uniquement là où la spec V1.0 l'autorise (Instagram/Facebook), uniquement si le
         Planner a jugé utile de la remplir. Le texte vient du contenu généré, jamais de GPT-image. */
-  const headline = (PLATFORM_OVERLAY[platform]==="accroche" && flow.content && typeof flow.content.imageHeadline==="string")
+  const contentHeadline = flow.content && typeof flow.content.imageHeadline==="string"
     ? flow.content.imageHeadline.trim() : "";
+  const storyHeadline = platform==="Story" && flow.brief && typeof flow.brief.texteImage==="string"
+    ? (flow.brief.texteImage.trim() || `${String(flow.brief.messageCentral||"RÉVÉLEZ-VOUS").split(/\s+/).slice(0,5).join(" ")} | UNE EXPÉRIENCE TRANSFORMATRICE`) : "";
+  const headline = PLATFORM_OVERLAY[platform]==="accroche" ? contentHeadline
+    : PLATFORM_OVERLAY[platform]==="fort" ? storyHeadline : "";
   /* 3) logo : appliqué sauf s'il est déjà dans la scène. Un seul appel, même fonction pour les
         deux besoins — aucune duplication, aucun chemin parallèle. */
   const needLogo = logoRequiredFor(platform) && !logoInScene;
   let logoApplied = false;
+  let headlineApplied = false;
+  let layoutReport = { version:"canvas-layout-v4", skipped:true };
   if(needLogo || headline){
-    const composited = await compositeBrandSignature(dataUrl, platform, { headline, withLogo: needLogo });
+    const composited = await compositeBrandSignature(dataUrl, platform, {
+      headline, withLogo:needLogo, brief:flow.brief||null, analysis:flow.analysis||null
+    });
+    layoutReport = composited.layoutReport || layoutReport;
+    if(layoutReport.blockingError) throw new Error(layoutReport.blockingError);
     dataUrl = composited.dataUrl;
     logoApplied = composited.applied && needLogo;
+    headlineApplied = composited.headlineApplied===true;
   }
-  return { dataUrl, logoApplied, logoInScene, headlineApplied: !!headline };
+  if(needLogo && !logoApplied) throw new Error("Composition Canvas bloquée : la signature officielle SDZ n'a pas pu être appliquée.");
+  if(headline && !headlineApplied) throw new Error("Composition Canvas bloquée : l'accroche n'a pas pu être rendue lisiblement.");
+  return { dataUrl, logoApplied, logoInScene, headlineApplied, layoutReport };
+}
+
+/* Écriture unique d'une image créative finalisée. Utilisée par la génération normale et par la
+   récupération d'une image brute déjà payée : aucune seconde génération image n'est nécessaire. */
+function storeFinalizedCreativeFlow(flow, finalized){
+  if(flow.imageId && state.images.some(i=>i.id===flow.imageId)){
+    return { id:flow.imageId, alreadyStored:true };
+  }
+  const platform=flow.inputs.platform;
+  const id=uid();
+  state.images.push({ id, name:`${platform}-${nowStr()}.png`, dataUrl:finalized.dataUrl,
+    tags:[platform], favorite:false, logoApplied:finalized.logoApplied,
+    usedReference:flow.usedReference, referenceFallbackReason:flow.referenceFallbackReason,
+    creativeBrief:flow.brief, creativeContent:flow.content, layoutReport:finalized.layoutReport||null,
+    altText:flow.content ? flow.content.altText : (flow.analysis&&flow.analysis.altText) });
+  LS.set("vf-images",state.images);
+  updateCount();
+  state.selectedId=id;
+  setPostImageId(id);
+  flow.imageId=id;
+  recordStructuredImageEntry(flow.inputs,flow.brief,(flow.referenceSelections||[]).map(r=>r.id),
+    flow.imagePrompt,id);
+  if(flow.content){
+    const hashtagsText=(flow.content.hashtags||[]).map(h=>h.startsWith("#")?h:"#"+h).slice(0,5).join(" ");
+    state.textPasted=[flow.content.caption||"",hashtagsText].filter(Boolean).join("\n\n");
+    state.pendingAltText=flow.content.altText||"";
+  }
+  return { id, alreadyStored:false };
 }
 
 /* P1 — Applique l'accroche à une image de campagne DÉJÀ finalisée (format + logo posés lors de la
@@ -3512,12 +4526,11 @@ async function applyHeadlineToItem(item){
   if(!item || !item.imageDataUrl || item.headlineApplied) return false;
   const headline = item.contentData && typeof item.contentData.imageHeadline==="string" ? item.contentData.imageHeadline.trim() : "";
   if(!headline || PLATFORM_OVERLAY[item.platform]!=="accroche") return false;
-  const finalized = await finalizeGeneratedImage({
-    inputs:{ platform:item.platform }, dataUrl:item.imageDataUrl,
-    logoSentAsReference:true, usedReference:true, content:item.contentData,
+  const composited = await compositeBrandSignature(item.imageDataUrl, item.platform, {
+    headline, withLogo:false, brief:item.creativeBrief||null, analysis:item.analysis||null
   });
-  if(!finalized.headlineApplied) return false;
-  item.imageDataUrl = finalized.dataUrl; item.headlineApplied = true;
+  if(!composited.headlineApplied || (composited.layoutReport&&composited.layoutReport.blockingError)) return false;
+  item.imageDataUrl = composited.dataUrl; item.headlineApplied = true; item.layoutReport = composited.layoutReport||null;
   /* Facebook réutilise EXACTEMENT l'image Instagram : la copie est mise à jour au même instant. */
   if(item.platform==="Instagram"){
     state.scheduled.filter(p=> p.campaignId===item.campaignId && p.platform==="Facebook" && p.reusedFrom==="Instagram")
@@ -3529,27 +4542,74 @@ async function applyHeadlineToItem(item){
 async function confirmAndGenerateImage(prepared, onStatus, cancelToken){
   const { inputs, brief, referenceSelections } = prepared;
   const { platform, mission, size } = inputs;
+  const psioReferenceRequired = inputs.prestation==="Luminothérapie PSIO®";
+
+  if(prepared.blockingError){
+    return {
+      ...prepared, phase:"image_failed", ok:false, stage:"preflight",
+      error:`Génération bloquée avant l'appel image : ${prepared.blockingError} Aucun crédit image n'a été consommé.`,
+    };
+  }
+  const psioReferenceCount=(referenceSelections||[]).filter(r=>OFFICIAL_PSIO_REFERENCE_IDS.has(r.id)&&r.dataUrl).length;
+  if(psioReferenceRequired && psioReferenceCount!==OFFICIAL_PSIO_REFERENCES.length){
+    return {
+      ...prepared, phase:"image_failed", ok:false, stage:"preflight",
+      error:"Référence produit officielle PSiO® absente : génération bloquée avant l'appel image. Aucun crédit image n'a été consommé.",
+    };
+  }
+
+  if(logoRequiredFor(platform)){
+    onStatus && onStatus("Vérification du logo officiel...");
+    const officialLogo = await getOfficialLogoAsset();
+    if(!officialLogo){
+      return {
+        ...prepared, phase:"image_failed", ok:false, stage:"preflight",
+        error:"Logo officiel indisponible : génération bloquée avant l'appel image. Aucun crédit image n'a été consommé. Définis d'abord le logo officiel dans la Bibliothèque.",
+      };
+    }
+  }
 
   onStatus && onStatus("Génération de l'image...");
   const smartReferenceDataUrls = (referenceSelections||[]).map(r=>r.dataUrl).filter(Boolean);
   let dataUrl, usedReference = false, referenceFallbackReason = null, logoSentAsReference = false, imageUsage = null;
   try{
-    const genResult = await callProviderImage(prepared.imagePrompt, size, undefined, onStatus, cancelToken, { smartReferenceDataUrls, onJobCreated: prepared.onImageJobCreated });
+    const genResult = await callProviderImage(prepared.imagePrompt, size, undefined, onStatus, cancelToken, {
+      smartReferenceDataUrls,
+      referenceRequired: psioReferenceRequired,
+      model: psioReferenceRequired ? "gpt-image-2" : undefined,
+      quality: psioReferenceRequired ? "high" : undefined,
+      onJobCreated: prepared.onImageJobCreated,
+    });
     dataUrl = genResult.dataUrl; usedReference = genResult.usedReference; referenceFallbackReason = genResult.referenceFallbackReason; logoSentAsReference = !!genResult.logoSentAsReference; imageUsage = genResult.imageUsage || null;
   }catch(err){
     // Échec image : aucun historique visuel créé, aucune analyse ni texte lancés (jamais de relance
     // automatique d'un appel image payant).
     return { ...prepared, phase:"image_failed", ok:false, stage:"image", error:`Échec de la génération d'image : ${String(err.message||err)}` };
   }
+  if(psioReferenceRequired && !usedReference){
+    return {
+      ...prepared, phase:"image_failed", ok:false, stage:"image",
+      error:`Image PSiO® refusée : la référence produit officielle n'a pas été utilisée${referenceFallbackReason ? ` (${referenceFallbackReason})` : ""}.`,
+    };
+  }
 
   onStatus && onStatus("Analyse de l'image obtenue...");
   let analysis, analysisError = null;
   try{
-    analysis = await analyzeGeneratedImage(dataUrl, brief);
+    const productReferences=(referenceSelections||[]).filter(r=>OFFICIAL_PSIO_REFERENCE_IDS.has(r.id)&&r.dataUrl);
+    analysis = await analyzeGeneratedImage(dataUrl, brief, {
+      productReferenceDataUrls:productReferences.map(r=>r.dataUrl),
+    });
   }catch(err){
     analysisError = `Échec de l'analyse d'image : ${String(err.message||err)} — image conservée, alt text prudent utilisé.`;
     analysis = { visibleSubjects:[], visibleAction:"", visibleSetting:"", visibleObjects:[], lighting:"",
-      altText: "Image générée pour La Santé des Zèbres.", briefMismatch:[] };
+      altText:"Image générée pour La Santé des Zèbres.", briefMismatch:[], protectedZones:[],
+      dominantColorCast:"other", productGeometryConformity:"incertain", productGeometryMismatch:"Analyse indisponible.",
+      productGeometryEvidence:{ curvedOpticalShield:"not_visible", deepNoseCutout:"not_visible",
+        lateralControlHousing:"not_visible", rectangularScreen:"not_visible", multipleRoundControls:"not_visible",
+        deviceCabling:"not_visible", genericVisorOrVrHeadset:false } };
+    analysis.rawOverlayDetected=true;
+    analysis.rawOverlayDescription="Contrôle du texte et du logo indisponible : validation impossible.";
   }
 
   onStatus && onStatus("Rédaction du texte...");
@@ -3781,8 +4841,11 @@ async function callProviderImage(prompt, size, extraReferenceDataUrls, onStatus,
     headers: { "Content-Type":"application/json" },
     body: JSON.stringify({
       prompt, size,
+      model: options.model || undefined,
+      quality: options.quality || undefined,
       referenceImageUrls: referenceImageUrls.length ? referenceImageUrls : undefined,
       referenceImageData: referenceImageData.length ? referenceImageData : undefined,
+      referenceRequired: options.referenceRequired===true,
     }),
   });
   const createData = await fetchJsonOrThrowRaw(createRes, "création du travail");
@@ -3996,10 +5059,22 @@ async function generateCampaignPosts(topic, missionKey, onProgress){
       platform: item.platform, mission: missionKey, topic,
       imagePrompt: prepared.imagePrompt,
       creativeBrief: prepared.brief || null,
+      plannerVersion: prepared.plannerVersion,
+      blockingError: prepared.blockingError || null,
+      plannerError: prepared.plannerError || null,
+      referenceSelectionIds: (prepared.referenceSelections||[]).map(r=>r.id),
+      preparedDiagnostics: {
+        briefCorrected: !!prepared.briefCorrected,
+        usedLocalBriefFallback: !!prepared.usedLocalBriefFallback,
+        daWriterUsed: !!prepared.daWriterUsed,
+        daWriterFallbackReason: prepared.daWriterFallbackReason || null,
+        validatorReport: prepared.validatorReport || null,
+      },
       textPrompt: isStory ? null : buildTextPromptFull(item.platform, topic, missionKey),
       textFinal: isStory ? null : "", imageDataUrl: null,
       schedulable: item.platform !== "Article Blog Wix" && item.platform !== "Story",
-      scheduledAt: null, status: "brouillon", createdAt: Date.now(), sentAt: null, error: null,
+      scheduledAt: null, status: prepared.blockingError ? "bloqué" : "brouillon",
+      createdAt: Date.now(), sentAt: null, error: prepared.blockingError || null,
     });
   }
   return posts;
@@ -5203,7 +6278,7 @@ function buildPostTab(){
   }
 
   /* ---------- MOTEUR CRÉATIF — action principale, en deux phases ----------
-     Phase A (gratuite, aucun appel image) : diversité déterministe, Creative Planner, validation
+     Phase A (aucun appel image, coût texte minime) : diversité déterministe, Creative Planner, validation
      locale, sélection des références, prompt image compact — tout ça est affiché dans le Prompt
      Inspector AVANT toute confirmation. Phase B (payante) ne part qu'après un clic explicite sur
      "Confirmer et générer l'image". Volontairement indépendant de state.imagePrompt (qui n'est
@@ -5213,11 +6288,14 @@ function buildPostTab(){
   const creativeEngineAvailable = !!(state.apiProviders.find(p=>p.kind==="openai-compatible" && (p.baseUrl||"").includes("api.openai.com")) || DEFAULT_OPENAI_PROVIDER);
   if(creativeEngineAvailable){
     const imgApiStatus = el("p",{style:"font-size:12px;color:var(--muted2);min-height:16px;margin:4px 0 8px;"},"");
-    const prepareBtn = el("button",{class:"btn-primary", style:"margin-bottom:10px;"}, [svgIcon(ICONS.sparkles,14), el("span",{},"Préparer la création (gratuit)")]);
+    const prepareBtn = el("button",{class:"btn-primary", style:"margin-bottom:10px;"}, [svgIcon(ICONS.sparkles,14), el("span",{},"Préparer la création (sans image)")]);
     const confirmBtn = el("button",{class:"btn-secondary", style:"margin:0 0 10px 8px;display:none;"}, [svgIcon(ICONS.wand,14), el("span",{},"Confirmer et générer l'image")]);
     const imgCancelBtn = el("button",{class:"btn-secondary", style:"margin:0 0 10px 8px;display:none;"}, "Annuler le suivi");
     const regenTextBtn = el("button",{class:"btn-secondary", style:"margin:0 0 10px 8px;display:none;"}, "Régénérer uniquement le texte");
     const relaunchAnalysisBtn = el("button",{class:"btn-secondary", style:"margin:0 0 10px 8px;display:none;"}, "Relancer l'analyse de l'image");
+    const recoverRawBtn = el("button",{class:"btn-secondary", style:"margin:0 0 10px 8px;display:none;"},
+      "Finaliser une image brute déjà téléchargée");
+    const recoverRawInput = el("input",{type:"file",accept:"image/png,image/jpeg,image/webp",style:"display:none;"});
     const inspectorHost = el("div",{});
     let activeCancelToken = null;
 
@@ -5258,17 +6336,28 @@ function buildPostTab(){
     function renderCreativeInspector(){
       const flow = state.lastCreativeFlow;
       inspectorHost.innerHTML = "";
-      confirmBtn.style.display = "none"; regenTextBtn.style.display = "none"; relaunchAnalysisBtn.style.display = "none";
+      confirmBtn.style.display = "none"; regenTextBtn.style.display = "none";
+      relaunchAnalysisBtn.style.display = "none"; recoverRawBtn.style.display = "none";
       if(!flow) return;
-      if(flow.phase==="prepared" && !flow.blockingError) confirmBtn.style.display = "inline-block";
-      if(flow.phase==="completed"){ regenTextBtn.style.display = "inline-block"; relaunchAnalysisBtn.style.display = "inline-block"; }
+      if(flow.phase==="prepared" && !flow.blockingError){
+        confirmBtn.style.display = "inline-block";
+        recoverRawBtn.style.display = "inline-block";
+      }
+      if(flow.phase==="completed"){
+        regenTextBtn.style.display = "inline-block";
+        relaunchAnalysisBtn.style.display = "inline-block";
+        relaunchAnalysisBtn.textContent = flow.finalizationError
+          ? "Recontrôler puis appliquer Canvas (sans nouvelle image)"
+          : "Relancer l'analyse de l'image";
+      }
       const details = el("details",{open:true, style:"margin:10px 0;"});
       details.appendChild(el("summary",{style:"cursor:pointer;font-size:13px;color:var(--muted);"}, "Prompt Inspector — moteur créatif"));
 
       // ---- Textes bruts nécessaires aux boutons de copie (calculés une seule fois) ----
       const promptText = flow.imagePrompt || "";
       const jsonText = JSON.stringify(flow.brief, null, 2);
-      const combinedText = `========================\nPROMPT OPENAI\n========================\n\n${promptText}\n\n========================\nSTRUCTURED OUTPUT\n========================\n\n${jsonText}`;
+      const engineVersion = flow.appVersion || "ancienne/non identifiée";
+      const combinedText = `========================\nVERSION MOTEUR\n========================\n\n${engineVersion}\n\n========================\nPROMPT OPENAI\n========================\n\n${promptText}\n\n========================\nSTRUCTURED OUTPUT\n========================\n\n${jsonText}`;
 
       // ---- Bandeau récapitulatif (lecture seule de flow.inputs/flow.brief/state.modules — aucune invention) ----
       const safe = v => (v===undefined || v===null || v==="") ? "—" : v;
@@ -5300,6 +6389,7 @@ function buildPostTab(){
       const totalImageModulesInjected = constitutionInjectedCount + noirOrInjectedCount + Object.values(registreInjectedCounts).reduce((a,b)=>a+b,0);
       const summaryBox = el("div",{class:"card", style:"margin-top:8px;font-size:12px;"});
       const srow = (label,val)=> el("div",{style:"padding:2px 0;"}, [el("span",{style:"color:var(--muted2);"}, label+" : "), el("span",{}, String(val))]);
+      summaryBox.appendChild(srow("Version moteur", engineVersion));
       summaryBox.appendChild(srow("Prestation", prestationLabel));
       summaryBox.appendChild(srow("Mission", missionLabel));
       summaryBox.appendChild(srow("Plateforme", platformLabel));
@@ -5331,14 +6421,21 @@ function buildPostTab(){
 
       const body = el("div",{class:"card", style:"margin-top:8px;font-size:12px;"});
       const row = (label,val)=> el("div",{style:"padding:4px 0;border-bottom:1px solid var(--border);"}, [el("span",{style:"color:var(--muted2);"}, label+" : "), el("span",{}, val||"—")]);
-      row.call && body.appendChild(row("Phase", flow.phase==="prepared" ? "A — préparée, en attente de confirmation (aucun crédit consommé)" : flow.phase==="image_failed" ? "B — échec avant obtention de l'image" : "B — terminée"));
+      row.call && body.appendChild(row("Phase", flow.phase==="prepared" ? "A — préparée, en attente de confirmation (aucune image générée ; coût texte minime)" : flow.phase==="image_failed" ? "B — échec avant obtention de l'image" : "B — terminée"));
       body.appendChild(row("Type de création (figé)", flow.brief && flow.brief.typeCreation));
       body.appendChild(row("Archétype choisi", flow.brief && flow.brief.archetypeNarratif));
       body.appendChild(row("Archétypes interdits (récents)", (flow.exclusions||[]).join(", ") || "aucun"));
       body.appendChild(row("Raison de différenciation", flow.brief && flow.brief.raisonDifferenceAvecHistorique));
       body.appendChild(row("Références sélectionnées", String((flow.referenceSelections||[]).length)));
+      if(flow.inputs && flow.inputs.prestation==="Luminothérapie PSIO®"){
+        body.appendChild(row("Référence produit PSiO® officielle",
+          (flow.referenceSelections||[]).filter(r=>OFFICIAL_PSIO_REFERENCE_IDS.has(r.id)).length===OFFICIAL_PSIO_REFERENCES.length
+            ? "3 vues chargées et obligatoires ✓" : "Jeu incomplet — génération bloquée"));
+      }
       if(flow.phase!=="prepared") body.appendChild(row("Référence réellement utilisée", flow.usedReference ? "Oui ✓" : (flow.referenceFallbackReason ? "Non — repli : "+flow.referenceFallbackReason : "Non demandée")));
-      body.appendChild(row("Modèle", "gpt-image-1"));
+      body.appendChild(row("Modèle", flow.inputs?.prestation==="Luminothérapie PSIO®"
+        ? "gpt-image-2 · retouche produit verrouillée · qualité haute"
+        : "gpt-image-1"));
       body.appendChild(row("Rédacteur DA", flow.daWriterUsed ? "Utilisé ✓ (prompt narratif)" : (flow.daWriterFallbackReason ? "Repli sur l'assemblage classique — "+flow.daWriterFallbackReason : "Désactivé")));
       if(flow.validatorReport){
         const vr = flow.validatorReport;
@@ -5365,8 +6462,18 @@ function buildPostTab(){
       if(flow.plannerError) body.appendChild(row("⚠ Creative Planner", flow.plannerError));
       if(flow.referenceError) body.appendChild(row("⚠ Références", flow.referenceError));
       if(flow.error) body.appendChild(row("⚠ Image", flow.error));
+      if(flow.finalizationError) body.appendChild(row("⛔ Image brute mise en quarantaine", flow.finalizationError));
       if(flow.analysisError) body.appendChild(row("⚠ Analyse d'image", flow.analysisError));
       if(flow.textError) body.appendChild(row("⚠ Génération texte", flow.textError));
+      if(flow.finalizationError && flow.dataUrl){
+        body.appendChild(el("p",{style:"font-weight:600;margin:12px 0 6px;color:var(--red);"},
+          "Image brute refusée — contrôle uniquement, publication bloquée"));
+        body.appendChild(el("img",{src:flow.dataUrl,alt:"Image brute refusée avant Canvas",
+          style:"width:100%;display:block;border:1px solid var(--red);border-radius:12px;"}));
+        body.appendChild(el("a",{href:flow.dataUrl,download:`image-brute-refusee-${Date.now()}.png`,
+          class:"btn-secondary",style:"display:flex;text-decoration:none;margin-top:8px;justify-content:center;"},
+          "Télécharger l’image brute refusée"));
+      }
       body.appendChild(el("p",{style:"font-weight:600;margin:8px 0 4px;"}, "Creative Brief (JSON)"));
       body.appendChild(el("pre",{style:"white-space:pre-wrap;font-size:11px;"}, jsonText));
       body.appendChild(el("p",{style:"font-weight:600;margin:8px 0 4px;"}, "Prompt image compact (exactement celui qui sera/a été envoyé)"));
@@ -5390,7 +6497,7 @@ function buildPostTab(){
         state.lastCreativeFlow = prepared;
         imgApiStatus.textContent = prepared.plannerError
           ? `Brief préparé (avec repli local — voir Inspector) ✓ Relis le prompt avant de confirmer.`
-          : "Brief préparé ✓ — relis le Creative Brief et le prompt ci-dessous avant de confirmer (aucun crédit consommé pour l'instant).";
+          : "Brief préparé ✓ — relis le Creative Brief et le prompt ci-dessous avant de confirmer (aucune image générée ; coût texte minime).";
         renderCreativeInspector();
       }catch(err){ imgApiStatus.textContent = `Échec de la préparation : ${err.message||err}`; }
       prepareBtn.disabled = false;
@@ -5409,47 +6516,28 @@ function buildPostTab(){
         const flow = await confirmAndGenerateImage(state.lastCreativeFlow, (label)=>{ imgApiStatus.textContent = label; }, cancelToken);
         state.lastCreativeFlow = flow;
         if(!flow.ok){
-          logToLab({ provider:"OpenAI", model:"gpt-image-1", type:"image", prompt: flow.imagePrompt, promptHash: hashPrompt(flow.imagePrompt||""), cost:null, durationMs: Date.now()-t0, status:"refused", reason: flow.error });
+          logToLab({ provider:"OpenAI", model:flow.inputs?.prestation==="Luminothérapie PSIO®"?"gpt-image-2":"gpt-image-1", type:"image", prompt: flow.imagePrompt, promptHash: hashPrompt(flow.imagePrompt||""), cost:null, durationMs: Date.now()-t0, status:"refused", reason: flow.error });
           imgApiStatus.textContent = flow.error;
           renderCreativeInspector();
           confirmBtn.disabled = false; imgCancelBtn.style.display = "none"; activeCancelToken = null;
           return;
         }
         const finalized = await finalizeGeneratedImage(flow);
-        let dataUrl = finalized.dataUrl;
-        let logoApplied = finalized.logoApplied;
-        const id = uid();
-        vfTrace("5-ajout-bibliotheque", { newId: id, imagesAvant: state.images.length });
-        state.images.push({ id, name:`${platform}-${nowStr()}.png`, dataUrl, tags:[platform], favorite:false,
-          logoApplied, usedReference: flow.usedReference, referenceFallbackReason: flow.referenceFallbackReason,
-          creativeBrief: flow.brief, creativeContent: flow.content, altText: flow.content ? flow.content.altText : (flow.analysis && flow.analysis.altText) });
-        LS.set("vf-images", state.images);
-        updateCount();
-        state.selectedId = id; setPostImageId(id);
-        vfTrace("6-postImageId-ecrit", { postImageId: state.postImageId, imagesApres: state.images.length, persiste: LS.get("vf-post-image-id", null) });
-        flow.imageId = id; // les boutons de relance retrouveront TOUJOURS l'image par cet id, jamais par state.selectedId
-        // Historique visuel structuré : uniquement maintenant, l'image existe réellement — et
-        // uniquement les IDs des références utilisées, jamais leurs dataUrl complètes.
-        recordStructuredImageEntry(
-          { mission: state.mission, platform, prestation: state.prestationName, topic: state.topic },
-          flow.brief, (flow.referenceSelections||[]).map(r=>r.id), flow.imagePrompt, id
-        );
-        logToLab({ provider:"OpenAI", model:"gpt-image-1", type:"image", prompt: flow.imagePrompt, promptHash: hashPrompt(flow.imagePrompt), cost:null, durationMs: Date.now()-t0, status:"accepted" });
-
-        // Raccordement réel du texte final au flux normal de publication : Instagram attend
-        // caption+hashtags dans state.textPasted, l'alt text est conservé séparément — c'est cette
-        // même zone que "Programmer la publication" utilise plus bas, inchangée.
-        if(flow.content){
-          const hashtagsText = (flow.content.hashtags||[]).map(h=> h.startsWith("#") ? h : "#"+h).slice(0,5).join(" ");
-          state.textPasted = [flow.content.caption||"", hashtagsText].filter(Boolean).join("\n\n");
-          state.pendingAltText = flow.content.altText || "";
-        }
+        vfTrace("5-ajout-bibliotheque", { imagesAvant: state.images.length });
+        const stored=storeFinalizedCreativeFlow(flow,finalized);
+        const logoApplied=finalized.logoApplied;
+        vfTrace("6-postImageId-ecrit", { postImageId: stored.id, imagesApres: state.images.length,
+          persiste: LS.get("vf-post-image-id", null) });
+        logToLab({ provider:"OpenAI", model:flow.inputs?.prestation==="Luminothérapie PSIO®"?"gpt-image-2":"gpt-image-1", type:"image", prompt: flow.imagePrompt, promptHash: hashPrompt(flow.imagePrompt), cost:null, durationMs: Date.now()-t0, status:"accepted" });
 
         let referenceLabel;
         if(flow.usedReference) referenceLabel = "Référence visuelle utilisée ✓";
         else if(flow.referenceFallbackReason) referenceLabel = "Référence non utilisée — génération standard de secours.";
         else referenceLabel = "Génération standard — aucune référence visuelle fournie.";
         const parts = [logoRequiredFor(platform) ? (logoApplied?"Image générée, logo appliqué ✓":"Image générée — aucun logo marqué comme actif de marque.") : "Image générée et ajoutée à ta bibliothèque ✓", referenceLabel];
+        if(finalized.layoutReport && !finalized.layoutReport.skipped){
+          parts.push(`Composition Canvas premium ✓ (texte : ${finalized.layoutReport.textZone||"aucun"} · logo : ${finalized.layoutReport.logoZone||"aucun"})`);
+        }
         if(flow.content) parts.push("Texte inséré dans la zone de publication ci-dessous ✓");
         if(flow.analysisError) parts.push("⚠ "+flow.analysisError);
         if(flow.textError) parts.push("⚠ "+flow.textError+" — utilise \"Régénérer uniquement le texte\".");
@@ -5459,6 +6547,10 @@ function buildPostTab(){
       }catch(err){
         const cancelled = String(err.message||err)==="__CANCELLED__";
         imgApiStatus.textContent = cancelled ? "Suivi annulé (la génération continue peut-être côté serveur)." : `Erreur inattendue : ${err.message||err}`;
+        if(!cancelled && state.lastCreativeFlow && state.lastCreativeFlow.dataUrl){
+          state.lastCreativeFlow.finalizationError = String(err.message||err);
+          renderCreativeInspector();
+        }
       }
       confirmBtn.disabled = false; imgCancelBtn.style.display = "none"; activeCancelToken = null;
     });
@@ -5488,12 +6580,70 @@ function buildPostTab(){
       if(!flow || !flow.dataUrl) return;
       relaunchAnalysisBtn.disabled = true;
       try{
-        const analysis = await analyzeGeneratedImage(flow.dataUrl, flow.brief);
+        const wasQuarantined=!!flow.finalizationError;
+        const productReferences=(flow.referenceSelections||[]).filter(r=>OFFICIAL_PSIO_REFERENCE_IDS.has(r.id)&&r.dataUrl);
+        const analysis = await analyzeGeneratedImage(flow.dataUrl, flow.brief, {
+          productReferenceDataUrls:productReferences.map(r=>r.dataUrl),
+        });
         flow.analysis = analysis; flow.analysisError = null;
+        if(wasQuarantined){
+          const finalized=await finalizeGeneratedImage(flow);
+          storeFinalizedCreativeFlow(flow,finalized);
+          flow.finalizationError=null;
+          logToLab({provider:"OpenAI",model:"gpt-image-2",type:"image",prompt:flow.imagePrompt,
+            promptHash:hashPrompt(flow.imagePrompt||""),cost:null,durationMs:null,status:"accepted",
+            reason:"Image brute récupérée après nouveau contrôle factuel, sans nouvelle génération image."});
+          imgApiStatus.textContent = "Image brute récupérée ✓ Analyse conforme, Canvas appliqué et image ajoutée à la Bibliothèque — aucun nouvel appel image facturé.";
+          renderMain();
+          return;
+        }
         imgApiStatus.textContent = "Analyse de l'image relancée ✓ (aucun nouvel appel image facturé)";
         renderCreativeInspector();
       }catch(err){ imgApiStatus.textContent = `Échec de l'analyse : ${err.message||err}`; }
       relaunchAnalysisBtn.disabled = false;
+    });
+
+    recoverRawBtn.addEventListener("click",()=>recoverRawInput.click());
+    recoverRawInput.addEventListener("change",async ()=>{
+      const file=recoverRawInput.files&&recoverRawInput.files[0];
+      const flow=state.lastCreativeFlow;
+      if(!file||!flow||flow.phase!=="prepared") return;
+      recoverRawBtn.disabled=true;
+      try{
+        const rawDataUrl=await new Promise((resolve,reject)=>{
+          const reader=new FileReader();
+          reader.onload=()=>resolve(reader.result);
+          reader.onerror=()=>reject(new Error("Lecture de l'image téléchargée impossible."));
+          reader.readAsDataURL(file);
+        });
+        const productReferences=(flow.referenceSelections||[]).filter(r=>OFFICIAL_PSIO_REFERENCE_IDS.has(r.id)&&r.dataUrl);
+        imgApiStatus.textContent="Contrôle de l'image brute téléchargée...";
+        flow.dataUrl=rawDataUrl;
+        flow.importedRaw=true;
+        flow.usedReference=flow.inputs?.prestation==="Luminothérapie PSIO®";
+        flow.referenceFallbackReason=null;
+        flow.analysis=await analyzeGeneratedImage(rawDataUrl,flow.brief,{
+          productReferenceDataUrls:productReferences.map(r=>r.dataUrl),
+        });
+        flow.analysisError=null;
+        imgApiStatus.textContent="Rédaction du texte puis application Canvas...";
+        flow.content=await generateContentFromBrief(flow.brief,flow.analysis,flow.inputs.platform,flow.inputs.mission);
+        flow.textError=null;
+        flow.phase="completed";
+        flow.ok=true;
+        const finalized=await finalizeGeneratedImage(flow);
+        storeFinalizedCreativeFlow(flow,finalized);
+        flow.finalizationError=null;
+        imgApiStatus.textContent="Image brute récupérée ✓ Contrôle conforme, Canvas appliqué et image ajoutée à la Bibliothèque — aucun nouvel appel image facturé.";
+        renderMain();
+      }catch(err){
+        flow.dataUrl=null;
+        flow.phase="prepared";
+        imgApiStatus.textContent=`Récupération refusée : ${err.message||err}`;
+        renderCreativeInspector();
+      }
+      recoverRawInput.value="";
+      recoverRawBtn.disabled=false;
     });
 
     frag.appendChild(prepareBtn);
@@ -5501,6 +6651,8 @@ function buildPostTab(){
     frag.appendChild(imgCancelBtn);
     frag.appendChild(regenTextBtn);
     frag.appendChild(relaunchAnalysisBtn);
+    frag.appendChild(recoverRawBtn);
+    frag.appendChild(recoverRawInput);
     frag.appendChild(imgApiStatus);
     frag.appendChild(inspectorHost);
     renderCreativeInspector(); // reconstruit l'état après un éventuel renderMain() précédent
@@ -5541,7 +6693,7 @@ function buildPostTab(){
       textMods: txtDetail.kept, textIgnored: txtDetail.ignored, imageMods: imgDetail.kept, imageIgnored: imgDetail.ignored,
       duplicatesRemoved: txtDetail.duplicatesRemoved + imgDetail.duplicatesRemoved,
       aspect: PLATFORM_ASPECT[platform],
-      overlayRule: platform==="Story" ? "4-5 phrases fortes, tailles variées + logo bas centré" : (PLATFORM_OVERLAY[platform]==="aucun" ? "aucun texte sur l'image" : PLATFORM_OVERLAY[platform]==="fiche" ? `fiche explicative élégante (${PLATFORM_MAXCHARS[platform]} car. max)` : `1-2 phrases courtes (${PLATFORM_MAXCHARS[platform]} car. max)`),
+      overlayRule: platform==="Story" ? "titre de prestation + sous-ligne courte, composition Canvas adaptative + signature officielle" : (PLATFORM_OVERLAY[platform]==="aucun" ? "aucun texte sur l'image ; signature officielle Canvas uniquement" : `accroche courte + signature officielle, composition Canvas adaptative (${PLATFORM_MAXCHARS[platform]} car. max)`),
     }));
 
     const risks = currentRiskFlags();
@@ -5748,26 +6900,25 @@ function buildPostTab(){
       el("img",{src:previewImgForPost.dataUrl, style:"width:100%;display:block;"}),
     ])));
 
-    const logoAsset = state.images.find(i=>i.assetType==="logo");
-    if(logoAsset){
+    /* Ne propose jamais une seconde signature sur une image déjà finalisée par Canvas. */
+    if(previewImgForPost.logoApplied){
+      frag.appendChild(el("p",{style:"font-size:12px;color:var(--green);margin:0 0 10px;text-align:center;"},
+        "Signature officielle déjà appliquée ✓"));
+    }else{
       const logoMsg = el("p",{style:"font-size:12px;color:var(--green);min-height:16px;margin:0 0 10px;text-align:center;"},"");
       frag.appendChild(el("button",{class:"btn-secondary", style:"margin-bottom:10px;", onclick: async ()=>{
         logoMsg.style.color = "var(--muted2)"; logoMsg.textContent = "Ajout du logo en cours...";
         try{
-          const baseImg = await loadImage(previewImgForPost.dataUrl);
-          const logoImg = await loadImage(logoAsset.dataUrl);
-          const canvas = document.createElement("canvas");
-          canvas.width = baseImg.width; canvas.height = baseImg.height;
-          const ctx = canvas.getContext("2d");
-          ctx.drawImage(baseImg, 0, 0);
-          const logoW = canvas.width * (state.logoOverlay.size/100);
-          const logoH = logoW * (logoImg.height/logoImg.width);
-          const lx = (state.logoOverlay.x/100)*canvas.width - logoW/2;
-          const ly = (state.logoOverlay.y/100)*canvas.height - logoH/2;
-          ctx.drawImage(logoImg, lx, ly, logoW, logoH);
-          const newDataUrl = canvas.toDataURL("image/png");
+          const composited = await compositeBrandSignature(previewImgForPost.dataUrl, platform, {
+            withLogo:true, headline:"", brief:previewImgForPost.creativeBrief||null
+          });
+          if(!composited.applied || (composited.layoutReport&&composited.layoutReport.blockingError)){
+            throw new Error(composited.layoutReport&&composited.layoutReport.blockingError || "Signature officielle indisponible");
+          }
+          const newDataUrl = composited.dataUrl;
           const id = uid();
-          state.images.push({ id, name:`${previewImgForPost.name.replace(/\.png$/,"")}-logo.png`, dataUrl:newDataUrl, tags:[platform,"logo-ajouté"], favorite:false });
+          state.images.push({ id, name:`${previewImgForPost.name.replace(/\.png$/,"")}-logo.png`, dataUrl:newDataUrl,
+            tags:[platform,"logo-ajouté"], favorite:false, logoApplied:true, layoutReport:composited.layoutReport||null });
           LS.set("vf-images", state.images);
           updateCount();
           setPostImageId(id);
@@ -5779,10 +6930,7 @@ function buildPostTab(){
       }}, [svgIcon(ICONS.sparkles,14), el("span",{},"Ajouter mon logo sur cette image")]));
       frag.appendChild(logoMsg);
       frag.appendChild(el("p",{style:"font-size:11px;color:var(--muted2);margin:-4px 0 10px;text-align:center;"},
-        "Utilise la position/taille réglées dans l'onglet Éditeur. Crée une nouvelle image, l'originale reste intacte."));
-    } else {
-      frag.appendChild(el("p",{style:"font-size:12px;color:var(--muted2);margin:0 0 10px;"},
-        "Aucun logo enregistré comme actif de marque — marque une image \"Logo\" dans l'onglet Bibliothèque pour pouvoir l'ajouter automatiquement ici."));
+        "Canvas choisit automatiquement une zone calme et sûre. Une nouvelle image est créée ; l'originale reste intacte."));
     }
   }
 
@@ -5930,6 +7078,10 @@ function buildCalendarCard(item, inCampaign){
         if(activeCancelToken) activeCancelToken.cancelled = true;
       });
       imgApiBtn.addEventListener("click", async ()=>{
+        if(item.blockingError){
+          imgApiStatus.textContent = "Génération bloquée : " + item.blockingError;
+          return;
+        }
         if(!confirm("Lancer la génération d'image via OpenAI ? Ceci consomme du crédit API.")) return;
         imgApiBtn.disabled = true; // évite une double génération pour cette même déclinaison
         imgCancelBtn.style.display = "inline-block";
@@ -5956,18 +7108,33 @@ function buildCalendarCard(item, inCampaign){
             renderMain();
             return;
           }
-          const siblingImage = getCampaignSiblingImage(item.campaignId, item.id);
-          const generationResult = await callProviderImage(item.imagePrompt, size, siblingImage ? [siblingImage] : undefined, (label)=>{ imgApiStatus.textContent = label; }, cancelToken);
-          const { usedReference, referenceFallbackReason } = generationResult;
+          const referenceSelections = await resolveReferenceSelectionsByIds(item.referenceSelectionIds||[]);
+          const phaseB = await confirmAndGenerateImage({
+            phase:"prepared",
+            inputs:{ mission:item.mission, platform:item.platform, prestation:state.prestationName,
+              topic:item.topic, size, aspectKey:PLATFORM_ASPECT[item.platform], isCampaign:true },
+            brief:item.creativeBrief, imagePrompt:item.imagePrompt, referenceSelections,
+          }, (label)=>{ imgApiStatus.textContent = label; }, cancelToken);
+          if(!phaseB.ok) throw new Error(phaseB.error || "Échec de la génération");
+          const { usedReference, referenceFallbackReason } = phaseB;
           /* Post-traitement : MÊME fonction que la génération unitaire (format officiel, accroche,
              logo) — aucun code dupliqué, aucun chemin parallèle. */
           const finalizedItem = await finalizeGeneratedImage({
-            inputs:{ platform:item.platform }, dataUrl: generationResult.dataUrl,
-            logoSentAsReference:false, usedReference, content: item.contentData || null,
+            inputs:{ platform:item.platform }, dataUrl: phaseB.dataUrl,
+            logoSentAsReference:false, usedReference, content: phaseB.content || item.contentData || null,
+            brief:item.creativeBrief,
           });
           let dataUrl = finalizedItem.dataUrl;
           const logoApplied = finalizedItem.logoApplied;
           item.imageDataUrl = dataUrl; item.logoApplied = logoApplied; item.usedReference = usedReference; item.referenceFallbackReason = referenceFallbackReason;
+          item.layoutReport = finalizedItem.layoutReport||null;
+          item.analysis = phaseB.analysis || null; item.analysisError = phaseB.analysisError || null;
+          item.contentData = phaseB.content || item.contentData || null; item.textError = phaseB.textError || null;
+          if(item.contentData && item.platform!=="Story"){
+            const hashtagsText = (item.contentData.hashtags||[]).map(x=>x.startsWith("#")?x:"#"+x).slice(0,5).join(" ");
+            item.textFinal = [item.contentData.caption||"", hashtagsText].filter(Boolean).join("\n\n");
+            item.altText = item.contentData.altText || "";
+          }
           item.headlineApplied = !!finalizedItem.headlineApplied; // texte déjà présent : accroche posée dès la génération
           const saved = LS.set("vf-scheduled", state.scheduled);
           logToLab({ provider:"OpenAI", model:"gpt-image-1-mini", type:"image", prompt:item.imagePrompt, promptHash:hashPrompt(item.imagePrompt), cost:null, durationMs:Date.now()-t0, status:"accepted" });
@@ -5977,7 +7144,9 @@ function buildCalendarCard(item, inCampaign){
           else referenceLabel = "Génération standard — aucune référence visuelle fournie.";
           imgApiStatus.textContent = (!saved ? "Générée, mais échec d'enregistrement (stockage plein ?)."
             : logoRequiredFor(item.platform) ? (logoApplied ? "Image générée, logo réel appliqué ✓" : "Image générée — aucun logo marqué comme actif de marque, rien n'a été ajouté.")
-            : "Image générée ✓") + " — " + referenceLabel;
+            : "Image générée ✓") + " — " + referenceLabel +
+            (finalizedItem.layoutReport&&!finalizedItem.layoutReport.skipped
+              ? ` — Canvas premium ✓ (${finalizedItem.layoutReport.textZone||"sans texte"} / ${finalizedItem.layoutReport.logoZone||"sans logo"})` : "");
           renderMain();
         }catch(err){
           const cancelled = String(err.message||err)==="__CANCELLED__";
@@ -5996,8 +7165,12 @@ function buildCalendarCard(item, inCampaign){
       let dataUrl = await normalizeToPlatformFormat(await resizeImageFile(file), item.platform); // V1.0 : format officiel
       let logoApplied = false;
       if(logoRequiredFor(item.platform)){
-        const composited = await compositeBrandSignature(dataUrl, item.platform);
+        const composited = await compositeBrandSignature(dataUrl, item.platform, {
+          brief:item.creativeBrief||null, analysis:item.analysis||null
+        });
+        if(composited.layoutReport&&composited.layoutReport.blockingError) throw new Error(composited.layoutReport.blockingError);
         dataUrl = composited.dataUrl; logoApplied = composited.applied;
+        item.layoutReport = composited.layoutReport||null;
       }
       item.imageDataUrl = dataUrl; item.logoApplied = logoApplied;
       const saved = LS.set("vf-scheduled", state.scheduled);
@@ -6467,7 +7640,7 @@ function buildApiTab(){
 ============================================================ */
 
 /* ---- Versionnage ---- */
-const VF_VERSION = "2.1.0-v1"; // semver manuelle : à incrémenter à chaque déploiement touchant le moteur
+const VF_VERSION = "2.2.20-meta-spacing"; // semver manuelle : à incrémenter à chaque déploiement touchant le moteur
 /* Hash déterministe de l'état des règles : deux runs au même hash = strictement les mêmes règles.
    Couvre : modules (contenu+état), UNIVERS_SDZ, charte condensée, garde-fou sécurité. */
 function computeModulesHash(){
@@ -6904,14 +8077,14 @@ function computeRunExplanation(run, refRun){
 /* ---- Banque officielle de sujets, VERSIONNÉE — référence du Golden Set.
    Comparer deux runs exige la même version (sinon "non comparables"). */
 const BENCH_TOPIC_BANK = {
-  version: "1.0.0",
+  version: "1.1.0",
   parPrestation: {
-    "Massage Ayurvédique Abhyanga": { id:"t-abhyanga-1", mission:"decouvrir_soin", sujet:"lâcher prise" },
-    "Reiki": { id:"t-reiki-1", mission:"decouvrir_soin", sujet:"retrouver son énergie" },
-    "Réflexologie plantaire": { id:"t-reflexo-1", mission:"decouvrir_soin", sujet:"relancer la circulation, alléger les jambes" },
-    "PSiO": { id:"t-psio-1", mission:"decouvrir_soin", sujet:"apaiser le mental, mieux dormir" },
+    "Massage Ayurvédique Abhyanga": { id:"t-abhyanga-1", mission:"Faire découvrir un soin", sujet:"lâcher prise" },
+    "Reiki": { id:"t-reiki-1", mission:"Faire découvrir un soin", sujet:"retrouver son énergie" },
+    "Réflexologie plantaire thaïlandaise": { id:"t-reflexo-1", mission:"Faire découvrir un soin", sujet:"relancer la circulation, alléger les jambes" },
+    "Luminothérapie PSIO®": { id:"t-psio-1", mission:"Faire découvrir un soin", sujet:"apaiser le mental, mieux dormir" },
   },
-  defaut: { id:"t-defaut-1", mission:"decouvrir_soin", sujet:"un moment pour soi, une vraie pause" },
+  defaut: { id:"t-defaut-1", mission:"Faire découvrir un soin", sujet:"un moment pour soi, une vraie pause" },
 };
 
 /* Construit une TestSuite Smoke : matrice DYNAMIQUE prestations × plateformes (aucune valeur en dur —
@@ -9405,7 +10578,19 @@ checkServerOnLoad();
 
 if ("serviceWorker" in navigator) {
   window.addEventListener("load", () => {
-    navigator.serviceWorker.register("./sw.js").catch((err) => console.error("SW non enregistré :", err));
+    const reloadKey = "vf-sw-reloaded-version";
+    navigator.serviceWorker.addEventListener("controllerchange", () => {
+      // Une seule actualisation automatique par version : le nouveau moteur remplace
+      // immédiatement la page encore ouverte, sans boucle de rechargement.
+      if(sessionStorage.getItem(reloadKey) !== VF_VERSION){
+        sessionStorage.setItem(reloadKey, VF_VERSION);
+        window.location.reload();
+      }
+    });
+    navigator.serviceWorker
+      .register(`./sw.js?v=${encodeURIComponent(VF_VERSION)}`, { updateViaCache: "none" })
+      .then((registration) => registration.update())
+      .catch((err) => console.error("SW non enregistré :", err));
   });
 }
 </script>

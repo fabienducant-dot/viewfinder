@@ -7,7 +7,7 @@
    au lieu de rester bloqué sur une version mise en cache. Seuls les fichiers statiques qui ne
    changent presque jamais (icônes) utilisent une stratégie cache-d'abord. */
 
-const CACHE_NAME = "viewfinder-cache-v3";
+const CACHE_NAME = "viewfinder-cache-v25";
 const APP_SHELL = [
   "./",
   "./index.html",
@@ -37,11 +37,16 @@ self.addEventListener("activate", (event) => {
 self.addEventListener("fetch", (event) => {
   if (event.request.method !== "GET") return;
 
+  const requestUrl = new URL(event.request.url);
   const isAppDocument = event.request.mode === "navigate" || event.request.url.endsWith("/index.html") || event.request.url.endsWith("/");
+  const isOfficialPsioReference =
+    requestUrl.origin === self.location.origin &&
+    requestUrl.pathname.endsWith("/assets/psio-official-reference.jpg");
 
-  if (isAppDocument) {
+  if (isAppDocument || isOfficialPsioReference) {
     // Réseau d'abord : garantit qu'une nouvelle version déployée est vue tout de suite.
-    // Le cache ne sert que si le téléphone est hors-ligne.
+    // La référence produit PSiO® suit la même règle pour ne jamais rester figée sur
+    // une ancienne photo. Le cache ne sert que si le téléphone est hors-ligne.
     event.respondWith(
       fetch(event.request)
         .then((response) => {

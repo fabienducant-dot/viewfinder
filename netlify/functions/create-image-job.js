@@ -10,6 +10,7 @@
    répondre immédiatement. Elle n'attend jamais OpenAI. */
 const { getStore } = require("@netlify/blobs");
 const crypto = require("crypto");
+const { resolveInvocationBaseUrl } = require("./_shared/netlify-invocation-url");
 
 function openJobStore(){
   const opts = { consistency: "strong" }; // écriture puis relecture quasi immédiate du statut : la
@@ -32,7 +33,8 @@ exports.handler = async (event) => {
   } catch (e) {
     return { statusCode: 400, headers: { "Content-Type": "application/json" }, body: JSON.stringify({ error: "Corps de requête invalide" }) };
   }
-  const { prompt, size, model, referenceImageUrls, referenceImageData } = payload;
+  const { prompt, size, model, quality, referenceImageUrls, referenceImageData } = payload;
+  const referenceRequired = payload.referenceRequired === true;
   if (typeof prompt !== "string" || !prompt.trim()) {
     return { statusCode: 400, headers: { "Content-Type": "application/json" }, body: JSON.stringify({ error: "Le prompt est requis" }) };
   }
@@ -44,7 +46,7 @@ exports.handler = async (event) => {
 
     // Entrée complète (peut contenir jusqu'à 3 images en base64) écrite en Blobs — jamais transmise
     // telle quelle au déclenchement de la Background Function.
-    await store.set(`jobs/${jobId}/input`, JSON.stringify({ prompt, size, model, referenceImageUrls, referenceImageData }));
+    await store.set(`jobs/${jobId}/input`, JSON.stringify({ prompt, size, model, quality, referenceImageUrls, referenceImageData, referenceRequired }));
 
     await store.set(`jobs/${jobId}`, JSON.stringify({
       jobId,
@@ -57,11 +59,14 @@ exports.handler = async (event) => {
       referenceFallbackReason: null,
     }));
 
-    const siteUrl = (process.env.SITE_URL || process.env.URL || "").replace(/\/$/, "");
+    // Le job doit déclencher la Background Function du MÊME déploiement. Sur une Deploy Preview,
+    // URL/SITE_URL peuvent pointer vers la production ; l'hôte Netlify validé de la requête
+    // entrante reste donc prioritaire.
+    const siteUrl = resolveInvocationBaseUrl(event);
     if (!siteUrl) {
       await store.set(`jobs/${jobId}`, JSON.stringify({
         jobId, status: "failed", createdAt: now, updatedAt: Date.now(),
-        error: { message: "SITE_URL/URL non disponible côté serveur — impossible de déclencher la génération.", source: "config" },
+        error: { message: "Hôte du déploiement Netlify introuvable — impossible de déclencher la génération.", source: "config" },
         resultKey: null, usedReference: null, referenceFallbackReason: null,
       }));
       return { statusCode: 200, headers: { "Content-Type": "application/json" }, body: JSON.stringify({ ok: true, jobId, status: "failed" }) };

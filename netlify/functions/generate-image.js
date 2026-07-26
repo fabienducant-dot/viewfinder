@@ -14,6 +14,7 @@
    n'importe quelle raison (fournisseur non compatible, erreur réseau, format...), on retombe
    automatiquement et silencieusement sur la génération texte seule habituelle : aucune requête
    de Fabien ne doit jamais échouer à cause de cette fonctionnalité optionnelle. */
+const { applyImageEditOptions } = require("./_shared/openai-image-edit-options");
 
 async function fetchAsBlob(url){
   const res = await fetch(url);
@@ -31,12 +32,12 @@ function dataUrlToBlob(dataUrl){
   return new Blob([binary], { type: contentType });
 }
 
-async function generateWithReferenceImages({ key, prompt, size, model, referenceImageUrls, referenceImageData }){
+async function generateWithReferenceImages({ key, prompt, size, model, quality, referenceImageUrls, referenceImageData }){
   const form = new FormData();
-  form.append("model", model || "gpt-image-1");
   form.append("prompt", prompt);
   form.append("size", size || "1024x1024");
   form.append("n", "1");
+  applyImageEditOptions(form, { model, quality });
   const urls = (referenceImageUrls || []).slice(0, 3);
   const dataUrls = (referenceImageData || []).slice(0, 3 - urls.length);
   for(const url of urls){
@@ -59,7 +60,7 @@ async function generateWithReferenceImages({ key, prompt, size, model, reference
   return res.json();
 }
 
-async function generateStandard({ key, prompt, size, model }){
+async function generateStandard({ key, prompt, size, model, quality }){
   const res = await fetch("https://api.openai.com/v1/images/generations", {
     method: "POST",
     headers: { "Content-Type": "application/json", Authorization: `Bearer ${key}` },
@@ -67,6 +68,7 @@ async function generateStandard({ key, prompt, size, model }){
       model: model || "gpt-image-1",
       prompt,
       size: size || "1024x1024",
+      ...(quality ? { quality } : {}),
       n: 1,
     }),
   });
@@ -88,7 +90,8 @@ exports.handler = async (event) => {
   } catch (e) {
     return { statusCode: 400, body: JSON.stringify({ error: "Corps de requête invalide" }) };
   }
-  const { prompt, size, model, referenceImageUrls, referenceImageData } = payload;
+  const { prompt, size, model, quality, referenceImageUrls, referenceImageData } = payload;
+  const referenceRequired = payload.referenceRequired === true;
 
   try {
     const key = process.env.OPENAI_API_KEY;
@@ -100,14 +103,17 @@ exports.handler = async (event) => {
     const hasData = Array.isArray(referenceImageData) && referenceImageData.length;
     if (hasUrls || hasData) {
       try {
-        data = await generateWithReferenceImages({ key, prompt, size, model, referenceImageUrls, referenceImageData });
+        data = await generateWithReferenceImages({ key, prompt, size, model, quality, referenceImageUrls, referenceImageData });
         usedReference = true;
       } catch (refErr) {
-        // dégradation propre : on retombe sur la génération standard, jamais d'échec côté utilisateur
-        data = await generateStandard({ key, prompt, size, model });
+        if(referenceRequired){
+          throw new Error(`Référence produit obligatoire non utilisée : ${String(refErr.message || refErr)}`);
+        }
+        // Dégradation propre pour les références artistiques facultatives uniquement.
+        data = await generateStandard({ key, prompt, size, model, quality });
       }
     } else {
-      data = await generateStandard({ key, prompt, size, model });
+      data = await generateStandard({ key, prompt, size, model, quality });
     }
 
     const b64 = data.data?.[0]?.b64_json || null;
