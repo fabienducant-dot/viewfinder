@@ -971,12 +971,17 @@ function normalizeOverlayZonePreference(value){
 }
 function brandLayoutCandidates(platform, kind){
   const isStory = platform==="Story";
+  const isMetaFeed = platform==="Instagram" || platform==="Facebook";
   const isLandscape = platform==="Google Business" || platform==="Article Blog Wix";
-  /* En Story, l'accroche et la signature forment un seul verrou éditorial centré. Deux positions
-     seulement sont admises : bas par défaut, haut si le sujet occupe réellement le bas. */
+  /* Sur les formats Meta avec texte, l'accroche et la signature forment un seul verrou éditorial
+     centré. Deux positions seulement : bas par défaut, haut si le sujet occupe réellement le bas. */
   if(kind==="lockup" && isStory) return [
     {id:"bottom-center-lockup",x:.10,y:.54,w:.80,h:.275,align:"center",pref:"bottom"},
     {id:"top-center-lockup",x:.10,y:.145,w:.80,h:.275,align:"center",pref:"top"},
+  ];
+  if(kind==="lockup" && isMetaFeed) return [
+    {id:"bottom-center-lockup",x:.09,y:.59,w:.82,h:.31,align:"center",pref:"bottom"},
+    {id:"top-center-lockup",x:.09,y:.075,w:.82,h:.31,align:"center",pref:"top"},
   ];
   if(kind==="text"){
     if(isStory) return [
@@ -1117,6 +1122,20 @@ function drawSoftScrim(ctx, box, strength){
   g.addColorStop(1,"rgba(0,0,0,0)");
   ctx.fillStyle=g; ctx.fillRect(x,y,w,h);
 }
+function drawEditorialLockupScrim(ctx, box, strength){
+  const W=ctx.canvas.width,H=ctx.canvas.height;
+  const y=Math.max(0,(box.y-.035)*H);
+  const h=Math.min(H-y,(box.h+.07)*H);
+  const a=Math.min(.68,Math.max(.30,strength||.44));
+  const g=ctx.createLinearGradient(0,y,0,y+h);
+  g.addColorStop(0,"rgba(0,0,0,0)");
+  g.addColorStop(.18,`rgba(0,0,0,${a*.58})`);
+  g.addColorStop(.42,`rgba(0,0,0,${a})`);
+  g.addColorStop(.78,`rgba(0,0,0,${a*.82})`);
+  g.addColorStop(1,"rgba(0,0,0,0)");
+  ctx.fillStyle=g;
+  ctx.fillRect(0,y,W,h);
+}
 function trackedTextWidth(ctx,text,tracking){
   const chars=[...String(text||"")];
   return chars.reduce((n,ch)=>n+ctx.measureText(ch).width,0)+Math.max(0,chars.length-1)*tracking;
@@ -1240,10 +1259,11 @@ function drawOfficialSignature(ctx,logoImg,box,platform){
   return {logoWidth:Math.round(maxLogoW),brandSize};
 }
 
-/* Verrou éditorial Story : accroche, filet lumineux puis signature officielle sur un même axe.
-   Cette composition reprend la logique des affiches SDZ validées sans copier leur format carré. */
-function drawPremiumStoryLockup(ctx,headline,logoImg,box){
+/* Verrou éditorial Meta : accroche, filet lumineux puis signature officielle sur un même axe.
+   Cette composition reprend la logique des affiches SDZ validées en l'adaptant au 9:16 et au 4:5. */
+function drawPremiumBrandLockup(ctx,headline,logoImg,box,platform){
   const W=ctx.canvas.width,H=ctx.canvas.height;
+  const isStory=platform==="Story";
   const parts=String(headline||"").split("|").map(s=>s.trim()).filter(Boolean);
   const preserveOfficialNames=value=>String(value||"").toUpperCase().replace(/\bPSIO\b/g,"PSiO");
   const title=preserveOfficialNames(parts.shift()||"");
@@ -1254,8 +1274,8 @@ function drawPremiumStoryLockup(ctx,headline,logoImg,box){
   let scale=1,layout=null;
 
   do{
-    const titleSize=Math.max(Math.round(W*.043),Math.round(W*.061*scale));
-    const subtitleSize=Math.max(Math.round(W*.032),Math.round(W*.041*scale));
+    const titleSize=Math.max(Math.round(W*(isStory?.043:.040)),Math.round(W*(isStory?.061:.056)*scale));
+    const subtitleSize=Math.max(Math.round(W*(isStory?.032:.029)),Math.round(W*(isStory?.041:.038)*scale));
     const titleTracking=Math.max(1,Math.round(titleSize*.15));
     const subtitleTracking=Math.max(1,Math.round(subtitleSize*.13));
     ctx.font=`500 ${titleSize}px Georgia, 'Times New Roman', serif`;
@@ -1265,9 +1285,9 @@ function drawPremiumStoryLockup(ctx,headline,logoImg,box){
     const titleLineHeight=titleSize*1.18;
     const subtitleLineHeight=subtitleSize*1.34;
     const ruleW=Math.min(maxWidth*.38,W*.28);
-    const logoW=Math.min(box.w*W*.22,W*.135*scale);
+    const logoW=Math.min(box.w*W*.22,W*(isStory?.135:.12)*scale);
     const logoH=logoW*logoRatio;
-    let brandSize=Math.max(16,Math.round(W*.0245*scale));
+    let brandSize=Math.max(16,Math.round(W*(isStory?.0245:.022)*scale));
     ctx.font=`500 ${brandSize}px Georgia, 'Times New Roman', serif`;
     while(brandSize>16&&trackedTextWidth(ctx,"LA SANTÉ DES ZÈBRES",Math.max(1,brandSize*.09))>maxWidth*.64){
       brandSize--; ctx.font=`500 ${brandSize}px Georgia, 'Times New Roman', serif`;
@@ -1291,7 +1311,11 @@ function drawPremiumStoryLockup(ctx,headline,logoImg,box){
   ctx.shadowColor="rgba(0,0,0,.94)"; ctx.shadowBlur=Math.round(W*.012);
   ctx.fillStyle="#F5F2E9";
   ctx.font=`500 ${l.titleSize}px Georgia, 'Times New Roman', serif`;
-  l.titleLines.forEach(line=>{
+  l.titleLines.forEach((line,index)=>{
+    /* Sans sous-ligne séparée, la seconde ligne devient naturellement le niveau or, comme dans
+       les affiches SDZ de référence : une seule phrase, deux niveaux de lecture. */
+    ctx.fillStyle=!l.subtitleLines.length&&l.titleLines.length>1&&index===l.titleLines.length-1
+      ? officialGoldGradient(ctx,y,y+l.titleLineHeight) : "#F5F2E9";
     drawTrackedText(ctx,line,centerX,y+l.titleSize*.54,l.titleTracking,"center");
     y+=l.titleLineHeight;
   });
@@ -1363,16 +1387,16 @@ async function compositeBrandSignature(baseDataUrl, platform, options){
     const preferredText=opts.brief && opts.brief.zoneTexte;
     const preferredLogo=opts.brief && opts.brief.zoneLogo;
     const protectedZones=normalizedProtectedZones(opts.analysis,opts.brief);
-    const useStoryLockup=platform==="Story"&&!!headline&&!!logoImg;
-    const lockupBox=useStoryLockup
+    const useUnifiedLockup=["Story","Instagram","Facebook"].includes(platform)&&!!headline&&!!logoImg;
+    const lockupBox=useUnifiedLockup
       ? selectBrandRegion(pixels,platform,"lockup",preferredText||"bottom",null,protectedZones) : null;
-    const pair=!useStoryLockup&&headline&&logoImg
+    const pair=!useUnifiedLockup&&headline&&logoImg
       ? selectBrandLayoutPair(pixels,platform,preferredText,preferredLogo,protectedZones) : null;
     const textBox=headline ? (lockupBox||(pair?pair.text:selectBrandRegion(pixels,platform,"text",preferredText,null,protectedZones))) : null;
     const logoBox=logoImg ? (lockupBox||(pair?pair.logo:selectBrandRegion(pixels,platform,"logo",preferredLogo,textBox,protectedZones))) : null;
     const report={version:"canvas-layout-v4",platform,
       textZone:textBox&&textBox.id||null,logoZone:logoBox&&logoBox.id||null,
-      composition:useStoryLockup?"unified-centered-lockup":"adaptive-separated",
+      composition:useUnifiedLockup?"unified-centered-lockup":"adaptive-separated",
       preferredText:normalizeOverlayZonePreference(preferredText),
       preferredLogo:normalizeOverlayZonePreference(preferredLogo),
       protectedZones:protectedZones.map(z=>z.label),scrimApplied:[],warnings:[]};
@@ -1381,7 +1405,7 @@ async function compositeBrandSignature(baseDataUrl, platform, options){
        un bandeau opaque ou une esthétique de flyer. */
     if(lockupBox){
       const strength=.36+Math.min(.26,lockupBox.metrics.mean*.28+lockupBox.metrics.edge*.48);
-      drawSoftScrim(ctx,lockupBox,strength); report.scrimApplied.push("lockup");
+      drawEditorialLockupScrim(ctx,lockupBox,strength); report.scrimApplied.push("lockup-full-width");
     }else if(textBox){
       const strength=.34+Math.min(.28,textBox.metrics.mean*.30+textBox.metrics.edge*.55);
       drawSoftScrim(ctx,textBox,strength); report.scrimApplied.push("text");
@@ -1393,7 +1417,7 @@ async function compositeBrandSignature(baseDataUrl, platform, options){
 
     let headlineMetrics=null, logoMetrics=null;
     if(lockupBox){
-      const metrics=drawPremiumStoryLockup(ctx,headline,logoImg,lockupBox);
+      const metrics=drawPremiumBrandLockup(ctx,headline,logoImg,lockupBox,platform);
       headlineMetrics=metrics.headline;
       logoMetrics=metrics.signature;
     }else if(headline){
@@ -7615,7 +7639,7 @@ function buildApiTab(){
 ============================================================ */
 
 /* ---- Versionnage ---- */
-const VF_VERSION = "2.2.16-story-unified-lockup"; // semver manuelle : à incrémenter à chaque déploiement touchant le moteur
+const VF_VERSION = "2.2.18-lockup-seamless-scrim"; // semver manuelle : à incrémenter à chaque déploiement touchant le moteur
 /* Hash déterministe de l'état des règles : deux runs au même hash = strictement les mêmes règles.
    Couvre : modules (contenu+état), UNIVERS_SDZ, charte condensée, garde-fou sécurité. */
 function computeModulesHash(){
