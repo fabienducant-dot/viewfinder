@@ -14,6 +14,7 @@
    n'importe quelle raison (fournisseur non compatible, erreur réseau, format...), on retombe
    automatiquement et silencieusement sur la génération texte seule habituelle : aucune requête
    de Fabien ne doit jamais échouer à cause de cette fonctionnalité optionnelle. */
+const { applyImageEditOptions } = require("./_shared/openai-image-edit-options");
 
 async function fetchAsBlob(url){
   const res = await fetch(url);
@@ -33,13 +34,10 @@ function dataUrlToBlob(dataUrl){
 
 async function generateWithReferenceImages({ key, prompt, size, model, quality, referenceImageUrls, referenceImageData }){
   const form = new FormData();
-  const imageModel = model || "gpt-image-1";
-  form.append("model", imageModel);
   form.append("prompt", prompt);
   form.append("size", size || "1024x1024");
   form.append("n", "1");
-  if(imageModel !== "gpt-image-2") form.append("input_fidelity", "high");
-  if(quality) form.append("quality", quality);
+  applyImageEditOptions(form, { model, quality });
   const urls = (referenceImageUrls || []).slice(0, 3);
   const dataUrls = (referenceImageData || []).slice(0, 3 - urls.length);
   for(const url of urls){
