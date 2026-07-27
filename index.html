@@ -562,6 +562,7 @@ const state = {
   auditFilter: "Toutes",
 };
 state.images = Array.isArray(state.images) ? state.images : [];
+state.userReferenceUpload = state.userReferenceUpload || null; // image de référence à la demande, en mémoire seulement
 state.styles = Array.isArray(state.styles) ? state.styles : [];
 state.selectedId = state.images[0] ? state.images[0].id : null;
 (function setDefaultStyle(){
@@ -4599,14 +4600,26 @@ async function prepareCreativeBrief(inputs){
     catch(err){ referenceError = `Sélection de référence impossible, génération sans référence : ${String(err.message||err)}`; referenceSelections = []; }
   }
 
+  // Image de référence à la demande (fournie par l'utilisateur pour CETTE génération précise) :
+  // toujours incluse, garantie utilisée — jamais soumise au tri automatique ci-dessus. Si le total
+  // dépasserait 3 images envoyées à l'API, on raccourcit d'abord les références automatiques,
+  // jamais celle de l'utilisateur.
+  if(inputs.userReferenceDataUrl){
+    const userRef = { id: inputs.userReferenceImageId || `user-ref-${Date.now()}`, dataUrl: inputs.userReferenceDataUrl, metadata:{ userSupplied:true } };
+    referenceSelections = [...referenceSelections.slice(0, 2), userRef];
+  }
+
   /* T2 — CONSTRUCTEUR UNIQUE : toute production du prompt image passe par buildFinalImagePrompt.
      prepareCreativeBrief ne construit plus rien lui-même. */
   const built = await buildFinalImagePrompt(brief, platform, aspectKey, !!isCampaign, { blockingError, experimentalMode: inputs.experimentalMode || null });
-  const imagePrompt = prestation==="Luminothérapie PSIO®"
+  let imagePrompt = prestation==="Luminothérapie PSIO®"
     ? stripPsioBrandFromImagePrompt(built.prompt)
     : prestation==="Biorésonance quantique"
     ? stripHealyBrandFromImagePrompt(built.prompt)
     : built.prompt;
+  if(inputs.userReferenceDataUrl){
+    imagePrompt = `${imagePrompt}\n\nRÉFÉRENCE SUPPLÉMENTAIRE FOURNIE PAR L'UTILISATEUR : la dernière image de référence montre un élément précis à incorporer fidèlement dans la composition — même forme, mêmes détails caractéristiques. Adapte sa couleur et son éclairage à la charte noir et or SDZ si nécessaire, mais ne le déforme ni ne le simplifie.`;
+  }
   const daWriterUsed = built.daWriterUsed;
   const daWriterFallbackReason = built.daWriterFallbackReason;
   const transmissionCheck = built.transmissionCheck || null; // EXPÉRIENCE brief_complet uniquement — null en production
@@ -5284,7 +5297,7 @@ async function generateCampaignPosts(topic, missionKey, onProgress){
     const aspect = item.aspectOverride || PLATFORM_ASPECT[item.platform];
     const isStory = item.platform === "Story";
     if(onProgress) onProgress(`${i+1}/${CAMPAIGN_ITEMS.length} — ${item.label}`);
-    const prepared = await prepareCreativeBrief({ mission: missionKey, platform: item.platform, prestation: state.prestationName, topic, aspectKey: aspect, size: API_IMAGE_SIZE_BY_PLATFORM[item.platform]||"1024x1024", isCampaign:true, registres: Array.isArray(state.registres) ? [...state.registres] : [] });
+    const prepared = await prepareCreativeBrief({ mission: missionKey, platform: item.platform, prestation: state.prestationName, topic, aspectKey: aspect, size: API_IMAGE_SIZE_BY_PLATFORM[item.platform]||"1024x1024", isCampaign:true, registres: Array.isArray(state.registres) ? [...state.registres] : [], userReferenceDataUrl: state.userReferenceUpload && state.userReferenceUpload.dataUrl, userReferenceImageId: state.userReferenceUpload && state.userReferenceUpload.id });
     posts.push({
       id: uid(), campaignId, campaignTopic: topic, campaignLabel: item.label,
       platform: item.platform, mission: missionKey, topic,
@@ -6488,6 +6501,38 @@ function buildPostTab(){
   const topicWarn = el("p",{style:"font-size:12px;color:var(--coral);margin:0 0 12px;min-height:14px;"}, "");
   frag.appendChild(topicWarn);
 
+  // Image de référence à la demande : incorporée fidèlement par le modèle, garantie utilisée
+  // (pas soumise au tri automatique de la bibliothèque). Partagée par les 3 modes de création.
+  frag.appendChild(el("p",{class:"label"},"Image de référence (optionnel)"));
+  frag.appendChild(el("p",{class:"hint", style:"margin:-4px 0 8px;"}, "Un élément précis à incorporer fidèlement dans l'image générée (objet, produit, détail...). Recolorée/adaptée à la charte si besoin, jamais déformée."));
+  const refPreviewBox = el("div",{style:"margin-bottom:8px;"});
+  function renderRefPreview(){
+    refPreviewBox.innerHTML = "";
+    if(state.userReferenceUpload){
+      refPreviewBox.appendChild(el("img",{src:state.userReferenceUpload.dataUrl, style:"max-width:120px;border-radius:8px;display:block;margin-bottom:6px;"}));
+      const removeBtn = el("button",{class:"btn-small"}, "Retirer cette référence");
+      removeBtn.addEventListener("click", ()=>{ state.userReferenceUpload = null; renderRefPreview(); });
+      refPreviewBox.appendChild(removeBtn);
+    }
+  }
+  renderRefPreview();
+  frag.appendChild(refPreviewBox);
+  const refInput = el("input",{type:"file", accept:"image/*", style:"margin-bottom:12px;"});
+  refInput.addEventListener("change", async ()=>{
+    const file = refInput.files && refInput.files[0];
+    if(!file) return;
+    const dataUrl = await new Promise((res,rej)=>{ const r=new FileReader(); r.onload=()=>res(r.result); r.onerror=rej; r.readAsDataURL(file); });
+    // Stockée comme une image normale de la bibliothèque (pas assetType "reference") : résolvable
+    // plus tard par id pour les campagnes (qui ne conservent que l'id, pas le dataUrl en mémoire),
+    // sans polluer le tri automatique des références pour de futures générations non liées.
+    const id = uid();
+    state.images.push({ id, name:file.name, dataUrl, tags:["référence à la demande"], favorite:false });
+    LS.set("vf-images", state.images);
+    state.userReferenceUpload = { id, dataUrl, name: file.name };
+    renderRefPreview();
+  });
+  frag.appendChild(refInput);
+
   if(isCampaign){
     frag.appendChild(el("button",{class:"btn-primary", style:"margin-bottom:14px;", onclick: async (e)=>{
       if(!state.topic.trim()){ topicWarn.textContent = "Décris d'abord le sujet du post avant de générer."; return; }
@@ -6497,6 +6542,7 @@ function buildPostTab(){
         const newPosts = await generateCampaignPosts(state.topic, state.mission, (p)=>{ btn.textContent = "Préparation " + p; });
         state.scheduled.push(...newPosts);
         LS.set("vf-scheduled", state.scheduled);
+        if(state.userReferenceUpload){ state.userReferenceUpload = null; } // utilisée pour les 5 formats, retirée automatiquement
         state.tab = "calendar";
         renderNav(); renderMain();
       }catch(err){
@@ -6729,7 +6775,7 @@ function buildPostTab(){
       prepareBtn.disabled = true;
       imgApiStatus.textContent = "Préparation de la création (Creative Planner)...";
       try{
-        const prepared = await prepareCreativeBrief({ mission: state.mission, platform, prestation: state.prestationName, topic: state.topic, aspectKey: PLATFORM_ASPECT[platform], size: API_IMAGE_SIZE_BY_PLATFORM[platform]||"1024x1024", isCampaign:false, registres: Array.isArray(state.registres) ? [...state.registres] : [] });
+        const prepared = await prepareCreativeBrief({ mission: state.mission, platform, prestation: state.prestationName, topic: state.topic, aspectKey: PLATFORM_ASPECT[platform], size: API_IMAGE_SIZE_BY_PLATFORM[platform]||"1024x1024", isCampaign:false, registres: Array.isArray(state.registres) ? [...state.registres] : [], userReferenceDataUrl: state.userReferenceUpload && state.userReferenceUpload.dataUrl, userReferenceImageId: state.userReferenceUpload && state.userReferenceUpload.id });
         state.lastCreativeFlow = prepared;
         imgApiStatus.textContent = prepared.plannerError
           ? `Brief préparé (avec repli local — voir Inspector) ✓ Relis le prompt avant de confirmer.`
@@ -6759,6 +6805,7 @@ function buildPostTab(){
           return;
         }
         const finalized = await finalizeGeneratedImage(flow);
+        if(state.userReferenceUpload){ state.userReferenceUpload = null; } // utilisée pour cette génération, retirée automatiquement
         vfTrace("5-ajout-bibliotheque", { imagesAvant: state.images.length });
         const stored=storeFinalizedCreativeFlow(flow,finalized);
         const logoApplied=finalized.logoApplied;
@@ -6908,13 +6955,14 @@ function buildPostTab(){
        qu'enverrait "Confirmer et générer l'image". Deux sorties, un seul constructeur. */
     const btn = e.currentTarget; const oldLabel = btn.textContent; btn.disabled = true; btn.textContent = "Préparation via le moteur créatif...";
     try{
-      const prepared = await prepareCreativeBrief({ mission: state.mission, platform, prestation: state.prestationName, topic: state.topic, aspectKey: PLATFORM_ASPECT[platform], size: API_IMAGE_SIZE_BY_PLATFORM[platform]||"1024x1024", isCampaign:false, registres: Array.isArray(state.registres) ? [...state.registres] : [] });
+      const prepared = await prepareCreativeBrief({ mission: state.mission, platform, prestation: state.prestationName, topic: state.topic, aspectKey: PLATFORM_ASPECT[platform], size: API_IMAGE_SIZE_BY_PLATFORM[platform]||"1024x1024", isCampaign:false, registres: Array.isArray(state.registres) ? [...state.registres] : [], userReferenceDataUrl: state.userReferenceUpload && state.userReferenceUpload.dataUrl, userReferenceImageId: state.userReferenceUpload && state.userReferenceUpload.id });
       state.lastCreativeFlow = prepared;
       state.imagePrompt = prepared.imagePrompt;
       state.textPrompt = (platform==="Story" || imageOnlyMode) ? null : buildTextPromptFull(platform, state.topic, state.mission);
       state.textPasted = ""; state.feedbackComment = "";
       state.textPromptOptimized = null; state.imagePromptOptimized = null;
       setPostImageId(null);
+      if(state.userReferenceUpload){ state.userReferenceUpload = null; } // utilisée pour cette préparation, retirée automatiquement
       renderMain();
     }catch(err){
       topicWarn.textContent = "Préparation impossible : " + (err.message||err);
@@ -7376,6 +7424,10 @@ function buildCalendarCard(item, inCampaign){
   card.appendChild(el("div",{style:"font-size:13px;color:var(--muted);margin-bottom:6px;"}, item.topic));
   if(item.scheduledAt) card.appendChild(el("div",{style:"font-size:12px;color:var(--muted2);"}, `Programmé pour : ${new Date(item.scheduledAt).toLocaleString("fr-FR")}`));
   if(item.sentAt) card.appendChild(el("div",{style:"font-size:12px;color:var(--green);"}, `Envoyé le : ${new Date(item.sentAt).toLocaleString("fr-FR")}`));
+  if(item.preparedDiagnostics && item.preparedDiagnostics.usedLocalBriefFallback){
+    card.appendChild(el("div",{style:"font-size:12px;color:var(--coral);font-weight:bold;"},
+      `⛔ Brief de secours utilisé — le Planner a échoué${item.plannerError ? " ("+item.plannerError+")" : ""}. La scène ci-dessous est générique, régénère avant de continuer.`));
+  }
   if(item.error) card.appendChild(el("div",{style:"font-size:12px;color:var(--coral);"}, `Erreur : ${item.error}`));
 
   const requiresText = !!item.textPrompt;
@@ -7649,6 +7701,7 @@ function buildCalendarTab(){
     let anomalies = 0;
     items.forEach(it=>{
       const issues = [];
+      if(it.preparedDiagnostics && it.preparedDiagnostics.usedLocalBriefFallback) issues.push(`⛔ brief de secours utilisé (échec du Planner${it.plannerError ? " : "+it.plannerError : ""}) — scène générique sans rapport avec la prestation, à régénérer avant tout`);
       if(!it.imageDataUrl) issues.push("image manquante");
       if(it.error) issues.push(`échec de génération : ${it.error}`);
       if(it.textPrompt && it.platform!=="Story" && (!it.textFinal||!it.textFinal.trim())) issues.push("texte manquant");
