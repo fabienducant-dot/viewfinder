@@ -5010,7 +5010,12 @@ async function callProviderImage(prompt, size, extraReferenceDataUrls, onStatus,
   // Hook additif (Banc d'essai B3) : permet à l'appelant de persister le jobId AVANT le polling,
   // pour reprendre un job payant déjà lancé après interruption — jamais de double facturation.
   if(options && typeof options.onJobCreated === "function"){ try{ options.onJobCreated(jobId); }catch(e){} }
-  try{ sessionStorage.setItem(IMAGE_JOB_SESSION_KEY, jobId); }catch(e){ /* stockage indisponible : tant pis, pas bloquant */ }
+  try{
+    const raw = sessionStorage.getItem(IMAGE_JOB_SESSION_KEY);
+    const active = raw ? JSON.parse(raw) : [];
+    if(!active.includes(jobId)) active.push(jobId);
+    sessionStorage.setItem(IMAGE_JOB_SESSION_KEY, JSON.stringify(active));
+  }catch(e){ /* stockage indisponible : tant pis, pas bloquant */ }
 
   try{
     const result = await pollImageJob(jobId, onStatus, cancelToken);
@@ -5021,7 +5026,10 @@ async function callProviderImage(prompt, size, extraReferenceDataUrls, onStatus,
     return { ...result, logoSentAsReference: referenceImageUrls.length > 0 };
   } finally {
     try{
-      if(sessionStorage.getItem(IMAGE_JOB_SESSION_KEY) === jobId) sessionStorage.removeItem(IMAGE_JOB_SESSION_KEY);
+      const raw = sessionStorage.getItem(IMAGE_JOB_SESSION_KEY);
+      const active = raw ? JSON.parse(raw).filter(id=>id!==jobId) : [];
+      if(active.length) sessionStorage.setItem(IMAGE_JOB_SESSION_KEY, JSON.stringify(active));
+      else sessionStorage.removeItem(IMAGE_JOB_SESSION_KEY);
     }catch(e){}
   }
 }
@@ -7262,6 +7270,8 @@ async function generateImageForCampaignItem(item, onStatus, cancelToken){
     item.altText = item.contentData.altText || "";
   }
   item.headlineApplied = !!finalizedItem.headlineApplied; // texte déjà présent : accroche posée dès la génération
+  item.overlayWarning = finalizedItem.overlayWarning || null;
+  item.overlayWarning = finalizedItem.overlayWarning || null;
   const saved = LS.set("vf-scheduled", state.scheduled);
   logToLab({ provider:"OpenAI", model:"gpt-image-1-mini", type:"image", prompt:item.imagePrompt, promptHash:hashPrompt(item.imagePrompt), cost:null, durationMs:Date.now()-t0, status:"accepted" });
   let referenceLabel;
@@ -7554,10 +7564,46 @@ function buildCalendarTab(){
       return (cb.createdAt||0)-(ca.createdAt||0);
     });
 
-  campaignIds.forEach(cid=>{
+  if(state.expandedCampaignIds===undefined){
+    state.expandedCampaignIds = campaignIds.length ? [campaignIds[0]] : [];
+  }
+
+  function buildCampaignReportText(items){
+    const lines = [`Rapport de campagne — ${new Date().toLocaleString("fr-FR")}`, ""];
+    let anomalies = 0;
+    items.forEach(it=>{
+      const issues = [];
+      if(!it.imageDataUrl) issues.push("image manquante");
+      if(it.error) issues.push(`échec de génération : ${it.error}`);
+      if(it.textPrompt && it.platform!=="Story" && (!it.textFinal||!it.textFinal.trim())) issues.push("texte manquant");
+      if(it.blockingError) issues.push(`génération bloquée : ${it.blockingError}`);
+      if(it.analysisError) issues.push(`échec d'analyse : ${it.analysisError}`);
+      if(it.textError) issues.push(`échec de texte : ${it.textError}`);
+      if(it.referenceFallbackReason) issues.push(`référence non utilisée : ${it.referenceFallbackReason}`);
+      if(it.overlayWarning) issues.push(it.overlayWarning);
+      if(it.imageDataUrl && logoRequiredFor(it.platform) && !it.logoApplied) issues.push("logo officiel non appliqué");
+      if(it.imagePrompt && it.textPrompt && !it.imageDataUrl===false && it.platform!=="Story" && it.creativeBrief && !it.headlineApplied && PLATFORM_OVERLAY[it.platform]!=="aucun") issues.push("accroche non incrustée sur l'image");
+      anomalies += issues.length;
+      lines.push(`${it.platform} : ${issues.length ? "⚠ "+issues.join(" | ") : "OK ✓"}`);
+    });
+    lines.push("", anomalies ? `${anomalies} anomalie(s) détectée(s) — vérifie les points ci-dessus avant publication.` : "Aucune anomalie détectée sur les 5 formats ✓");
+    return lines.join("\n");
+  }
+
+  campaignIds.forEach((cid, campaignIdx)=>{
     const items = state.scheduled.filter(p=>p.campaignId===cid);
     const topic = items[0].campaignTopic || items[0].topic || "(sans thème)";
-    frag.appendChild(el("h2",{class:"section"}, `📦 Campagne — ${topic.length>60 ? topic.slice(0,60)+"..." : topic}`));
+    const isExpanded = state.expandedCampaignIds.includes(cid);
+    const header = el("h2",{class:"section", style:"cursor:pointer;user-select:none;display:flex;align-items:center;gap:6px;"},
+      `${isExpanded?"▾":"▸"} 📦 Campagne — ${topic.length>60 ? topic.slice(0,60)+"..." : topic}${!isExpanded?` (${items.length} formats, repliée)`:""}`);
+    header.addEventListener("click", ()=>{
+      state.expandedCampaignIds = isExpanded
+        ? state.expandedCampaignIds.filter(x=>x!==cid)
+        : [...state.expandedCampaignIds, cid];
+      renderMain();
+    });
+    frag.appendChild(header);
+    if(!isExpanded) return; // repliée : rien n'est supprimé, juste masqué par défaut au-delà de la plus récente
 
     const batchBtn = el("button",{class:"btn-secondary", style:"margin:4px 0 8px;"}, [svgIcon(ICONS.wand,14), el("span",{},"🚀 Générer les 5 (images + textes)")]);
     const batchCancelBtn = el("button",{class:"btn-secondary", style:"margin:4px 0 8px 8px;display:none;"}, "Annuler");
@@ -7594,9 +7640,13 @@ function buildCalendarTab(){
             await generateTextForCampaignItem(it);
           }
           statusLines[it.platform] = "terminé ✓";
+          it.error = null; // efface une éventuelle erreur d'une tentative précédente
+          LS.set("vf-scheduled", state.scheduled);
         }catch(err){
           const cancelled = String(err.message||err)==="__CANCELLED__";
-          statusLines[it.platform] = cancelled ? "annulé." : `échec (${err.message||err})`;
+          const msg = cancelled ? "annulé." : `échec (${err.message||err})`;
+          statusLines[it.platform] = msg;
+          if(!cancelled){ it.error = String(err.message||err); LS.set("vf-scheduled", state.scheduled); } // persiste même après fermeture de l'app
         }
         renderBatchStatus();
       }
@@ -7604,11 +7654,15 @@ function buildCalendarTab(){
       const instagramItem = items.find(it=>it.platform==="Instagram");
       const facebookItem = items.find(it=>it.platform==="Facebook");
       const independentItems = items.filter(it=> it.platform!=="Instagram" && it.platform!=="Facebook" && needsWork(it));
+      const sleep = ms => new Promise(r=>setTimeout(r,ms));
 
-      /* Instagram + les 3 formats indépendants (Google Business, Story, Wix) partent EN MÊME
-         TEMPS. Facebook ne dépend que d'Instagram — il démarre dès qu'Instagram est terminé, sans
-         attendre les 3 autres, qui continuent en parallèle de leur côté. */
-      const independentTasks = independentItems.map(it=>processItem(it));
+      /* Instagram + les 3 formats indépendants (Google Business, Story, Wix) partent quasi en même
+         temps, mais légèrement étalés (2s d'écart) plutôt que pile à la même milliseconde : un vrai
+         départ groupé sur 4-5 appels d'un coup déclenche très probablement la limite de requêtes
+         simultanées d'OpenAI (un seul passe, les autres sont rejetés). Cet étalement reste bien plus
+         rapide qu'un enchaînement séquentiel complet, sans provoquer la rafale. Facebook ne dépend
+         que d'Instagram — il démarre dès qu'Instagram est terminé, sans attendre les 3 autres. */
+      const independentTasks = independentItems.map((it,idx)=> sleep(idx*2000).then(()=>processItem(it)));
       let instagramThenFacebook = Promise.resolve();
       if(instagramItem && needsWork(instagramItem)){
         instagramThenFacebook = processItem(instagramItem).then(async ()=>{
@@ -7624,6 +7678,17 @@ function buildCalendarTab(){
       renderMain();
     });
     frag.appendChild(batchBtn); frag.appendChild(batchCancelBtn); frag.appendChild(batchStatusBox);
+
+    const reportBtn = el("button",{class:"btn-secondary", style:"margin:0 0 8px;"}, [svgIcon(ICONS.sparkles,14), el("span",{},"📋 Rapport de campagne (anomalies)")]);
+    const reportBox = el("div",{style:"display:none;margin-bottom:8px;"});
+    reportBtn.addEventListener("click", ()=>{
+      const text = buildCampaignReportText(items);
+      reportBox.innerHTML = "";
+      reportBox.style.display = "block";
+      reportBox.appendChild(el("div",{class:"card", style:"margin-bottom:6px;"},[el("pre",{}, text)]));
+      reportBox.appendChild(copyBtnFor(()=>text));
+    });
+    frag.appendChild(reportBtn); frag.appendChild(reportBox);
 
     items.forEach(item=> frag.appendChild(buildCalendarCard(item, true)));
   });
