@@ -3086,6 +3086,35 @@ function validateAndFixBriefV2(brief, allowed, exclusions, typeCreationImpose, p
     fixed.miseEnScene.action = `${fixed.miseEnScene.action}, un drap ou tissu noir satiné sobre couvrant pudiquement le corps de la personne recevant le soin au moins jusqu'à la taille — seule la zone strictement nécessaire au geste (épaules, dos, mains ou pieds selon le soin) reste dégagée`;
     corrected = true;
   }
+  // Vocabulaire à connotation romantique/sensuelle : à bannir systématiquement des scènes à
+  // contact corporel, quel que soit le drapé décrit par ailleurs — probable déclencheur direct du
+  // filtre de sécurité OpenAI (safety_violations=[sexual]) observé sur plusieurs générations massage.
+  // Correction déterministe plutôt qu'une consigne au rédacteur, qui n'a pas suffi jusqu'ici.
+  if(isBodyContact){
+    const ROMANTIC_WORDS = [
+      [/\bla première caresse\b/gi, "le premier geste du soin"],
+      [/\bcaresses?\b/gi, "gestes"],
+      [/\bcaress(?:e|er|ant|ante)\b/gi, "masser"],
+      [/\bconnexion entre les mains et la peau\b/gi, "précision du geste sur la zone soignée"],
+      [/\bvolupt(?:é|ueux|ueuse)\b/gi, "détente"],
+      [/\bsensuel(?:le)?\b/gi, "apaisant"],
+      [/\bcâlin(?:e)?\b/gi, "geste"],
+    ];
+    ["action","sujetPrincipal"].forEach(field=>{
+      if(fixed.miseEnScene && typeof fixed.miseEnScene[field]==="string"){
+        let v = fixed.miseEnScene[field];
+        ROMANTIC_WORDS.forEach(([re,repl])=>{ v = v.replace(re, repl); });
+        if(v!==fixed.miseEnScene[field]){ fixed.miseEnScene[field] = v; corrected = true; }
+      }
+    });
+    ["decor","momentCinematographique"].forEach(field=>{
+      if(typeof fixed[field]==="string"){
+        let v = fixed[field];
+        ROMANTIC_WORDS.forEach(([re,repl])=>{ v = v.replace(re, repl); });
+        if(v!==fixed[field]){ fixed[field] = v; corrected = true; }
+      }
+    });
+  }
 
   // Fait de marque permanent : SDZ n'emploie qu'un seul praticien, de genre masculin. Correction
   // déterministe (pas seulement une consigne au Planner) : toute mention féminine du praticien
@@ -3145,21 +3174,26 @@ function validateAndFixBriefV2(brief, allowed, exclusions, typeCreationImpose, p
       fixed.niveauLuminosite = "lumineux_eclatant";
       corrected = true;
     }
-    const registryDecorContract = buildActiveRegistryDecorContract(fixed.registresActifs);
-    if(registryDecorContract){
-      const plannerDecor = String(fixed.decor||"").trim();
-      const plannerDecorUtile = plannerDecor
-        && !contientMotifV2EnPause(plannerDecor)
-        && !/^(?:espace|fond) noir profond abstrait\b/i.test(plannerDecor);
-      const decorAvecRegistres = plannerDecorUtile
-        ? `${registryDecorContract}. Détail spécifique du brief : ${plannerDecor}`
-        : registryDecorContract;
-      if(fixed.decor!==decorAvecRegistres){ fixed.decor = decorAvecRegistres; corrected = true; }
-    }
     const negative = [String(fixed.negativePrompt||"").trim(),
       "mutation physique, transfiguration du visage, corps fragmenté, ambiance d'horreur, symboles occultes, faux logo, zèbre décoratif"]
       .filter(Boolean).join(", ");
     if(negative !== fixed.negativePrompt){ fixed.negativePrompt = negative; corrected = true; }
+  }
+
+  // Contrat de décor des registres actifs (Cinématographie/Architecture/Fantastique) : appliqué
+  // quel que soit le style retenu (affiche fantastique OU luxe silencieux). Auparavant limité au
+  // seul style "affiche fantastique" — des registres cochés par l'utilisateur étaient donc
+  // silencieusement ignorés dès que le style basculait sur "luxe silencieux".
+  const registryDecorContract = buildActiveRegistryDecorContract(fixed.registresActifs);
+  if(registryDecorContract){
+    const plannerDecor = String(fixed.decor||"").trim();
+    const plannerDecorUtile = plannerDecor
+      && !contientMotifV2EnPause(plannerDecor)
+      && !/^(?:espace|fond) noir profond abstrait\b/i.test(plannerDecor);
+    const decorAvecRegistres = plannerDecorUtile
+      ? `${registryDecorContract}. Détail spécifique du brief : ${plannerDecor}`
+      : registryDecorContract;
+    if(fixed.decor!==decorAvecRegistres){ fixed.decor = decorAvecRegistres; corrected = true; }
   }
 
   if(/transfigur/i.test(String(fixed.momentCinematographique||""))){
@@ -3706,6 +3740,7 @@ RÈGLES ABSOLUES — tu reformules, tu n'inventes JAMAIS :
 - N'ajoute aucun geste secondaire, aucune main ni aucun accessoire absent du brief. N'ajoute aucun halo, faisceau, rayon, cercle, axe ou particule si le brief ne les demande pas explicitement. Évite toute formulation incertaine comme "peut-être".
 - Le corps et le visage restent humains, naturels et intacts. Ne transforme jamais une évolution émotionnelle en mutation physique.
 - Si le brief mentionne un drap, un tissu ou une pudeur couvrant le corps, cette précision doit obligatoirement apparaître dans ta reformulation, avec la même clarté — ne la résume jamais en une formule vague, ne la déplace jamais en fin de texte, ne la supprime jamais pour raccourcir.
+- N'utilise jamais de vocabulaire à connotation romantique ou sensuelle ("caresse", "sensuel", "volupté", "câlin"...) pour décrire un geste de soin, même par élégance de style : reste sur un vocabulaire professionnel et technique du geste (masser, appliquer, envelopper, guider).
 - Ignore toute valeur technique ou interne qui semblerait être une donnée de contrôle.
 - Longueur : 180 à 250 mots. Un texte continu en 2 ou 3 paragraphes, sans titres, sans listes, sans étiquettes.
 - N'écris RIEN d'autre que la note elle-même : pas de préambule, pas de commentaire.`;
