@@ -2618,6 +2618,7 @@ ${consignePrestation}
 - Dans "miseEnScene.action", décris uniquement l'usage réel de la prestation, une posture ou un geste humain crédible. N'y place jamais un effet visuel, des particules, une lumière, une transformation ou un symbole.
 - L'effet fantastique amplifie la prestation réelle ; il ne la remplace jamais. Le sujet reste naturel, habillé, crédible et intact.
 - Reste éditorial, premium et jamais démonstratif ou didactique.
+- Fait de marque permanent : SDZ n'emploie qu'un seul praticien, de genre masculin. Si la scène montre un praticien réalisant le soin (par opposition au bénéficiaire qui le reçoit), ce doit toujours être un homme ("un praticien", jamais "une praticienne").
 ${prestation==="Luminothérapie PSIO®" ? `- CAS PSIO® : la personne est déjà confortablement installée, les yeux fermés, avec les lunettes correctement portées et lisibles sur le visage. Elle n'est jamais debout, en attente de commencer, ni en train de tenir les lunettes à la main. La forme, les proportions, la surface optique, l'écran, les commandes et les câbles doivent correspondre strictement à la référence officielle ; seule la couleur peut être adaptée en noir profond et or noble SDZ. Aucun casque VR, halo circulaire, auréole, faisceau ajouté ou geste secondaire inventé.` : ""}
 ${prestation==="Biorésonance quantique" ? `- CAS BIORÉSONANCE (Healy) : le boîtier Healy est utilisé selon l'un de ses deux usages réels — soit relié par câbles fins à des électrodes fixées sur les poignets, soit via son adaptateur sans fil (coil) fixé sur le vêtement au niveau du thorax ou du cou ; le boîtier lui-même est tenu en main ou posé à proximité immédiate, jamais rangé ou hors champ, et jamais collé directement sur la peau comme un patch autocollant (ex. épaule) sans câble ni coil visible. La forme (carré à coins arrondis, base élargie) et les proportions doivent correspondre strictement à la référence officielle. La grande zone circulaire centrale de la face (où figure le logo du fabricant) et les zones de commande restent des surfaces plates et vierges, sans icône, pictogramme, médaillon, anneau ni point central — seule la couleur peut être adaptée en noir profond et or noble SDZ. Aucune inscription, marque ou icône du fabricant reproduite, aucun autre dispositif électronique, aucun halo, auréole, faisceau ajouté ou geste secondaire inventé.` : ""}
 
@@ -3083,6 +3084,20 @@ function validateAndFixBriefV2(brief, allowed, exclusions, typeCreationImpose, p
   const isBodyContact = !isPsio && !isHealy && BODY_CONTACT_KEYWORDS.some(kw=>bodyContactHaystack.includes(kw));
   if(isBodyContact && fixed.miseEnScene && fixed.miseEnScene.action && !/drap|pudiq/i.test(fixed.miseEnScene.action)){
     fixed.miseEnScene.action = `${fixed.miseEnScene.action}, un drap ou tissu noir satiné sobre couvrant pudiquement le corps de la personne recevant le soin au moins jusqu'à la taille — seule la zone strictement nécessaire au geste (épaules, dos, mains ou pieds selon le soin) reste dégagée`;
+    corrected = true;
+  }
+
+  // Fait de marque permanent : SDZ n'emploie qu'un seul praticien, de genre masculin. Correction
+  // déterministe (pas seulement une consigne au Planner) : toute mention féminine du praticien
+  // dans les champs du brief est reformulée au masculin.
+  ["action","sujetPrincipal"].forEach(field=>{
+    if(fixed.miseEnScene && typeof fixed.miseEnScene[field]==="string" && /praticienne/i.test(fixed.miseEnScene[field])){
+      fixed.miseEnScene[field] = fixed.miseEnScene[field].replace(/praticienne/gi, "praticien");
+      corrected = true;
+    }
+  });
+  if(typeof fixed.caracteristiquePrestationVisible==="string" && /praticienne/i.test(fixed.caracteristiquePrestationVisible)){
+    fixed.caracteristiquePrestationVisible = fixed.caracteristiquePrestationVisible.replace(/praticienne/gi, "praticien");
     corrected = true;
   }
 
@@ -7330,11 +7345,17 @@ function buildCalendarCard(item, inCampaign){
 
   const requiresText = !!item.textPrompt;
   const needsContent = inCampaign && ((requiresText && (!item.textFinal || !item.textFinal.trim())) || !item.imageDataUrl);
-  if(needsContent){
+
+  // Le prompt image reste toujours consultable et copiable, même une fois l'image générée —
+  // avant, cette section disparaissait dès que needsContent devenait faux, rendant le prompt
+  // introuvable après coup (impossible de le comparer ou de le réutiliser).
+  if(item.imagePrompt){
     card.appendChild(el("p",{class:"label", style:"margin-top:10px;"}, "Prompt image"));
     card.appendChild(vfWrap(el("div",{class:"card", style:"margin-bottom:6px;"},[el("pre",{}, item.imagePrompt)])));
     card.appendChild(copyBtnFor(()=>item.imagePrompt));
+  }
 
+  if(needsContent){
     const imgApiStatus = el("p",{style:"font-size:12px;color:var(--muted2);min-height:16px;margin:4px 0;"},"");
     const openaiProvider = state.apiProviders.find(p=>p.kind==="openai-compatible" && (p.baseUrl||"").includes("api.openai.com")) || DEFAULT_OPENAI_PROVIDER;
     if(openaiProvider){
@@ -7409,15 +7430,6 @@ function buildCalendarCard(item, inCampaign){
       card.appendChild(textApiBtn); card.appendChild(textApiStatus);
     }
 
-    if(item.textPrompt){
-      card.appendChild(el("p",{class:"label", style:"margin-top:10px;"}, "Prompt texte"));
-      card.appendChild(vfWrap(el("div",{class:"card", style:"margin-bottom:6px;"},[el("pre",{}, item.textPrompt)])));
-      card.appendChild(copyBtnFor(()=>item.textPrompt));
-      const pastedArea = el("textarea",{rows:"4", placeholder:"Colle ici la réponse texte de ChatGPT...", style:"margin:6px 0;"}, item.textFinal);
-      pastedArea.addEventListener("input", e=>{ item.textFinal = e.target.value; LS.set("vf-scheduled", state.scheduled); });
-      card.appendChild(pastedArea);
-    }
-
     const checklist = buildValidationChecklist({
       platform: item.platform, textPrompt: item.textPrompt, getTextResult: ()=>item.textFinal,
       hasImage: !!item.imageDataUrl, logoApplied: !!item.logoApplied, prestationName: null,
@@ -7444,6 +7456,17 @@ function buildCalendarCard(item, inCampaign){
       renderMain();
     }}, "☑️ Valider ce contenu"));
     card.appendChild(validateMsg);
+  }
+
+  // Le prompt texte reste lui aussi toujours consultable et copiable, même une fois le texte
+  // généré — même raisonnement que pour le prompt image ci-dessus.
+  if(item.textPrompt){
+    card.appendChild(el("p",{class:"label", style:"margin-top:10px;"}, "Prompt texte"));
+    card.appendChild(vfWrap(el("div",{class:"card", style:"margin-bottom:6px;"},[el("pre",{}, item.textPrompt)])));
+    card.appendChild(copyBtnFor(()=>item.textPrompt));
+    const pastedArea = el("textarea",{rows:"4", placeholder:"Colle ici la réponse texte de ChatGPT...", style:"margin:6px 0;"}, item.textFinal);
+    pastedArea.addEventListener("input", e=>{ item.textFinal = e.target.value; LS.set("vf-scheduled", state.scheduled); });
+    card.appendChild(pastedArea);
   }
 
   if(item.imageDataUrl) card.appendChild(el("img",{src:item.imageDataUrl, style:"width:100%;display:block;border-radius:8px;margin-top:8px;"}));
@@ -7600,7 +7623,7 @@ function buildCalendarTab(){
       if(it.referenceFallbackReason) issues.push(`référence non utilisée : ${it.referenceFallbackReason}`);
       if(it.overlayWarning) issues.push(it.overlayWarning);
       if(it.imageDataUrl && logoRequiredFor(it.platform) && !it.logoApplied) issues.push("logo officiel non appliqué");
-      if(it.imagePrompt && it.textPrompt && !it.imageDataUrl===false && it.platform!=="Story" && it.creativeBrief && !it.headlineApplied && PLATFORM_OVERLAY[it.platform]!=="aucun") issues.push("accroche non incrustée sur l'image");
+      if(it.imageDataUrl && it.creativeBrief && !it.headlineApplied && PLATFORM_OVERLAY[it.platform]!=="aucun") issues.push("accroche non incrustée sur l'image");
       anomalies += issues.length;
       lines.push(`${it.platform} : ${issues.length ? "⚠ "+issues.join(" | ") : "OK ✓"}`);
     });
