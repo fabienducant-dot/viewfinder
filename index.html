@@ -7766,6 +7766,35 @@ function buildCalendarTab(){
     });
     frag.appendChild(reportBtn); frag.appendChild(reportBox);
 
+    const exportBtn = el("button",{class:"btn-secondary", style:"margin:0 0 8px 8px;"}, [svgIcon(ICONS.download,14), el("span",{},"📄 Exporter tous les prompts (.txt)")]);
+    exportBtn.addEventListener("click", ()=>{
+      const order = ["Instagram","Facebook","Google Business","Story","Article Blog Wix"];
+      const ordered = items.slice().sort((a,b)=>order.indexOf(a.platform)-order.indexOf(b.platform));
+      const lines = [`Campagne — ${topic}`, `Exporté le ${new Date().toLocaleString("fr-FR")}`, ""];
+      ordered.forEach(it=>{
+        lines.push("=".repeat(60));
+        lines.push(`${it.platform}`);
+        lines.push("=".repeat(60));
+        lines.push("");
+        lines.push("--- PROMPT IMAGE ---");
+        lines.push(it.imagePrompt || "(aucun)");
+        lines.push("");
+        if(it.textPrompt){
+          lines.push("--- PROMPT TEXTE ---");
+          lines.push(it.textPrompt);
+          lines.push("");
+        }
+      });
+      const blob = new Blob([lines.join("\n")], { type:"text/plain;charset=utf-8" });
+      const link = document.createElement("a");
+      link.href = URL.createObjectURL(blob);
+      const safeTopic = topic.toLowerCase().replace(/[^a-z0-9]+/g,"-").replace(/^-+|-+$/g,"").slice(0,40) || "campagne";
+      link.download = `campagne-${safeTopic}-prompts.txt`;
+      link.click();
+      setTimeout(()=>URL.revokeObjectURL(link.href), 5000);
+    });
+    frag.appendChild(exportBtn);
+
     items.forEach(item=> frag.appendChild(buildCalendarCard(item, true)));
   });
 
