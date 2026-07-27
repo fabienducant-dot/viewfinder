@@ -3308,21 +3308,27 @@ async function generateCreativeBriefV2(mission, prestation, platform, topic, typ
     return data;
   };
 
-  let data, plannerNetworkRetryUsed = false;
-  try{
-    data = await callOnce();
-  }catch(err){
-    const estUneErreurReseau = /failed to fetch|network|timeout/i.test(String(err.message||err));
-    if(!estUneErreurReseau) throw err;
-    plannerNetworkRetryUsed = true;
-    data = await callOnce(); // si la seconde tentative échoue aussi, l'erreur remonte telle quelle
-  }
+  const callAndParseOnce = async ()=>{
+    const data = await callOnce();
+    let rawBrief;
+    try{ rawBrief = JSON.parse(data.text); }
+    catch(e){
+      throw new Error(`Creative Planner V2 — erreur JSON.parse :\n${e.message}\n\nRéponse brute :\n${String(data.text||"").slice(0,1500)}`);
+    }
+    return { data, rawBrief };
+  };
 
-  let rawBrief;
-  try{ rawBrief = JSON.parse(data.text); }
-  catch(e){
-    console.error("[Creative Planner V2] JSON.parse a échoué — contenu brut reçu :", data.text);
-    throw new Error(`Creative Planner V2 — erreur JSON.parse :\n${e.message}\n\nRéponse brute :\n${String(data.text||"").slice(0,1500)}`);
+  let data, rawBrief, plannerNetworkRetryUsed = false;
+  try{
+    ({ data, rawBrief } = await callAndParseOnce());
+  }catch(err){
+    // Une seconde tentative, quelle que soit la raison du premier échec (réseau, timeout, ou JSON
+    // mal formé/tronqué renvoyé par le modèle — cause la plus fréquente en pratique, pas seulement
+    // les erreurs réseau). Cas vécu : un brief de secours vide sortait ~1 fois sur 5 dans une
+    // campagne, sans qu'aucune tentative supplémentaire ne soit faite pour un JSON invalide.
+    console.error("[Creative Planner V2] premier essai échoué, nouvelle tentative —", err.message||err);
+    plannerNetworkRetryUsed = true;
+    ({ data, rawBrief } = await callAndParseOnce()); // si la seconde tentative échoue aussi, l'erreur remonte telle quelle
   }
   const { brief, corrected, blockingError, aucuneRaisonDetre, filiationConflitMomentFaible } = validateAndFixBriefV2(rawBrief, allowed, exclusions, typeCreationImpose, prestation, platform, registres);
   const usage = data.usage ? { promptTokens: data.usage.prompt_tokens ?? null, completionTokens: data.usage.completion_tokens ?? null, model: provider.model } : null;
