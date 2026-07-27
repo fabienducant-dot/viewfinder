@@ -665,6 +665,26 @@ function normalizeScheduledPost(p){
     createdAt: p.createdAt || Date.now(),
     sentAt: p.sentAt || null,
     error: p.error || null,
+    // Ci-dessous : champs ajoutés au fil du projet (brief créatif, diagnostics, résultats de
+    // génération). Auparavant absents d'ici, ils étaient silencieusement effacés à CHAQUE rendu
+    // (normalizeState tourne à chaque renderMain) — cause du bug "brief créatif manquant" qui
+    // apparaissait après une génération pourtant réussie. Conservés tels quels désormais.
+    creativeBrief: (p.creativeBrief && typeof p.creativeBrief==="object") ? p.creativeBrief : null,
+    plannerVersion: p.plannerVersion || undefined,
+    blockingError: p.blockingError || null,
+    plannerError: p.plannerError || null,
+    referenceSelectionIds: Array.isArray(p.referenceSelectionIds) ? p.referenceSelectionIds : [],
+    preparedDiagnostics: (p.preparedDiagnostics && typeof p.preparedDiagnostics==="object") ? p.preparedDiagnostics : null,
+    contentData: (p.contentData && typeof p.contentData==="object") ? p.contentData : null,
+    analysis: (p.analysis && typeof p.analysis==="object") ? p.analysis : null,
+    analysisError: p.analysisError || null,
+    textError: p.textError || null,
+    usedReference: !!p.usedReference,
+    referenceFallbackReason: p.referenceFallbackReason || null,
+    reusedFrom: p.reusedFrom || null,
+    layoutReport: (p.layoutReport && typeof p.layoutReport==="object") ? p.layoutReport : null,
+    headlineApplied: !!p.headlineApplied,
+    overlayWarning: p.overlayWarning || null,
   };
 }
 function normalizeDirectionArtistique(da){
@@ -3083,16 +3103,18 @@ function validateAndFixBriefV2(brief, allowed, exclusions, typeCreationImpose, p
     fixed.caracteristiqueSourcePrestation, fixed.caracteristiquePrestationVisible,
   ].filter(Boolean).join(" ").toLowerCase();
   const isBodyContact = !isPsio && !isHealy && BODY_CONTACT_KEYWORDS.some(kw=>bodyContactHaystack.includes(kw));
-  if(isBodyContact && fixed.miseEnScene && fixed.miseEnScene.action && !/drap|pudiq/i.test(fixed.miseEnScene.action)){
-    fixed.miseEnScene.action = `${fixed.miseEnScene.action}, dans un contexte de photographie éditoriale professionnelle sans aucune connotation suggestive : un drap ou tissu noir satiné sobre couvrant pudiquement le corps de la personne recevant le soin au moins jusqu'à la taille — seule la zone strictement nécessaire au geste (épaules, dos, mains ou pieds selon le soin) reste accessible au praticien`;
-    corrected = true;
-  }
-  // Cadrage resserré pour les scènes à contact corporel : privilégie les mains, le tissu et le
-  // geste en gros plan plutôt qu'un plan large sur le corps. La surface de peau réellement visible
-  // dans l'image générée (pas le texte du prompt) est ce qu'évalue le classificateur visuel
-  // indépendant d'OpenAI — réduire cette surface à la source est le levier le plus fiable.
-  if(isBodyContact && fixed.miseEnScene && typeof fixed.miseEnScene.cadrage==="string" && !/gros plan|plan rapproché|plan serré/i.test(fixed.miseEnScene.cadrage)){
-    fixed.miseEnScene.cadrage = `${fixed.miseEnScene.cadrage}, resserré en gros plan ou plan rapproché sur les mains, le tissu et le geste — jamais un plan large exposant l'ensemble du corps`;
+  // Changement de fond, pas un patch de plus : au lieu de représenter le soin lui-même (corps,
+  // contact, huile — source de tous les rejets de sécurité et de l'ambiance ratée), on représente
+  // le RÉSULTAT RESSENTI après le soin — une silhouette seule, habillée, dans un paysage naturel au
+  // coucher du soleil. Zéro peau visible, zéro contact corporel décrit : le risque de rejet devient
+  // structurellement nul, pas juste réduit par la formulation.
+  if(isBodyContact && fixed.miseEnScene){
+    fixed.miseEnScene.sujetPrincipal = "une personne seule, vue de dos ou de profil perdu, habillée sobrement (jamais torse nu, jamais allongée, jamais de scène de soin visible)";
+    fixed.miseEnScene.action = "se tenir debout ou marcher face à l'horizon, dans un geste d'ouverture et de légèreté retrouvée — aucune scène de soin, aucun contact corporel, aucun praticien visible : seul le résultat ressenti après le soin est représenté, jamais le soin lui-même";
+    fixed.miseEnScene.cadrage = "plan large sur le paysage, sujet en silhouette à l'échelle humaine face à l'immensité, jamais de gros plan sur un corps ou un contact corporel";
+    fixed.decor = "un paysage naturel grandiose au coucher du soleil — montagnes, sentier de crête, plage ou rivage — avec un ciel dramatique traversé de lumière dorée ; aucune architecture intérieure, aucun décor de spa, aucune scène de soin";
+    fixed.lumiere = "lumière dorée de fin de journée, rayons perçant à travers les nuages ou reflétés sur l'eau, chaleureuse et enveloppante, jamais dramatique ou intense";
+    fixed.elementOr = "reflets d'or métallique sur le ciel, l'eau ou la poussière en suspension, dans la continuité de la charte noir et or SDZ";
     corrected = true;
   }
   // Vocabulaire à connotation romantique/sensuelle : à bannir systématiquement des scènes à
@@ -7416,7 +7438,6 @@ async function generateImageForCampaignItem(item, onStatus, cancelToken){
     item.altText = item.contentData.altText || "";
   }
   item.headlineApplied = !!finalizedItem.headlineApplied; // texte déjà présent : accroche posée dès la génération
-  item.overlayWarning = finalizedItem.overlayWarning || null;
   item.overlayWarning = finalizedItem.overlayWarning || null;
   const saved = LS.set("vf-scheduled", state.scheduled);
   logToLab({ provider:"OpenAI", model:"gpt-image-1-mini", type:"image", prompt:item.imagePrompt, promptHash:hashPrompt(item.imagePrompt), cost:null, durationMs:Date.now()-t0, status:"accepted" });
