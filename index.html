@@ -3069,6 +3069,23 @@ function validateAndFixBriefV2(brief, allowed, exclusions, typeCreationImpose, p
     }
   }
 
+  // Contact corporel générique (massages, réflexologie, gommages, drainages...) : la pudeur doit
+  // être explicite DANS LE BRIEF lui-même — le rédacteur DA n'invente jamais, il ne fait que
+  // reformuler. Si le drapé n'apparaît que dans la règle de sécurité finale (générique, en fin de
+  // prompt) et jamais dans l'action décrite, le rédacteur n'a rien à préserver et peut produire une
+  // scène ambiguë. Cas vécu : rejet "sexual" côté OpenAI sur plusieurs prestations massage alors que
+  // la règle générale était bien présente en fin de prompt.
+  const BODY_CONTACT_KEYWORDS = ["massage","massa","réflexologie","reflexologie","gommage","drainage","kinésithérapie","kinesitherapie","palpation","modelage"];
+  const bodyContactHaystack = [
+    prestation, fixed.miseEnScene && fixed.miseEnScene.action, fixed.miseEnScene && fixed.miseEnScene.sujetPrincipal,
+    fixed.caracteristiqueSourcePrestation, fixed.caracteristiquePrestationVisible,
+  ].filter(Boolean).join(" ").toLowerCase();
+  const isBodyContact = !isPsio && !isHealy && BODY_CONTACT_KEYWORDS.some(kw=>bodyContactHaystack.includes(kw));
+  if(isBodyContact && fixed.miseEnScene && fixed.miseEnScene.action && !/drap|pudiq/i.test(fixed.miseEnScene.action)){
+    fixed.miseEnScene.action = `${fixed.miseEnScene.action}, un drap ou tissu noir satiné sobre couvrant pudiquement le corps de la personne recevant le soin au moins jusqu'à la taille — seule la zone strictement nécessaire au geste (épaules, dos, mains ou pieds selon le soin) reste dégagée`;
+    corrected = true;
+  }
+
   // Pause déterministe des automatismes observés pendant les runs officiels. Le brief V2 place
   // désormais la prestation réelle au centre et n'impose aucun symbole de substitution.
   if(typeCreationImpose==="affiche_fantastique"){
@@ -3673,6 +3690,7 @@ RÈGLES ABSOLUES — tu reformules, tu n'inventes JAMAIS :
 - La prestation réelle prime : son geste, sa zone du corps ou son matériel doit rester lisible. Si le brief ne contient aucun "symbolePrincipal", n'en invente pas. S'il en contient un, décris-le une seule fois sans inventer d'axe, de portail, de halo ou de lien lumineux absent du brief.
 - N'ajoute aucun geste secondaire, aucune main ni aucun accessoire absent du brief. N'ajoute aucun halo, faisceau, rayon, cercle, axe ou particule si le brief ne les demande pas explicitement. Évite toute formulation incertaine comme "peut-être".
 - Le corps et le visage restent humains, naturels et intacts. Ne transforme jamais une évolution émotionnelle en mutation physique.
+- Si le brief mentionne un drap, un tissu ou une pudeur couvrant le corps, cette précision doit obligatoirement apparaître dans ta reformulation, avec la même clarté — ne la résume jamais en une formule vague, ne la déplace jamais en fin de texte, ne la supprime jamais pour raccourcir.
 - Ignore toute valeur technique ou interne qui semblerait être une donnée de contrôle.
 - Longueur : 180 à 250 mots. Un texte continu en 2 ou 3 paragraphes, sans titres, sans listes, sans étiquettes.
 - N'écris RIEN d'autre que la note elle-même : pas de préambule, pas de commentaire.`;
