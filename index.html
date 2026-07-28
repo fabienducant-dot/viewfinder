@@ -2701,7 +2701,7 @@ POLITIQUE SYMBOLIQUE V2 :
 Éléments à ne surtout pas répéter (déjà utilisés très récemment sur cette plateforme) :
 ${exclusions.length ? exclusions.map(e=>`- ${e}`).join("\n") : "(aucun historique récent)"}
 
-${platform==="Story" ? `Pour "texteImage", fournis obligatoirement le NOM COURT ET RECONNAISSABLE DE LA PRESTATION en première partie, puis une sous-ligne spécifique de 3 à 7 mots dérivée de sa fiche, séparées par le caractère |. Exemple de structure : "PSIO® | LUMIÈRE ET SON EN HARMONIE". Interdits car trop génériques : "Déconnexion parfaite", "Immersion dans l'instant", "Révélez-vous", "Renaître", "Expérience transformatrice". Réserve "zoneTexte" dans le tiers supérieur ou inférieur selon la scène.` : `Pour "texteImage", reste sobre et conforme aux règles de la plateforme.`}
+${(PLATFORM_OVERLAY[platform]==="accroche"||PLATFORM_OVERLAY[platform]==="fort") ? `Pour "texteImage", fournis obligatoirement le NOM COURT ET RECONNAISSABLE DE LA PRESTATION (ou un mot-clé fort qui l'évoque) en première partie, puis une sous-ligne courte et percutante de 2 à 5 mots dérivée de sa fiche, séparées par le caractère |. Vise le ton d'une affiche premium : direct, mémorable, jamais une phrase complète — pense slogan, pas description. Exemples de structure (à ne pas recopier tels quels) : "PSIO® | LUMIÈRE ET SON EN HARMONIE", "ABHYANGA | LÂCHER-PRISE TOTAL". Jamais de point final ni de ponctuation de phrase en fin de sous-ligne. Interdits car trop génériques ou trop longs : "Déconnexion parfaite", "Immersion dans l'instant", "Révélez-vous", "Renaître", "Expérience transformatrice", "Retrouvez l'équilibre intérieur", "Retrouvons unité intérieure", toute sous-ligne de plus de 5 mots. Réserve "zoneTexte" dans le tiers supérieur ou inférieur selon la scène.` : `Pour "texteImage", reste sobre et conforme aux règles de la plateforme.`}
 
 Conçois une scène originale et précise respectant l'identité noir & or de SDZ (or noble, jamais orangé ; le noir comme espace, jamais comme sous-exposition).`);
 }
@@ -3139,12 +3139,28 @@ function validateAndFixBriefV2(brief, allowed, exclusions, typeCreationImpose, p
   // coucher du soleil. Zéro peau visible, zéro contact corporel décrit : le risque de rejet devient
   // structurellement nul, pas juste réduit par la formulation.
   if(isBodyContact && fixed.miseEnScene){
+    // Variété de décor par prestation : sans ça, Abhyanga, Balinais, Thaï... produisent tous la
+    // même scène montagne/lac, ce qui efface justement la différenciation propre à chaque fiche.
+    // Choix déterministe (même prestation = même décor à chaque fois, pour la cohérence de marque),
+    // mais différent d'une prestation à l'autre.
+    const LANDSCAPE_ARCHETYPES = [
+      { decor:"un paysage de haute montagne au coucher du soleil — crêtes rocheuses et lac de montagne — sous un ciel dramatique traversé de lumière dorée", action:"se tenir debout face à l'horizon, bras légèrement ouverts, dans un geste de légèreté retrouvée" },
+      { decor:"un rivage sauvage au coucher du soleil — falaises et océan à perte de vue — sous un ciel dramatique traversé de lumière dorée", action:"marcher lentement le long du rivage, tête légèrement tournée vers l'horizon, dans un geste de légèreté retrouvée" },
+      { decor:"une vallée boisée et brumeuse à l'heure dorée — grands arbres et lumière filtrée — sous un ciel traversé de lumière dorée", action:"se tenir immobile au milieu du sentier, visage tourné vers la lumière, dans un geste de légèreté retrouvée" },
+      { decor:"un désert de dunes au coucher du soleil — étendue de sable à perte de vue — sous un ciel dramatique traversé de lumière dorée", action:"marcher au sommet d'une dune face à l'horizon, dans un geste de légèreté retrouvée" },
+      { decor:"un plateau rocheux surplombant une vallée à l'heure dorée — horizon dégagé à perte de vue — sous un ciel dramatique traversé de lumière dorée", action:"se tenir au bord du plateau, bras légèrement ouverts, dans un geste de légèreté retrouvée" },
+      { decor:"une rive de rivière sinueuse au coucher du soleil — méandres et reliefs lointains — sous un ciel traversé de lumière dorée", action:"marcher le long de la rive, dans un geste de légèreté retrouvée" },
+      { decor:"un sommet dégagé au-dessus des nuages à l'heure dorée — mer de nuages à perte de vue — sous un ciel dramatique traversé de lumière dorée", action:"se tenir au sommet, bras légèrement ouverts face à la mer de nuages, dans un geste de légèreté retrouvée" },
+    ];
+    let hash = 0;
+    for(const ch of String(prestation||"")) hash = (hash*31 + ch.charCodeAt(0)) >>> 0;
+    const landscape = LANDSCAPE_ARCHETYPES[hash % LANDSCAPE_ARCHETYPES.length];
     fixed.miseEnScene.sujetPrincipal = "une personne seule, vue de dos ou de profil perdu, habillée sobrement (jamais torse nu, jamais allongée, jamais de scène de soin visible)";
-    fixed.miseEnScene.action = "se tenir debout ou marcher face à l'horizon, dans un geste d'ouverture et de légèreté retrouvée — aucune scène de soin, aucun contact corporel, aucun praticien visible : seul le résultat ressenti après le soin est représenté, jamais le soin lui-même";
+    fixed.miseEnScene.action = `${landscape.action} — aucune scène de soin, aucun contact corporel, aucun praticien visible : seul le résultat ressenti après le soin est représenté, jamais le soin lui-même`;
     fixed.miseEnScene.cadrage = "plan large sur le paysage, sujet en silhouette à l'échelle humaine face à l'immensité, jamais de gros plan sur un corps ou un contact corporel";
-    fixed.decor = "un paysage naturel grandiose au coucher du soleil — montagnes, sentier de crête, plage ou rivage — avec un ciel dramatique traversé de lumière dorée ; aucune architecture intérieure, aucun décor de spa, aucune scène de soin";
-    fixed.lumiere = "lumière dorée de fin de journée, rayons perçant à travers les nuages ou reflétés sur l'eau, chaleureuse et enveloppante, jamais dramatique ou intense";
-    fixed.elementOr = "reflets d'or métallique sur le ciel, l'eau ou la poussière en suspension, dans la continuité de la charte noir et or SDZ";
+    fixed.decor = `${landscape.decor} ; aucune architecture intérieure, aucun décor de spa, aucune scène de soin`;
+    fixed.lumiere = "lumière dorée de fin de journée, rayons perçant à travers les nuages ou reflétés sur l'eau ou le sable, chaleureuse et enveloppante, jamais dramatique ou intense";
+    fixed.elementOr = "reflets d'or métallique sur le ciel, l'eau, le sable ou la poussière en suspension, dans la continuité de la charte noir et or SDZ";
     // Ces trois champs alimentent aussi la scène auprès du rédacteur DA, indépendamment des cinq
     // ci-dessus : les laisser décrire l'application d'huile/le contact corporel (hérité de la fiche
     // prestation) recréait un mélange contradictoire ("silhouette dans un paysage... sans soin
@@ -4773,7 +4789,7 @@ async function finalizeGeneratedImage(flow){
         générique pour Instagram/Facebook. Le texte vient du brief créatif (texteImage), jamais de
         GPT-image. Repli identique si texteImage est vide. */
   const structuredHeadline = flow.brief && typeof flow.brief.texteImage==="string"
-    ? (flow.brief.texteImage.trim() || `${String(flow.brief.messageCentral||"RÉVÉLEZ-VOUS").split(/\s+/).slice(0,5).join(" ")} | UNE EXPÉRIENCE TRANSFORMATRICE`) : "";
+    ? (flow.brief.texteImage.trim() || `${String(flow.brief.messageCentral||"RÉVÉLEZ-VOUS").split(/\s+/).slice(0,4).join(" ")} | LÂCHER-PRISE TOTAL`) : "";
   const headline = (PLATFORM_OVERLAY[platform]==="accroche" || PLATFORM_OVERLAY[platform]==="fort")
     ? structuredHeadline : "";
   /* 3) logo : appliqué sauf s'il est déjà dans la scène. Un seul appel, même fonction pour les
