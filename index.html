@@ -3115,6 +3115,14 @@ function validateAndFixBriefV2(brief, allowed, exclusions, typeCreationImpose, p
     fixed.decor = "un paysage naturel grandiose au coucher du soleil — montagnes, sentier de crête, plage ou rivage — avec un ciel dramatique traversé de lumière dorée ; aucune architecture intérieure, aucun décor de spa, aucune scène de soin";
     fixed.lumiere = "lumière dorée de fin de journée, rayons perçant à travers les nuages ou reflétés sur l'eau, chaleureuse et enveloppante, jamais dramatique ou intense";
     fixed.elementOr = "reflets d'or métallique sur le ciel, l'eau ou la poussière en suspension, dans la continuité de la charte noir et or SDZ";
+    // Ces trois champs alimentent aussi la scène auprès du rédacteur DA, indépendamment des cinq
+    // ci-dessus : les laisser décrire l'application d'huile/le contact corporel (hérité de la fiche
+    // prestation) recréait un mélange contradictoire ("silhouette dans un paysage... sans soin
+    // visible" suivi quand même de "le praticien applique de l'huile sur le corps").
+    fixed.ideeVisuelle = "l'instant de légèreté retrouvée après le soin, incarné par une silhouette seule face à un paysage naturel au coucher du soleil";
+    fixed.pointDeTransformation = "le moment où la silhouette s'ouvre face à l'horizon, symbolisant le lâcher-prise obtenu grâce au soin — jamais le soin lui-même";
+    fixed.momentCinematographique = "l'instant précis où la silhouette, seule face à l'immensité du paysage, incarne la légèreté retrouvée après le soin — jamais une scène de soin ou de contact corporel";
+    fixed.caracteristiquePrestationVisible = "aucune caractéristique physique du soin n'est montrée — seule la silhouette libérée dans le paysage exprime le résultat ressenti";
     corrected = true;
   }
   // Vocabulaire à connotation romantique/sensuelle : à bannir systématiquement des scènes à
