@@ -1022,10 +1022,18 @@ function brandLayoutCandidates(platform, kind){
   if(kind==="lockup" && isStory) return [
     {id:"bottom-center-lockup",x:.10,y:.595,w:.80,h:.265,align:"center",pref:"bottom"},
     {id:"top-center-lockup",x:.10,y:.145,w:.80,h:.275,align:"center",pref:"top"},
+    {id:"bottom-left-lockup",x:.06,y:.595,w:.55,h:.265,align:"left",pref:"bottom"},
+    {id:"bottom-right-lockup",x:.39,y:.595,w:.55,h:.265,align:"right",pref:"bottom"},
+    {id:"top-left-lockup",x:.06,y:.145,w:.55,h:.275,align:"left",pref:"top"},
+    {id:"top-right-lockup",x:.39,y:.145,w:.55,h:.275,align:"right",pref:"top"},
   ];
   if(kind==="lockup" && isMetaFeed) return [
     {id:"bottom-center-lockup",x:.09,y:.59,w:.82,h:.31,align:"center",pref:"bottom"},
     {id:"top-center-lockup",x:.09,y:.075,w:.82,h:.31,align:"center",pref:"top"},
+    {id:"bottom-left-lockup",x:.06,y:.59,w:.58,h:.31,align:"left",pref:"bottom"},
+    {id:"bottom-right-lockup",x:.36,y:.59,w:.58,h:.31,align:"right",pref:"bottom"},
+    {id:"top-left-lockup",x:.06,y:.075,w:.58,h:.31,align:"left",pref:"top"},
+    {id:"top-right-lockup",x:.36,y:.075,w:.58,h:.31,align:"right",pref:"top"},
   ];
   if(kind==="text"){
     if(isStory) return [
@@ -3382,13 +3390,20 @@ async function generateCreativeBriefV2(mission, prestation, platform, topic, typ
   try{
     ({ data, rawBrief } = await callAndParseOnce());
   }catch(err){
-    // Une seconde tentative, quelle que soit la raison du premier échec (réseau, timeout, ou JSON
-    // mal formé/tronqué renvoyé par le modèle — cause la plus fréquente en pratique, pas seulement
-    // les erreurs réseau). Cas vécu : un brief de secours vide sortait ~1 fois sur 5 dans une
-    // campagne, sans qu'aucune tentative supplémentaire ne soit faite pour un JSON invalide.
-    console.error("[Creative Planner V2] premier essai échoué, nouvelle tentative —", err.message||err);
+    // Jusqu'à deux nouvelles tentatives (3 au total), avec un court délai avant chacune — utile
+    // si la cause est une surcharge momentanée (plusieurs appels Planner partent maintenant en
+    // parallèle pour une même campagne). Quelle que soit la raison du premier échec (réseau,
+    // timeout, ou JSON mal formé/tronqué — cause la plus fréquente en pratique).
+    console.error("[Creative Planner V2] premier essai échoué, nouvelle tentative dans 1.5s —", err.message||err);
     plannerNetworkRetryUsed = true;
-    ({ data, rawBrief } = await callAndParseOnce()); // si la seconde tentative échoue aussi, l'erreur remonte telle quelle
+    await new Promise(r=>setTimeout(r,1500));
+    try{
+      ({ data, rawBrief } = await callAndParseOnce());
+    }catch(err2){
+      console.error("[Creative Planner V2] deuxième essai échoué, dernière tentative dans 3s —", err2.message||err2);
+      await new Promise(r=>setTimeout(r,3000));
+      ({ data, rawBrief } = await callAndParseOnce()); // si cette 3e tentative échoue aussi, l'erreur remonte telle quelle
+    }
   }
   const { brief, corrected, blockingError, aucuneRaisonDetre, filiationConflitMomentFaible } = validateAndFixBriefV2(rawBrief, allowed, exclusions, typeCreationImpose, prestation, platform, registres);
   const usage = data.usage ? { promptTokens: data.usage.prompt_tokens ?? null, completionTokens: data.usage.completion_tokens ?? null, model: provider.model } : null;
@@ -7442,7 +7457,12 @@ async function generateImageForCampaignItem(item, onStatus, cancelToken){
     if(!twin){
       throw new Error("Génère d'abord l'image Instagram de cette campagne : Facebook réutilise exactement la même image.");
     }
+    // L'image reprise porte déjà le logo/l'accroche appliqués par Instagram — copier ces indicateurs
+    // aussi, sinon le rapport de campagne signale à tort "logo non appliqué" sur une image qui l'a.
+    const twinItem = state.scheduled.find(p=> p.campaignId===item.campaignId && p.id!==item.id && p.platform==="Instagram" && p.imageDataUrl);
     item.imageDataUrl = twin; item.usedReference = false; item.referenceFallbackReason = null;
+    item.logoApplied = twinItem ? !!twinItem.logoApplied : true;
+    item.headlineApplied = twinItem ? !!twinItem.headlineApplied : false;
     item.reusedFrom = "Instagram";
     const okSave = LS.set("vf-scheduled", state.scheduled);
     return okSave ? "Image Instagram réutilisée à l'identique ✓ (aucun crédit consommé)"
