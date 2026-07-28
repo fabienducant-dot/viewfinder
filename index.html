@@ -685,6 +685,7 @@ function normalizeScheduledPost(p){
     layoutReport: (p.layoutReport && typeof p.layoutReport==="object") ? p.layoutReport : null,
     headlineApplied: !!p.headlineApplied,
     overlayWarning: p.overlayWarning || null,
+    pendingImageJobId: p.pendingImageJobId || null, // permet de reprendre un job payant après fermeture/interruption Android
   };
 }
 function normalizeDirectionArtistique(da){
@@ -768,6 +769,27 @@ function normalizeState(){
   if(state.styleId && !state.styles.some(s=>s.id===state.styleId)) state.styleId = state.styles[0] ? state.styles[0].id : "";
 }
 normalizeState();
+/* Reprise au démarrage : si Android a tué l'app pendant qu'un job d'image payant tournait encore,
+   le job a continué côté serveur (create-image-job / process-image-job-background sont
+   indépendants du navigateur) — seul le suivi côté app était interrompu. On retrouve ici tout post
+   avec un job en attente et on reprend son suivi, sans jamais recréer de second job payant. */
+async function resumePendingCampaignJobs(){
+  const orphans = (state.scheduled||[]).filter(it => it.pendingImageJobId && !it.imageDataUrl);
+  if(!orphans.length) return;
+  for(const it of orphans){
+    try{
+      await generateImageForCampaignItem(it, ()=>{}, { cancelled:false });
+      if(it.textPrompt && it.platform!=="Story" && (!it.textFinal||!it.textFinal.trim())){
+        await generateTextForCampaignItem(it);
+      }
+    }catch(err){
+      it.error = String(err.message||err);
+      LS.set("vf-scheduled", state.scheduled);
+    }
+  }
+  renderMain();
+}
+resumePendingCampaignJobs();
 
 /* ============================================================
    HELPERS DOM
@@ -4865,6 +4887,7 @@ async function confirmAndGenerateImage(prepared, onStatus, cancelToken){
         model: productReferenceRequired ? "gpt-image-2" : undefined,
         quality: productReferenceRequired ? "high" : undefined,
         onJobCreated: prepared.onImageJobCreated,
+        resumeJobId: safetyRetryCount===0 ? prepared.resumeJobId : undefined,
       });
       dataUrl = genResult.dataUrl; usedReference = genResult.usedReference; referenceFallbackReason = genResult.referenceFallbackReason; logoSentAsReference = !!genResult.logoSentAsReference; imageUsage = genResult.imageUsage || null;
       break;
@@ -5120,6 +5143,13 @@ const IMAGE_JOB_SESSION_KEY = "vf-active-image-job";
    n'est pas requise en V1). */
 async function callProviderImage(prompt, size, extraReferenceDataUrls, onStatus, cancelToken, options){
   options = options || {};
+  // Reprise : un job payant a déjà été créé lors d'une tentative précédente (persisté avant
+  // interruption Android) — on ne recrée JAMAIS de second job, on reprend simplement le suivi.
+  if(options.resumeJobId){
+    if(onStatus) onStatus("Reprise du suivi d'une génération déjà lancée...");
+    const result = await pollImageJob(options.resumeJobId, onStatus, cancelToken);
+    return { ...result, logoSentAsReference: false };
+  }
   const referenceImageUrls = getBrandReferenceImages();
   // Références visuelles validées en premier (assetType "reference"), puis l'éventuelle image de
   // cohérence de campagne déjà existante (siblingImage) — combinées, plafonnées à 3 (repris côté
@@ -7419,12 +7449,24 @@ async function generateImageForCampaignItem(item, onStatus, cancelToken){
                   : "Image réutilisée, mais échec d'enregistrement (stockage plein ?).";
   }
   const referenceSelections = await resolveReferenceSelectionsByIds(item.referenceSelectionIds||[]);
-  const phaseB = await confirmAndGenerateImage({
-    phase:"prepared",
-    inputs:{ mission:item.mission, platform:item.platform, prestation:state.prestationName,
-      topic:item.topic, size, aspectKey:PLATFORM_ASPECT[item.platform], isCampaign:true },
-    brief:item.creativeBrief, imagePrompt:item.imagePrompt, referenceSelections,
-  }, onStatus, cancelToken);
+  let phaseB;
+  try{
+    phaseB = await confirmAndGenerateImage({
+      phase:"prepared",
+      inputs:{ mission:item.mission, platform:item.platform, prestation:state.prestationName,
+        topic:item.topic, size, aspectKey:PLATFORM_ASPECT[item.platform], isCampaign:true },
+      brief:item.creativeBrief, imagePrompt:item.imagePrompt, referenceSelections,
+      resumeJobId: item.pendingImageJobId || undefined,
+      // Persisté en localStorage DÈS la création du job, avant même le premier sondage : si Android
+      // tue l'app en arrière-plan pendant la génération, resumePendingCampaignJobs() (appelée au
+      // démarrage) retrouve ce jobId et reprend le suivi — le job continue de toute façon côté
+      // serveur, seul le suivi côté app était interrompu.
+      onImageJobCreated: (jobId)=>{ item.pendingImageJobId = jobId; LS.set("vf-scheduled", state.scheduled); },
+    }, onStatus, cancelToken);
+  } finally {
+    item.pendingImageJobId = null; // le suivi est arrivé à son terme, quelle que soit l'issue
+    LS.set("vf-scheduled", state.scheduled);
+  }
   if(!phaseB.ok) throw new Error(phaseB.error || "Échec de la génération");
   const { usedReference, referenceFallbackReason } = phaseB;
   /* Post-traitement : MÊME fonction que la génération unitaire (format officiel, accroche,
