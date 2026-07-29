@@ -3152,7 +3152,13 @@ function validateAndFixBriefV2(brief, allowed, exclusions, typeCreationImpose, p
     prestation, fixed.miseEnScene && fixed.miseEnScene.action, fixed.miseEnScene && fixed.miseEnScene.sujetPrincipal,
     fixed.caracteristiqueSourcePrestation, fixed.caracteristiquePrestationVisible,
   ].filter(Boolean).join(" ").toLowerCase();
-  const isBodyContact = !isPsio && !isHealy && BODY_CONTACT_KEYWORDS.some(kw=>bodyContactHaystack.includes(kw));
+  // Liste blanche → liste noire : protéger PAR DÉFAUT (sauf PSiO®/Healy, qui ont leur propre
+  // verrou produit) plutôt que d'exiger la présence du mot "massage" quelque part. Cas vécu :
+  // une campagne sans prestation précise sélectionnée n'a aucun mot-clé sur lequel s'appuyer, et
+  // retombait silencieusement sur l'ancien chemin générique, sans aucune protection (drapé, décor,
+  // vocabulaire). BODY_CONTACT_KEYWORDS reste utile comme signal positif mais n'est plus la seule
+  // porte d'entrée.
+  const isBodyContact = !isPsio && !isHealy;
   // Changement de fond, pas un patch de plus : au lieu de représenter le soin lui-même (corps,
   // contact, huile — source de tous les rejets de sécurité et de l'ambiance ratée), on représente
   // le RÉSULTAT RESSENTI après le soin — une silhouette seule, habillée, dans un paysage naturel au
