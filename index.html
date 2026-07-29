@@ -4916,7 +4916,7 @@ async function confirmAndGenerateImage(prepared, onStatus, cancelToken){
         smartReferenceDataUrls,
         referenceRequired: productReferenceRequired,
         model: productReferenceRequired ? "gpt-image-2" : undefined,
-        quality: productReferenceRequired ? "high" : undefined,
+        quality: productReferenceRequired ? "high" : "medium",
         onJobCreated: prepared.onImageJobCreated,
         resumeJobId: safetyRetryCount===0 ? prepared.resumeJobId : undefined,
       });
