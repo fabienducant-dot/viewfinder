@@ -1220,9 +1220,16 @@ function wrapTrackedText(ctx,text,maxWidth,tracking,maxLines){
   });
   if(current) lines.push(current);
   if(lines.length>(maxLines||2)){
-    const kept=lines.slice(0,(maxLines||2)-1);
-    kept.push(lines.slice((maxLines||2)-1).join(" "));
-    return kept;
+    const cap=(maxLines||2)-1;
+    const kept=lines.slice(0,cap);
+    const merged=lines.slice(cap).join(" ");
+    // Ne fusionne les lignes excédentaires QUE si le résultat tient réellement dans la largeur —
+    // sinon on garde une ligne de plus plutôt que de produire une ligne trop large qui sera
+    // rognée/tronquée visuellement à l'affichage. Une ligne supplémentaire (gérée par les boucles
+    // de réduction appelantes via leur calcul de hauteur totale) vaut toujours mieux qu'un
+    // débordement de largeur.
+    if(trackedTextWidth(ctx,merged,tracking)<=maxWidth){ kept.push(merged); return kept; }
+    return [...kept, ...lines.slice(cap)];
   }
   return lines;
 }
@@ -3177,6 +3184,15 @@ function validateAndFixBriefV2(brief, allowed, exclusions, typeCreationImpose, p
       { decor:"un plateau rocheux surplombant une vallée à l'heure dorée — horizon dégagé à perte de vue — sous un ciel dramatique traversé de lumière dorée", action:"se tenir au bord du plateau, bras légèrement ouverts, dans un geste de légèreté retrouvée" },
       { decor:"une rive de rivière sinueuse au coucher du soleil — méandres et reliefs lointains — sous un ciel traversé de lumière dorée", action:"marcher le long de la rive, dans un geste de légèreté retrouvée" },
       { decor:"un sommet dégagé au-dessus des nuages à l'heure dorée — mer de nuages à perte de vue — sous un ciel dramatique traversé de lumière dorée", action:"se tenir au sommet, bras légèrement ouverts face à la mer de nuages, dans un geste de légèreté retrouvée" },
+      { decor:"une prairie alpine en fleurs à l'heure dorée — herbes hautes et sommets lointains — sous un ciel traversé de lumière dorée", action:"marcher lentement à travers les herbes hautes, main effleurant les tiges, dans un geste de légèreté retrouvée" },
+      { decor:"un canyon sculpté par l'érosion au coucher du soleil — parois striées et lumière rasante — sous un ciel dramatique traversé de lumière dorée", action:"se tenir au creux du canyon, visage levé vers la lumière, dans un geste de légèreté retrouvée" },
+      { decor:"une forêt d'automne baignée de lumière dorée — feuillages cuivrés et rayons filtrés — sous un ciel traversé de lumière dorée", action:"marcher sur un sentier de feuilles, dans un geste de légèreté retrouvée" },
+      { decor:"une étendue enneigée au coucher du soleil — sommets immaculés et lumière rasante — sous un ciel dramatique traversé de lumière dorée", action:"se tenir face aux sommets enneigés, bras légèrement ouverts, dans un geste de légèreté retrouvée" },
+      { decor:"une terrasse d'oliviers surplombant la mer à l'heure dorée — rangées argentées et horizon marin — sous un ciel traversé de lumière dorée", action:"marcher entre les rangées d'arbres, dans un geste de légèreté retrouvée" },
+      { decor:"une plaine à perte de vue sous un ciel étoilé s'éclaircissant à l'horizon doré — immensité silencieuse — lumière dorée naissante", action:"se tenir immobile face à l'immensité, tête légèrement levée, dans un geste de légèreté retrouvée" },
+      { decor:"un lagon calme entouré de rochers à l'heure dorée — eau translucide et lumière réfléchie — sous un ciel traversé de lumière dorée", action:"marcher au bord de l'eau, regard porté sur l'horizon, dans un geste de légèreté retrouvée" },
+      { decor:"une crête venteuse surplombant des collines successives à l'heure dorée — horizon ondulé à perte de vue — sous un ciel dramatique traversé de lumière dorée", action:"se tenir sur la crête, bras légèrement ouverts face au vent, dans un geste de légèreté retrouvée" },
+      { decor:"une clairière baignée de lumière dorée au cœur d'une forêt dense — rayons verticaux filtrant la canopée — sous une lumière dorée tombante", action:"se tenir au centre de la clairière, visage tourné vers la lumière, dans un geste de légèreté retrouvée" },
     ];
     let hash = 0;
     for(const ch of String(prestation||"")) hash = (hash*31 + ch.charCodeAt(0)) >>> 0;
@@ -3195,11 +3211,24 @@ function validateAndFixBriefV2(brief, allowed, exclusions, typeCreationImpose, p
     fixed.pointDeTransformation = "le moment où la silhouette s'ouvre face à l'horizon, symbolisant le lâcher-prise obtenu grâce au soin — jamais le soin lui-même";
     fixed.momentCinematographique = "l'instant précis où la silhouette, seule face à l'immensité du paysage, incarne la légèreté retrouvée après le soin — jamais une scène de soin ou de contact corporel";
     fixed.caracteristiquePrestationVisible = "aucune caractéristique physique du soin n'est montrée — seule la silhouette libérée dans le paysage exprime le résultat ressenti";
+    // Seul le symbole zèbre/médaillon est neutralisé (déclencheur identifié) — un symbole propre à
+    // LA PRESTATION (ex. "courbe dorée épousant l'arrondi du ventre, comme un abri" pour la femme
+    // enceinte) reste précieux : c'est justement ce qui différencie visuellement chaque prestation
+    // au lieu que tout se ressemble une fois réduit au même "silhouette + paysage". Supprimer TOUT
+    // symbole systématiquement avait aussi supprimé cette différenciation légitime issue des fiches.
+    const symboleBrut = String(fixed.symbolePrincipal||"");
+    const estSymboleZebre = /z[eè]bre|m[eé]daillon|pendentif|embl[eè]me|sceau|logo/i.test(symboleBrut);
+    if(estSymboleZebre || !symboleBrut.trim()){
+      fixed.symbolePrincipal = "aucun";
+    }else{
+      // Conservé et tissé dans la lumière dorée du paysage, jamais comme objet ou logo posé sur le
+      // sujet — un motif abstrait de lumière/reflet, pas une forme littérale.
+      fixed.elementOr = `${fixed.elementOr}, la lumière dorée du ciel ou du sable évoquant subtilement ${symboleBrut.toLowerCase()}, jamais comme une forme ou un objet posé sur le sujet`;
+    }
     // Le modèle a été observé en train d'inventer un médaillon décoratif avec tête de zèbre sur le
     // sujet (probablement tenté par le contexte de marque "Santé des Zèbres" partout dans le
     // prompt), malgré l'interdiction explicite et la consigne "aucun par défaut". Verrou
     // déterministe plutôt que de compter sur le Planner pour s'auto-corriger.
-    fixed.symbolePrincipal = "aucun";
     fixed.compositionInterdite = [...new Set([...(fixed.compositionInterdite||[]),
       "médaillon, pendentif ou symbole circulaire évoquant une tête de zèbre porté sur le corps du sujet",
       "tout logo, sceau ou emblème dessiné sur le sujet ou dans la scène"])];
