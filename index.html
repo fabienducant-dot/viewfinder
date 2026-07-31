@@ -2728,7 +2728,7 @@ POLITIQUE SYMBOLIQUE V2 :
 Éléments à ne surtout pas répéter (déjà utilisés très récemment sur cette plateforme) :
 ${exclusions.length ? exclusions.map(e=>`- ${e}`).join("\n") : "(aucun historique récent)"}
 
-${(PLATFORM_OVERLAY[platform]==="accroche"||PLATFORM_OVERLAY[platform]==="fort") ? `Pour "texteImage", fournis obligatoirement le NOM COURT ET RECONNAISSABLE DE LA PRESTATION (ou un mot-clé fort qui l'évoque) en première partie, puis une sous-ligne courte et percutante de 2 à 5 mots dérivée de sa fiche, séparées par le caractère |. Vise le ton d'une affiche premium : direct, mémorable, jamais une phrase complète — pense slogan, pas description. Exemples de structure (à ne pas recopier tels quels) : "PSIO® | LUMIÈRE ET SON EN HARMONIE", "ABHYANGA | LÂCHER-PRISE TOTAL". Jamais de point final ni de ponctuation de phrase en fin de sous-ligne. Interdits car trop génériques ou trop longs : "Déconnexion parfaite", "Immersion dans l'instant", "Révélez-vous", "Renaître", "Expérience transformatrice", "Retrouvez l'équilibre intérieur", "Retrouvons unité intérieure", toute sous-ligne de plus de 5 mots. Réserve "zoneTexte" dans le tiers supérieur ou inférieur selon la scène.` : `Pour "texteImage", reste sobre et conforme aux règles de la plateforme.`}
+${(PLATFORM_OVERLAY[platform]==="accroche"||PLATFORM_OVERLAY[platform]==="fort") ? `Pour "texteImage", fournis obligatoirement le NOM COURT ET RECONNAISSABLE DE LA PRESTATION (ou un mot-clé fort qui l'évoque, MAXIMUM 2 mots) en première partie, puis une sous-ligne courte et percutante de 2 à 4 mots dérivée de sa fiche, séparées par le caractère |. Le total des deux parties ne doit JAMAIS dépasser 6 mots — au-delà, une fois affiché en grand sur Story, le bloc de texte déborde en hauteur et écrase le logo. Si le nom complet de la prestation dépasse 2 mots (ex. "Bien-être en Entreprise"), raccourcis-le à son mot-clé le plus fort (ex. "BIEN-ÊTRE" ou "ENTREPRISE" seul), jamais la formule complète. Vise le ton d'une affiche premium : direct, mémorable, jamais une phrase complète — pense slogan, pas description. Exemples de structure (à ne pas recopier tels quels) : "PSIO® | LUMIÈRE ET SON", "ABHYANGA | LÂCHER-PRISE TOTAL", "ENTREPRISE | COHÉSION RENFORCÉE". Jamais de point final ni de ponctuation de phrase en fin de sous-ligne. Interdits car trop génériques ou trop longs : "Déconnexion parfaite", "Immersion dans l'instant", "Révélez-vous", "Renaître", "Expérience transformatrice", "Retrouvez l'équilibre intérieur", "Retrouvons unité intérieure", tout ensemble de plus de 6 mots au total. Réserve "zoneTexte" dans le tiers supérieur ou inférieur selon la scène.` : `Pour "texteImage", reste sobre et conforme aux règles de la plateforme.`}
 
 Conçois une scène originale et précise respectant l'identité noir & or de SDZ (or noble, jamais orangé ; le noir comme espace, jamais comme sous-exposition).`);
 }
@@ -3332,7 +3332,11 @@ function validateAndFixBriefV2(brief, allowed, exclusions, typeCreationImpose, p
   // quel que soit le style retenu (affiche fantastique OU luxe silencieux). Auparavant limité au
   // seul style "affiche fantastique" — des registres cochés par l'utilisateur étaient donc
   // silencieusement ignorés dès que le style basculait sur "luxe silencieux".
-  const registryDecorContract = buildActiveRegistryDecorContract(fixed.registresActifs);
+  // Le contrat de décor des registres (architecture/cinématographie/fantastique) ne s'applique
+  // JAMAIS par-dessus le décor paysage des scènes à contact corporel : combiner "piliers
+  // d'architecture" avec "désert au coucher du soleil" recréait visuellement le motif portail/seuil
+  // qu'on a justement banni ailleurs (deux structures encadrant le sujet = une porte).
+  const registryDecorContract = isBodyContact ? "" : buildActiveRegistryDecorContract(fixed.registresActifs);
   if(registryDecorContract){
     const plannerDecor = String(fixed.decor||"").trim();
     const plannerDecorUtile = plannerDecor
@@ -3352,6 +3356,22 @@ function validateAndFixBriefV2(brief, allowed, exclusions, typeCreationImpose, p
   if(platform==="Story"){
     const headline = ensureStoryHeadline(fixed.texteImage, prestation);
     if(headline !== fixed.texteImage){ fixed.texteImage = headline; corrected = true; }
+  }
+  // Filet de sécurité déterministe sur la longueur de l'accroche : la consigne au Planner limite
+  // déjà le total à 6 mots, mais si elle n'est pas suivie, un titre+sous-titre trop long produit
+  // trop de lignes une fois affiché en grand (Story notamment), écrasant le logo. On raccourcit
+  // ici plutôt que de compter uniquement sur le rétrécissement de Canvas.
+  if((PLATFORM_OVERLAY[platform]==="accroche"||PLATFORM_OVERLAY[platform]==="fort") && typeof fixed.texteImage==="string" && fixed.texteImage.includes("|")){
+    const [titrePart, ...rest] = fixed.texteImage.split("|").map(s=>s.trim());
+    const sousLignePart = rest.join(" ");
+    const titreMots = titrePart.split(/\s+/).filter(Boolean);
+    const sousLigneMots = sousLignePart.split(/\s+/).filter(Boolean);
+    if(titreMots.length>2 || sousLigneMots.length>4){
+      const titreCourt = titreMots.slice(0,2).join(" ");
+      const sousLigneCourte = sousLigneMots.slice(0,4).join(" ");
+      fixed.texteImage = `${titreCourt} | ${sousLigneCourte}`;
+      corrected = true;
+    }
   }
 
   // 1. Interdits absolus : correction locale déterministe pour ne pas condamner tout un item
