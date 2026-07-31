@@ -566,6 +566,7 @@ const state = {
 };
 state.images = Array.isArray(state.images) ? state.images : [];
 state.userReferenceUpload = state.userReferenceUpload || null; // image de référence à la demande, en mémoire seulement
+state.aiLogoIntegration = !!state.aiLogoIntegration; // logo intégré par l'IA (expérimental), désactivé par défaut
 state.styles = Array.isArray(state.styles) ? state.styles : [];
 state.selectedId = state.images[0] ? state.images[0].id : null;
 (function setDefaultStyle(){
@@ -689,6 +690,7 @@ function normalizeScheduledPost(p){
     headlineApplied: !!p.headlineApplied,
     overlayWarning: p.overlayWarning || null,
     pendingImageJobId: p.pendingImageJobId || null, // permet de reprendre un job payant après fermeture/interruption Android
+    aiLogoIntegrationUsed: !!p.aiLogoIntegrationUsed,
   };
 }
 function normalizeDirectionArtistique(da){
@@ -3214,9 +3216,43 @@ function validateAndFixBriefV2(brief, allowed, exclusions, typeCreationImpose, p
       { decor:"un jardin en terrasses parfumé surplombant la mer à l'heure dorée — bougainvilliers et pierre claire — lumière chaude et enveloppante", action:"marcher entre les massifs en effleurant les fleurs du bout des doigts, sourire léger et démarche détendue" },
       { decor:"un désert de dunes au coucher du soleil — étendue de sable à perte de vue — sous un ciel dramatique traversé de lumière dorée", action:"courir légèrement au sommet d'une dune bras ouverts, riant, dans un élan de liberté retrouvée" },
     ];
+    // Prestations à origine culturelle/géographique claire : le décor doit évoquer CE lieu
+    // précisément (palette, végétation, relief), jamais au hasard — sans jamais représenter de
+    // monument réel ni de symbole religieux (uniquement le paysage naturel). Les prestations sans
+    // origine marquée (Zébré, dos/zone, Enfant...) gardent la liste générale ci-dessus.
+    const THEMED_ARCHETYPES = {
+      "inde": [ // Massage Ayurvédique Abhyanga
+        { decor:"des terrasses de théiers en gradins dans la brume matinale, contreforts himalayens en arrière-plan — sous une lumière dorée safranée naissante", action:"s'étirer lentement face aux terrasses, visage détendu et souriant vers la lumière naissante" },
+        { decor:"une vallée fluviale large aux eaux calmes au coucher du soleil, rives couvertes d'épices et de plantations — lumière chaude teintée de safran", action:"marcher lentement au bord de l'eau, un sourire paisible, effleurant l'air chargé de senteurs épicées" },
+        { decor:"des contreforts himalayens drapés de brume à l'aube, lumière safranée perçant entre les crêtes — chaleur douce et enveloppante", action:"s'asseoir en tailleur face aux sommets, mains posées sur les genoux, visage serein tourné vers la lumière" },
+      ],
+      "bali": [ // Massage Balinais
+        { decor:"des rizières en terrasses baignées de brume dorée au lever du jour — végétation tropicale luxuriante et palmiers épars", action:"s'étirer face aux rizières, sourire ample, bras ouverts dans la lumière naissante" },
+        { decor:"une plage de sable volcanique sombre bordée de palmiers au coucher du soleil — vagues calmes et reflets dorés", action:"marcher pieds nus sur le sable, riant doucement, une main effleurant l'air chaud du soir" },
+        { decor:"une jungle tropicale dense s'ouvrant sur une cascade discrète à l'heure dorée — brume légère et lumière filtrée par la canopée", action:"se tenir face à la clairière tropicale, visage détendu, savourant l'air humide et chaud" },
+      ],
+      "thai": [ // Massage Thaï traditionnel, Réflexologie plantaire thaïlandaise
+        { decor:"des îles calcaires émergeant d'une mer turquoise à l'heure dorée — végétation tropicale accrochée aux falaises", action:"se tenir au bord de l'eau, bras détendus, contemplant les îles avec un sourire paisible" },
+        { decor:"une rivière tropicale sinueuse traversant une jungle dense à l'heure dorée — brume légère flottant à la surface", action:"marcher lentement au bord de la rivière, souriant, une main effleurant les feuillages" },
+        { decor:"une vallée tropicale embrumée vue depuis un point élevé à l'aube dorée — canopée dense à perte de vue", action:"s'étirer face à la vallée, tête légèrement renversée, savourant l'air chaud du matin" },
+      ],
+      "japon": [ // Massage japonais du visage
+        { decor:"une forêt de pins baignée de brume légère au pied d'un sommet enneigé conique — lumière douce et enveloppante", action:"se tenir immobile face au sommet, visage détendu, savourant le calme et la fraîcheur de l'air" },
+        { decor:"une vallée en fleurs printanière traversée par un ruisseau calme à l'heure dorée — pétales portés par une brise légère", action:"marcher lentement parmi les pétales, souriant doucement, une main tendue pour les effleurer" },
+        { decor:"une côte rocheuse ponctuée de pins sculptés par le vent à l'heure dorée — mer calme et brume légère à l'horizon", action:"s'asseoir sur un rocher face à la mer, mains posées sur les genoux, visage serein" },
+      ],
+    };
+    const THEME_MATCH = [
+      [/ayurv[ée]diqu|abhyanga/i, "inde"],
+      [/balinais|bali\b/i, "bali"],
+      [/tha[iï]/i, "thai"],
+      [/japon/i, "japon"],
+    ];
+    const themeKey = (THEME_MATCH.find(([re])=>re.test(String(prestation||"")))||[])[1];
+    const archetypePool = themeKey ? THEMED_ARCHETYPES[themeKey] : LANDSCAPE_ARCHETYPES;
     let hash = 0;
     for(const ch of String(prestation||"")) hash = (hash*31 + ch.charCodeAt(0)) >>> 0;
-    const landscape = LANDSCAPE_ARCHETYPES[hash % LANDSCAPE_ARCHETYPES.length];
+    const landscape = archetypePool[hash % archetypePool.length];
     let genreHash = 0;
     for(const ch of String(prestation||"")+String(fixed.messageCentral||"")) genreHash = (genreHash*31 + ch.charCodeAt(0)) >>> 0;
     const silhouetteGenre = (genreHash % 2 === 0) ? "un homme seul" : "une femme seule";
@@ -4826,6 +4862,20 @@ async function prepareCreativeBrief(inputs){
     referenceSelections = [...referenceSelections.slice(0, 2), userRef];
   }
 
+  // Logo intégré par l'IA (expérimental, activé explicitement) : le vrai fichier logo est envoyé
+  // en référence, en plus des autres. Garanti conservé même si le total dépasse 3 (on raccourcit
+  // les références automatiques en premier, jamais le logo demandé explicitement).
+  let aiLogoIntegrationUsed = false;
+  if(inputs.aiLogoIntegration){
+    try{
+      const officialLogo = await getOfficialLogoAsset();
+      if(officialLogo && officialLogo.dataUrl){
+        referenceSelections = [...referenceSelections.slice(0, 2), { id:"official-logo-ai-integration", dataUrl: officialLogo.dataUrl, metadata:{ logoIntegration:true } }];
+        aiLogoIntegrationUsed = true;
+      }
+    }catch(e){ /* logo indisponible : on continue sans, Canvas prendra le relais comme d'habitude */ }
+  }
+
   /* T2 — CONSTRUCTEUR UNIQUE : toute production du prompt image passe par buildFinalImagePrompt.
      prepareCreativeBrief ne construit plus rien lui-même. */
   const built = await buildFinalImagePrompt(brief, platform, aspectKey, !!isCampaign, { blockingError, experimentalMode: inputs.experimentalMode || null });
@@ -4836,6 +4886,21 @@ async function prepareCreativeBrief(inputs){
     : built.prompt;
   if(inputs.userReferenceDataUrl){
     imagePrompt = `${imagePrompt}\n\nRÉFÉRENCE SUPPLÉMENTAIRE FOURNIE PAR L'UTILISATEUR : la dernière image de référence montre un élément précis à incorporer fidèlement dans la composition — même forme, mêmes détails caractéristiques. Adapte sa couleur et son éclairage à la charte noir et or SDZ si nécessaire, mais ne le déforme ni ne le simplifie.`;
+  }
+  if(aiLogoIntegrationUsed){
+    // Retire l'interdiction standard "aucun logo dessiné" (contradictoire ici, puisqu'on demande au
+    // contraire de reproduire le vrai logo fourni en référence) pour éviter une consigne qui se
+    // contredit elle-même dans le même prompt.
+    const headlineForApi = String(brief.texteImage||"").trim();
+    imagePrompt = imagePrompt.replace(/Aucun logo dessiné[^.]*\.(?:[^.]*\.)?/i, "");
+    imagePrompt = imagePrompt.replace(/Aucun texte n'est incrusté dans l'image[^.]*\./i, "");
+    imagePrompt = `${imagePrompt}
+
+LOGO OFFICIEL FOURNI EN RÉFÉRENCE — CONSIGNE STRICTE : l'image de référence supplémentaire montre le logo officiel exact de la marque (tête de zèbre dorée dans un médaillon circulaire avec symboles zodiacaux et œil au sommet). Reproduis-le à L'IDENTIQUE — mêmes proportions, mêmes détails, mêmes symboles, sans en modifier le dessin, les traits ou la composition. N'invente aucune variante, ne le déforme pas, ne le retouche pas à tort. Intègre-le physiquement dans le décor comme un élément réel de la scène plutôt qu'un autocollant posé dessus : gravé en relief, incrusté dans une matière du décor, fondu dans une surface existante, ou tout autre traitement cohérent avec CE décor précis — la pierre n'est qu'un exemple parmi d'autres, adapte le traitement à la matière réellement présente dans la scène (bois, métal, sable, eau, tissu...). Toujours en harmonie avec la lumière et la matière environnantes, jamais flottant ni plaqué sans profondeur.
+
+SIGNATURE DE MARQUE — À GÉNÉRER DANS L'IMAGE : sous le logo, ou en bas de l'image si la composition s'y prête mieux, fais apparaître le texte "LA SANTÉ DES ZÈBRES" puis en dessous "RAISMES" en plus petit — gravés ou intégrés dans la même matière et le même traitement que le logo, dans une typographie élégante à empattements (serif), sobre et lisible, jamais une police décorative ou fantaisiste.
+
+ACCROCHE — À GÉNÉRER DANS L'IMAGE : fais apparaître le texte suivant, intégré et fondu dans le décor (jamais un bandeau plaqué par-dessus) : "${headlineForApi}". Traite-le en reflets or métallique lumineux sur fond noir, ou dans tout autre traitement cohérent avec la matière et la lumière de CETTE scène précise, tant que le résultat reste premium, luxueux, à la limite du fantastique — jamais un style discount ou générique. Ce texte doit rester parfaitement lisible et orthographié exactement comme fourni ci-dessus, sans faute, sans lettre manquante ou déformée, en rapport visuel direct avec le sujet de la scène.`;
   }
   const daWriterUsed = built.daWriterUsed;
   const daWriterFallbackReason = built.daWriterFallbackReason;
@@ -4856,7 +4921,7 @@ async function prepareCreativeBrief(inputs){
 
   return {
     phase: "prepared", inputs, allowed, exclusions, brief, briefCorrected, plannerError,
-    usedLocalBriefFallback, referenceSelections, referenceError, imagePrompt, steps, blockingError,
+    usedLocalBriefFallback, referenceSelections, referenceError, imagePrompt, steps, blockingError, aiLogoIntegrationUsed,
     daWriterUsed, daWriterFallbackReason, usage, transmissionCheck, instrumentation,
     paquetOrchestrateur, validatorReport,
     appVersion: VF_VERSION,
@@ -4897,9 +4962,11 @@ async function finalizeGeneratedImage(flow){
   if(paletteViolation){
     throw new Error(`Image brute refusée avant Canvas : ${paletteViolation}. Canvas n'ajoute jamais sa signature sur une image hors charte.`);
   }
-  /* Une référence utilisée ne prouve jamais que le logo officiel est présent et exact.
-     Seule la signature ajoutée par Canvas est considérée comme valide. */
-  const logoInScene = false;
+  /* Une référence utilisée ne prouve jamais que le logo officiel est présent et exact — SAUF
+     lorsque le logo intégré par l'IA a été explicitement activé pour cette génération (référence
+     envoyée + consigne stricte de reproduction fidèle) : dans ce cas précis, Canvas ne redessine
+     pas le logo par-dessus, pour ne pas le dupliquer. */
+  const logoInScene = !!flow.aiLogoIntegrationUsed;
   /* 1) format officiel de la plateforme */
   let dataUrl = await normalizeToPlatformFormat(flow.dataUrl, platform);
   /* 2) accroche : généralisée (demande explicite) à Instagram/Facebook/Story pour TOUTE prestation,
@@ -4908,10 +4975,11 @@ async function finalizeGeneratedImage(flow){
         GPT-image. Repli identique si texteImage est vide. */
   const structuredHeadline = flow.brief && typeof flow.brief.texteImage==="string"
     ? (flow.brief.texteImage.trim() || `${String(flow.brief.messageCentral||"RÉVÉLEZ-VOUS").split(/\s+/).slice(0,4).join(" ")} | LÂCHER-PRISE TOTAL`) : "";
-  const headline = (PLATFORM_OVERLAY[platform]==="accroche" || PLATFORM_OVERLAY[platform]==="fort")
+  const headline = (!logoInScene && (PLATFORM_OVERLAY[platform]==="accroche" || PLATFORM_OVERLAY[platform]==="fort"))
     ? structuredHeadline : "";
-  /* 3) logo : appliqué sauf s'il est déjà dans la scène. Un seul appel, même fonction pour les
-        deux besoins — aucune duplication, aucun chemin parallèle. */
+  /* 3) logo : appliqué sauf s'il est déjà dans la scène (texte et signature compris, dans ce cas —
+        voir logoInScene ci-dessus). Un seul appel, même fonction pour les deux besoins — aucune
+        duplication, aucun chemin parallèle. */
   const needLogo = logoRequiredFor(platform) && !logoInScene;
   let logoApplied = false;
   let headlineApplied = false;
@@ -5536,12 +5604,13 @@ async function generateCampaignPosts(topic, missionKey, onProgress){
     const aspect = item.aspectOverride || PLATFORM_ASPECT[item.platform];
     const isStory = item.platform === "Story";
     if(onProgress) onProgress(`${i+1}/${CAMPAIGN_ITEMS.length} — ${item.label}`);
-    const prepared = await prepareCreativeBrief({ mission: missionKey, platform: item.platform, prestation: state.prestationName, topic, aspectKey: aspect, size: API_IMAGE_SIZE_BY_PLATFORM[item.platform]||"1024x1024", isCampaign:true, registres: Array.isArray(state.registres) ? [...state.registres] : [], userReferenceDataUrl: state.userReferenceUpload && state.userReferenceUpload.dataUrl, userReferenceImageId: state.userReferenceUpload && state.userReferenceUpload.id });
+    const prepared = await prepareCreativeBrief({ mission: missionKey, platform: item.platform, prestation: state.prestationName, topic, aspectKey: aspect, size: API_IMAGE_SIZE_BY_PLATFORM[item.platform]||"1024x1024", isCampaign:true, registres: Array.isArray(state.registres) ? [...state.registres] : [], userReferenceDataUrl: state.userReferenceUpload && state.userReferenceUpload.dataUrl, userReferenceImageId: state.userReferenceUpload && state.userReferenceUpload.id, aiLogoIntegration: !!state.aiLogoIntegration });
     posts.push({
       id: uid(), campaignId, campaignTopic: topic, campaignLabel: item.label,
       platform: item.platform, mission: missionKey, topic,
       imagePrompt: prepared.imagePrompt,
       creativeBrief: prepared.brief || null,
+      aiLogoIntegrationUsed: !!prepared.aiLogoIntegrationUsed,
       plannerVersion: prepared.plannerVersion,
       blockingError: prepared.blockingError || null,
       plannerError: prepared.plannerError || null,
@@ -6772,6 +6841,19 @@ function buildPostTab(){
   });
   frag.appendChild(refInput);
 
+  // Logo intégré par l'IA (expérimental, activable) : au lieu du logo posé par Canvas après coup,
+  // le vrai fichier logo est envoyé en référence à l'API avec consigne de le reproduire à
+  // l'identique et de l'intégrer physiquement dans le décor (gravé dans la roche, en relief...).
+  // Désactivé par défaut : Canvas garantit un logo pixel-parfait à chaque fois, l'IA peut
+  // introduire de petites variations d'une génération à l'autre sur un dessin aussi fin.
+  const aiLogoRow = el("div",{style:"display:flex;align-items:center;gap:8px;margin:4px 0 14px;"});
+  const aiLogoCheckbox = el("input",{type:"checkbox"});
+  aiLogoCheckbox.checked = !!state.aiLogoIntegration;
+  aiLogoCheckbox.addEventListener("change", ()=>{ state.aiLogoIntegration = aiLogoCheckbox.checked; });
+  aiLogoRow.appendChild(aiLogoCheckbox);
+  aiLogoRow.appendChild(el("label",{}, "Logo intégré par l'IA dans le décor (expérimental — gravé/en relief) au lieu du logo posé par Canvas"));
+  frag.appendChild(aiLogoRow);
+
   if(isCampaign){
     frag.appendChild(el("button",{class:"btn-primary", style:"margin-bottom:14px;", onclick: async (e)=>{
       if(!state.topic.trim()){ topicWarn.textContent = "Décris d'abord le sujet du post avant de générer."; return; }
@@ -7014,7 +7096,7 @@ function buildPostTab(){
       prepareBtn.disabled = true;
       imgApiStatus.textContent = "Préparation de la création (Creative Planner)...";
       try{
-        const prepared = await prepareCreativeBrief({ mission: state.mission, platform, prestation: state.prestationName, topic: state.topic, aspectKey: PLATFORM_ASPECT[platform], size: API_IMAGE_SIZE_BY_PLATFORM[platform]||"1024x1024", isCampaign:false, registres: Array.isArray(state.registres) ? [...state.registres] : [], userReferenceDataUrl: state.userReferenceUpload && state.userReferenceUpload.dataUrl, userReferenceImageId: state.userReferenceUpload && state.userReferenceUpload.id });
+        const prepared = await prepareCreativeBrief({ mission: state.mission, platform, prestation: state.prestationName, topic: state.topic, aspectKey: PLATFORM_ASPECT[platform], size: API_IMAGE_SIZE_BY_PLATFORM[platform]||"1024x1024", isCampaign:false, registres: Array.isArray(state.registres) ? [...state.registres] : [], userReferenceDataUrl: state.userReferenceUpload && state.userReferenceUpload.dataUrl, userReferenceImageId: state.userReferenceUpload && state.userReferenceUpload.id, aiLogoIntegration: !!state.aiLogoIntegration });
         state.lastCreativeFlow = prepared;
         imgApiStatus.textContent = prepared.plannerError
           ? `Brief préparé (avec repli local — voir Inspector) ✓ Relis le prompt avant de confirmer.`
@@ -7194,7 +7276,7 @@ function buildPostTab(){
        qu'enverrait "Confirmer et générer l'image". Deux sorties, un seul constructeur. */
     const btn = e.currentTarget; const oldLabel = btn.textContent; btn.disabled = true; btn.textContent = "Préparation via le moteur créatif...";
     try{
-      const prepared = await prepareCreativeBrief({ mission: state.mission, platform, prestation: state.prestationName, topic: state.topic, aspectKey: PLATFORM_ASPECT[platform], size: API_IMAGE_SIZE_BY_PLATFORM[platform]||"1024x1024", isCampaign:false, registres: Array.isArray(state.registres) ? [...state.registres] : [], userReferenceDataUrl: state.userReferenceUpload && state.userReferenceUpload.dataUrl, userReferenceImageId: state.userReferenceUpload && state.userReferenceUpload.id });
+      const prepared = await prepareCreativeBrief({ mission: state.mission, platform, prestation: state.prestationName, topic: state.topic, aspectKey: PLATFORM_ASPECT[platform], size: API_IMAGE_SIZE_BY_PLATFORM[platform]||"1024x1024", isCampaign:false, registres: Array.isArray(state.registres) ? [...state.registres] : [], userReferenceDataUrl: state.userReferenceUpload && state.userReferenceUpload.dataUrl, userReferenceImageId: state.userReferenceUpload && state.userReferenceUpload.id, aiLogoIntegration: !!state.aiLogoIntegration });
       state.lastCreativeFlow = prepared;
       state.imagePrompt = prepared.imagePrompt;
       state.textPrompt = (platform==="Story" || imageOnlyMode) ? null : buildTextPromptFull(platform, state.topic, state.mission);
@@ -7628,7 +7710,7 @@ async function generateImageForCampaignItem(item, onStatus, cancelToken){
   const finalizedItem = await finalizeGeneratedImage({
     inputs:{ platform:item.platform, prestation:state.prestationName }, dataUrl: phaseB.dataUrl,
     logoSentAsReference:false, usedReference, content: phaseB.content || item.contentData || null,
-    brief:item.creativeBrief,
+    brief:item.creativeBrief, aiLogoIntegrationUsed: !!item.aiLogoIntegrationUsed,
   });
   const dataUrl = finalizedItem.dataUrl;
   const logoApplied = finalizedItem.logoApplied;
