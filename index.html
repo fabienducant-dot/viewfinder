@@ -967,7 +967,7 @@ async function compositeRealLogo(baseDataUrl){
   if(!logoAsset) return { dataUrl: baseDataUrl, applied:false };
   try{
     const baseImg = await loadImage(baseDataUrl);
-    const logoImg = await getAutoTransparentLogo(logoAsset); // canvas prêt à dessiner, fond blanc déjà retiré si besoin
+    const logoImg = await loadImage(logoAsset.dataUrl); // fichier pris tel quel, sans détection/retrait automatique de fond — le logo réel peut contenir du noir plein qui fait partie du design (ex. le disque du médaillon), pas un arrière-plan à retirer
     const canvas = document.createElement("canvas");
     canvas.width = baseImg.width; canvas.height = baseImg.height;
     const ctx = canvas.getContext("2d");
@@ -1057,26 +1057,26 @@ function brandLayoutCandidates(platform, kind){
     ];
   }
   if(isLandscape) return [
-    {id:"top-left",x:.055,y:.075,w:.25,h:.23,align:"left",pref:"top"},
-    {id:"top-right",x:.695,y:.075,w:.25,h:.23,align:"right",pref:"top"},
-    {id:"bottom-left",x:.055,y:.695,w:.25,h:.23,align:"left",pref:"bottom"},
-    {id:"bottom-right",x:.695,y:.695,w:.25,h:.23,align:"right",pref:"bottom"},
+    {id:"top-left",x:.05,y:.06,w:.40,h:.30,align:"left",pref:"top"},
+    {id:"top-right",x:.55,y:.06,w:.40,h:.30,align:"right",pref:"top"},
+    {id:"bottom-left",x:.05,y:.64,w:.40,h:.30,align:"left",pref:"bottom"},
+    {id:"bottom-right",x:.55,y:.64,w:.40,h:.30,align:"right",pref:"bottom"},
   ];
   if(isStory) return [
-    {id:"top-center",x:.35,y:.13,w:.30,h:.205,align:"center",pref:"top"},
-    {id:"top-left",x:.055,y:.14,w:.295,h:.205,align:"left",pref:"top"},
-    {id:"top-right",x:.65,y:.14,w:.295,h:.205,align:"right",pref:"top"},
-    {id:"bottom-center",x:.35,y:.625,w:.30,h:.20,align:"center",pref:"bottom"},
-    {id:"bottom-left",x:.055,y:.625,w:.295,h:.20,align:"left",pref:"bottom"},
-    {id:"bottom-right",x:.65,y:.625,w:.295,h:.20,align:"right",pref:"bottom"},
+    {id:"top-center",x:.28,y:.11,w:.44,h:.27,align:"center",pref:"top"},
+    {id:"top-left",x:.05,y:.12,w:.42,h:.27,align:"left",pref:"top"},
+    {id:"top-right",x:.53,y:.12,w:.42,h:.27,align:"right",pref:"top"},
+    {id:"bottom-center",x:.28,y:.60,w:.44,h:.27,align:"center",pref:"bottom"},
+    {id:"bottom-left",x:.05,y:.60,w:.42,h:.27,align:"left",pref:"bottom"},
+    {id:"bottom-right",x:.53,y:.60,w:.42,h:.27,align:"right",pref:"bottom"},
   ];
   return [
-    {id:"top-center",x:.37,y:.065,w:.26,h:.21,align:"center",pref:"top"},
-    {id:"top-left",x:.06,y:.07,w:.27,h:.21,align:"left",pref:"top"},
-    {id:"top-right",x:.67,y:.07,w:.27,h:.21,align:"right",pref:"top"},
-    {id:"bottom-center",x:.37,y:.72,w:.26,h:.21,align:"center",pref:"bottom"},
-    {id:"bottom-left",x:.06,y:.72,w:.27,h:.21,align:"left",pref:"bottom"},
-    {id:"bottom-right",x:.67,y:.72,w:.27,h:.21,align:"right",pref:"bottom"},
+    {id:"top-center",x:.30,y:.055,w:.40,h:.28,align:"center",pref:"top"},
+    {id:"top-left",x:.05,y:.06,w:.40,h:.28,align:"left",pref:"top"},
+    {id:"top-right",x:.55,y:.06,w:.40,h:.28,align:"right",pref:"top"},
+    {id:"bottom-center",x:.30,y:.66,w:.40,h:.28,align:"center",pref:"bottom"},
+    {id:"bottom-left",x:.05,y:.66,w:.40,h:.28,align:"left",pref:"bottom"},
+    {id:"bottom-right",x:.55,y:.66,w:.40,h:.28,align:"right",pref:"bottom"},
   ];
 }
 function boxesOverlap(a,b,padding){
@@ -1499,7 +1499,7 @@ async function compositeBrandSignature(baseDataUrl, platform, options){
     layoutReport:{version:"canvas-layout-v4",skipped:true} };
   try{
     const img = await loadImage(baseDataUrl);
-    const logoImg = logoAsset ? await getAutoTransparentLogo(logoAsset) : null;
+    const logoImg = logoAsset ? await loadImage(logoAsset.dataUrl) : null; // idem : logo pris tel quel
     const canvas = document.createElement("canvas");
     canvas.width = img.width; canvas.height = img.height;
     const ctx = canvas.getContext("2d");
@@ -2444,7 +2444,7 @@ function contientMotifV2EnPause(value){
   const norm = normalizeForContainmentCheck(value);
   return V2_MOTIF_PATTERNS.some(pattern => pattern.test(norm));
 }
-function buildActiveRegistryDecorContract(registres){
+function buildActiveRegistryDecorContract(registres, varietyKey){
   const actifs = [...new Set((Array.isArray(registres) ? registres : [])
     .filter(r=>KNOWN_REGISTRES.includes(r)))];
   if(!actifs.length) return "";
@@ -2453,10 +2453,19 @@ function buildActiveRegistryDecorContract(registres){
     directions.push("profondeur cinématographique nettement lisible sur trois plans, avec premier plan sombre texturé, sujet parfaitement détaché au plan principal et arrière-plan éclairé par une lumière latérale");
   }
   if(actifs.includes("architecture")){
-    directions.push("architecture intérieure abstraite visible en pierre noire satinée : hautes parois sculptées, nervures verticales, panneaux minéraux et volumes géométriques non culturels dont les arêtes accrochent des reflets d'or noble");
+    // Fidèle au module officiel "Architecture intégrée à la nature" : le bâti n'est jamais une
+    // structure séparée posée sur le décor (d'où l'effet porte/portail répété par le passé), mais
+    // une masse supplémentaire intégrée à la même hiérarchie que la roche, l'eau ou la végétation —
+    // au point que le bâti semble appartenir au lieu plutôt que d'y être ajouté.
+    directions.push("un vestige ou une trace bâtie (pierre taillée, terrasse, muret) traité comme une masse du paysage au même titre que la roche ou l'eau — jamais une structure isolée posée devant ou autour du sujet, jamais deux éléments symétriques qui l'encadrent ; la pierre construite et la roche naturelle répondent à la même lumière dorée jusqu'à se confondre");
   }
   if(actifs.includes("fantastique")){
-    directions.push("dimension fantastique portée uniquement par une perspective légèrement impossible, une échelle majestueuse et des reflets dorés fluides intégrés aux surfaces, sans symbole, portail, halo, particules ni phénomène occulte");
+    // Fidèle aux modules officiels "Le seuil, lieu de l'anomalie", "Adaptation Paysage" et "La
+    // discrétion comme condition du doute" : dans un paysage, l'anomalie fantastique n'est JAMAIS un
+    // objet, un symbole ou une structure — seulement un phénomène naturel déjà présent (lumière,
+    // reflet, brume, écho) légèrement dévié, discret, situé en périphérie du cadre plutôt qu'en son
+    // centre, au point que le spectateur hésite entre l'avoir perçu ou imaginé.
+    directions.push("dimension fantastique portée uniquement par un phénomène naturel discrètement dévié — une lumière qui ne devrait pas se comporter ainsi, un reflet incertain, une brume qui efface un contour — situé en périphérie du cadre, jamais au centre, jamais sous forme d'objet, de symbole ou de structure ; le doute doit rester possible, jamais une certitude visuelle");
   }
   return `Décor noir et or visible, détaillé et habité, jamais fond noir uni ni vide : ${directions.join(" ; ")}. Les détails du décor restent lisibles dans les ombres sans concurrencer le sujet ni le matériel réel`;
 }
@@ -2685,7 +2694,9 @@ ${typeCreationInstructions}
 
 REGISTRES VISUELS ACTIFS — ils doivent tous être visibles dans l'image, et pas seulement mentionnés :
 ${(registres||[]).map(r=>`- ${r}`).join("\n") || "- aucun registre supplémentaire"}
-${buildActiveRegistryDecorContract(registres) ? `CONTRAT DE DÉCOR DÉTERMINISTE : ${buildActiveRegistryDecorContract(registres)}.` : ""}
+${buildActiveRegistryDecorContract(registres, prestation) ? `CONTRAT DE DÉCOR DÉTERMINISTE : ${buildActiveRegistryDecorContract(registres, prestation)}.` : ""}
+${(prestation!=="Luminothérapie PSIO®" && prestation!=="Biorésonance quantique") ? `
+DÉCOR DE CETTE PRESTATION — RÈGLE SPÉCIFIQUE : "decor" ne représente JAMAIS le soin lui-même (aucune table, aucun intérieur, aucune architecture, aucun élément de spa) — uniquement un paysage naturel extérieur à l'heure dorée (montagne, désert, forêt, côte, vallée, plateau...). Choisis ce paysage en t'inspirant du "Sujet demandé par l'utilisateur" ci-dessus s'il évoque un lieu, une culture ou une ambiance précise (ex. "Bali" → végétation tropicale, rizières en terrasses, lagon ; "montagne, Inde" → sommets himalayens) — sans reproduire de monument réel ni de symbole religieux. Si le sujet n'évoque aucun lieu précis, choisis un paysage cohérent avec l'émotion de la prestation. "miseEnScene" décrit une silhouette seule, habillée, vue de dos ou de profil, jamais de scène de soin ni de contact corporel.` : ""}
 
 Principes visuels indispensables de la marque SDZ (à respecter impérativement) :
 ${socle}
@@ -3199,8 +3210,17 @@ function validateAndFixBriefV2(brief, allowed, exclusions, typeCreationImpose, p
     const landscape = LANDSCAPE_ARCHETYPES[hash % LANDSCAPE_ARCHETYPES.length];
     fixed.miseEnScene.sujetPrincipal = "une personne seule, vue de dos ou de profil perdu, habillée sobrement (jamais torse nu, jamais allongée, jamais de scène de soin visible)";
     fixed.miseEnScene.action = `${landscape.action} — aucune scène de soin, aucun contact corporel, aucun praticien visible : seul le résultat ressenti après le soin est représenté, jamais le soin lui-même`;
-    fixed.miseEnScene.cadrage = "plan large sur le paysage, sujet en silhouette à l'échelle humaine face à l'immensité, jamais de gros plan sur un corps ou un contact corporel";
-    fixed.decor = `${landscape.decor} ; aucune architecture intérieure, aucun décor de spa, aucune scène de soin`;
+    fixed.miseEnScene.cadrage = "plan large sur le paysage, sujet en silhouette à l'échelle humaine face à l'immensité ; la brume, la poussière en suspension ou la lumière rasante comptent autant que l'étendue elle-même ; la ligne d'horizon est coupée par le cadre plutôt que centrée, pour suggérer un espace qui dépasse l'image ; jamais de gros plan sur un corps ou un contact corporel";
+    // Le décor du Planner est conservé s'il est valide (paysage naturel, potentiellement inspiré du
+    // sujet du jour saisi par l'utilisateur — ex. "Bali" → végétation tropicale) — le repli fixe par
+    // prestation ne sert plus que de filet de sécurité si le Planner produit un décor invalide, vide
+    // ou encore centré sur le soin/l'architecture.
+    const decorPlanner = String(fixed.decor||"").trim();
+    const decorInterdit = /table|spa\b|int[ée]rieur|architecture|pierre|salle|corps\b|peau\b|pratici|\bsoin\b|massage|huile|coussin|m[ée]dical/i;
+    const decorValide = decorPlanner.length>15 && !decorInterdit.test(decorPlanner);
+    fixed.decor = decorValide
+      ? `${decorPlanner} ; aucune architecture intérieure, aucun décor de spa, aucune scène de soin`
+      : `${landscape.decor} ; aucune architecture intérieure, aucun décor de spa, aucune scène de soin`;
     fixed.lumiere = "lumière dorée de fin de journée, rayons perçant à travers les nuages ou reflétés sur l'eau ou le sable, chaleureuse et enveloppante, jamais dramatique ou intense";
     fixed.elementOr = "reflets d'or métallique sur le ciel, l'eau, le sable ou la poussière en suspension, dans la continuité de la charte noir et or SDZ";
     // Ces trois champs alimentent aussi la scène auprès du rédacteur DA, indépendamment des cinq
@@ -3336,7 +3356,7 @@ function validateAndFixBriefV2(brief, allowed, exclusions, typeCreationImpose, p
   // JAMAIS par-dessus le décor paysage des scènes à contact corporel : combiner "piliers
   // d'architecture" avec "désert au coucher du soleil" recréait visuellement le motif portail/seuil
   // qu'on a justement banni ailleurs (deux structures encadrant le sujet = une porte).
-  const registryDecorContract = isBodyContact ? "" : buildActiveRegistryDecorContract(fixed.registresActifs);
+  const registryDecorContract = buildActiveRegistryDecorContract(fixed.registresActifs, prestation);
   if(registryDecorContract){
     const plannerDecor = String(fixed.decor||"").trim();
     const plannerDecorUtile = plannerDecor
