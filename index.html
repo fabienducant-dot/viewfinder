@@ -1057,26 +1057,26 @@ function brandLayoutCandidates(platform, kind){
     ];
   }
   if(isLandscape) return [
-    {id:"top-left",x:.05,y:.06,w:.40,h:.30,align:"left",pref:"top"},
-    {id:"top-right",x:.55,y:.06,w:.40,h:.30,align:"right",pref:"top"},
-    {id:"bottom-left",x:.05,y:.64,w:.40,h:.30,align:"left",pref:"bottom"},
-    {id:"bottom-right",x:.55,y:.64,w:.40,h:.30,align:"right",pref:"bottom"},
+    {id:"top-left",x:.05,y:.04,w:.42,h:.46,align:"left",pref:"top"},
+    {id:"top-right",x:.53,y:.04,w:.42,h:.46,align:"right",pref:"top"},
+    {id:"bottom-left",x:.05,y:.50,w:.42,h:.46,align:"left",pref:"bottom"},
+    {id:"bottom-right",x:.53,y:.50,w:.42,h:.46,align:"right",pref:"bottom"},
   ];
   if(isStory) return [
-    {id:"top-center",x:.28,y:.11,w:.44,h:.27,align:"center",pref:"top"},
-    {id:"top-left",x:.05,y:.12,w:.42,h:.27,align:"left",pref:"top"},
-    {id:"top-right",x:.53,y:.12,w:.42,h:.27,align:"right",pref:"top"},
-    {id:"bottom-center",x:.28,y:.60,w:.44,h:.27,align:"center",pref:"bottom"},
-    {id:"bottom-left",x:.05,y:.60,w:.42,h:.27,align:"left",pref:"bottom"},
-    {id:"bottom-right",x:.53,y:.60,w:.42,h:.27,align:"right",pref:"bottom"},
+    {id:"top-center",x:.25,y:.08,w:.50,h:.36,align:"center",pref:"top"},
+    {id:"top-left",x:.04,y:.08,w:.46,h:.36,align:"left",pref:"top"},
+    {id:"top-right",x:.50,y:.08,w:.46,h:.36,align:"right",pref:"top"},
+    {id:"bottom-center",x:.25,y:.56,w:.50,h:.36,align:"center",pref:"bottom"},
+    {id:"bottom-left",x:.04,y:.56,w:.46,h:.36,align:"left",pref:"bottom"},
+    {id:"bottom-right",x:.50,y:.56,w:.46,h:.36,align:"right",pref:"bottom"},
   ];
   return [
-    {id:"top-center",x:.30,y:.055,w:.40,h:.28,align:"center",pref:"top"},
-    {id:"top-left",x:.05,y:.06,w:.40,h:.28,align:"left",pref:"top"},
-    {id:"top-right",x:.55,y:.06,w:.40,h:.28,align:"right",pref:"top"},
-    {id:"bottom-center",x:.30,y:.66,w:.40,h:.28,align:"center",pref:"bottom"},
-    {id:"bottom-left",x:.05,y:.66,w:.40,h:.28,align:"left",pref:"bottom"},
-    {id:"bottom-right",x:.55,y:.66,w:.40,h:.28,align:"right",pref:"bottom"},
+    {id:"top-center",x:.28,y:.04,w:.44,h:.40,align:"center",pref:"top"},
+    {id:"top-left",x:.04,y:.04,w:.42,h:.40,align:"left",pref:"top"},
+    {id:"top-right",x:.54,y:.04,w:.42,h:.40,align:"right",pref:"top"},
+    {id:"bottom-center",x:.28,y:.56,w:.44,h:.40,align:"center",pref:"bottom"},
+    {id:"bottom-left",x:.04,y:.56,w:.42,h:.40,align:"left",pref:"bottom"},
+    {id:"bottom-right",x:.54,y:.56,w:.42,h:.40,align:"right",pref:"bottom"},
   ];
 }
 function boxesOverlap(a,b,padding){
@@ -1302,10 +1302,15 @@ function drawOfficialSignature(ctx,logoImg,box,platform){
   const isStory=platform==="Story";
   const blockCenterX=(box.x+box.w/2)*W;
   const extraHeight=W*(isStory?.082:.068);
-  const heightLimitedWidth=Math.max(W*.08,(box.h*H-extraHeight)*(logoImg.width/logoImg.height));
-  /* Logo, deuxième augmentation (demande explicite) : nettement plus grand que le x2 précédent. */
-  const maxLogoW=Math.min(box.w*W, W*(isStory?.520:.380),heightLimitedWidth);
-  const logoH=maxLogoW*(logoImg.height/logoImg.width);
+  const logoRatio=logoImg.height/logoImg.width;
+  // Cible basée sur la HAUTEUR disponible, pas la largeur : un logo portrait qui viserait un
+  // pourcentage fixe de largeur devrait devenir démesurément haut sur un format large comme Wix
+  // (1536×1024) — baser le calcul sur la hauteur donne un poids visuel cohérent quel que soit le
+  // format (Story portrait, Google Business carré, Wix paysage).
+  const targetLogoH = Math.min(box.h*H - extraHeight, H*(isStory?.30:.30));
+  const heightLimitedWidth = Math.max(W*.08, targetLogoH/logoRatio);
+  const maxLogoW=Math.min(box.w*W, heightLimitedWidth);
+  const logoH=maxLogoW*logoRatio;
   const top=box.y*H+Math.max(0,(box.h*H-(logoH+extraHeight))/2);
   ctx.shadowColor="rgba(224,197,106,.24)";
   ctx.shadowBlur=Math.round(W*(isStory?.014:.008));
@@ -3188,27 +3193,34 @@ function validateAndFixBriefV2(brief, allowed, exclusions, typeCreationImpose, p
     // Choix déterministe (même prestation = même décor à chaque fois, pour la cohérence de marque),
     // mais différent d'une prestation à l'autre.
     const LANDSCAPE_ARCHETYPES = [
-      { decor:"un paysage de haute montagne au coucher du soleil — crêtes rocheuses et lac de montagne — sous un ciel dramatique traversé de lumière dorée", action:"se tenir debout face à l'horizon, bras légèrement ouverts, dans un geste de légèreté retrouvée" },
-      { decor:"un rivage sauvage au coucher du soleil — falaises et océan à perte de vue — sous un ciel dramatique traversé de lumière dorée", action:"marcher lentement le long du rivage, tête légèrement tournée vers l'horizon, dans un geste de légèreté retrouvée" },
-      { decor:"une vallée boisée et brumeuse à l'heure dorée — grands arbres et lumière filtrée — sous un ciel traversé de lumière dorée", action:"se tenir immobile au milieu du sentier, visage tourné vers la lumière, dans un geste de légèreté retrouvée" },
-      { decor:"un désert de dunes au coucher du soleil — étendue de sable à perte de vue — sous un ciel dramatique traversé de lumière dorée", action:"marcher au sommet d'une dune face à l'horizon, dans un geste de légèreté retrouvée" },
-      { decor:"un plateau rocheux surplombant une vallée à l'heure dorée — horizon dégagé à perte de vue — sous un ciel dramatique traversé de lumière dorée", action:"se tenir au bord du plateau, bras légèrement ouverts, dans un geste de légèreté retrouvée" },
-      { decor:"une rive de rivière sinueuse au coucher du soleil — méandres et reliefs lointains — sous un ciel traversé de lumière dorée", action:"marcher le long de la rive, dans un geste de légèreté retrouvée" },
-      { decor:"un sommet dégagé au-dessus des nuages à l'heure dorée — mer de nuages à perte de vue — sous un ciel dramatique traversé de lumière dorée", action:"se tenir au sommet, bras légèrement ouverts face à la mer de nuages, dans un geste de légèreté retrouvée" },
-      { decor:"une prairie alpine en fleurs à l'heure dorée — herbes hautes et sommets lointains — sous un ciel traversé de lumière dorée", action:"marcher lentement à travers les herbes hautes, main effleurant les tiges, dans un geste de légèreté retrouvée" },
-      { decor:"un canyon sculpté par l'érosion au coucher du soleil — parois striées et lumière rasante — sous un ciel dramatique traversé de lumière dorée", action:"se tenir au creux du canyon, visage levé vers la lumière, dans un geste de légèreté retrouvée" },
-      { decor:"une forêt d'automne baignée de lumière dorée — feuillages cuivrés et rayons filtrés — sous un ciel traversé de lumière dorée", action:"marcher sur un sentier de feuilles, dans un geste de légèreté retrouvée" },
-      { decor:"une étendue enneigée au coucher du soleil — sommets immaculés et lumière rasante — sous un ciel dramatique traversé de lumière dorée", action:"se tenir face aux sommets enneigés, bras légèrement ouverts, dans un geste de légèreté retrouvée" },
-      { decor:"une terrasse d'oliviers surplombant la mer à l'heure dorée — rangées argentées et horizon marin — sous un ciel traversé de lumière dorée", action:"marcher entre les rangées d'arbres, dans un geste de légèreté retrouvée" },
-      { decor:"une plaine à perte de vue sous un ciel étoilé s'éclaircissant à l'horizon doré — immensité silencieuse — lumière dorée naissante", action:"se tenir immobile face à l'immensité, tête légèrement levée, dans un geste de légèreté retrouvée" },
-      { decor:"un lagon calme entouré de rochers à l'heure dorée — eau translucide et lumière réfléchie — sous un ciel traversé de lumière dorée", action:"marcher au bord de l'eau, regard porté sur l'horizon, dans un geste de légèreté retrouvée" },
-      { decor:"une crête venteuse surplombant des collines successives à l'heure dorée — horizon ondulé à perte de vue — sous un ciel dramatique traversé de lumière dorée", action:"se tenir sur la crête, bras légèrement ouverts face au vent, dans un geste de légèreté retrouvée" },
-      { decor:"une clairière baignée de lumière dorée au cœur d'une forêt dense — rayons verticaux filtrant la canopée — sous une lumière dorée tombante", action:"se tenir au centre de la clairière, visage tourné vers la lumière, dans un geste de légèreté retrouvée" },
+      { decor:"un paysage de haute montagne au coucher du soleil — crêtes rocheuses et lac de montagne — sous un ciel dramatique traversé de lumière dorée", action:"étirer lentement les bras au-dessus de la tête face à l'horizon, visage détendu et souriant, dans un geste de plénitude retrouvée" },
+      { decor:"un rivage sauvage au coucher du soleil — falaises et océan à perte de vue — sous un ciel dramatique traversé de lumière dorée", action:"marcher pieds nus le long du rivage, tête légèrement renversée en arrière, savourant l'instant avec un sourire discret" },
+      { decor:"une vallée boisée et brumeuse à l'heure dorée — grands arbres et lumière filtrée — sous un ciel traversé de lumière dorée", action:"s'asseoir sur une pierre plate au bord du sentier, mains posées derrière soi, visage tourné vers la lumière avec un léger sourire" },
+      { decor:"une oasis entourée de palmiers au coucher du soleil — eau calme et reflets dorés — sous un ciel dramatique traversé de lumière chaude", action:"se tenir au bord de l'eau, tête légèrement inclinée, un sourire de contentement paisible" },
+      { decor:"un plateau rocheux surplombant une vallée à l'heure dorée — horizon dégagé à perte de vue — sous un ciel dramatique traversé de lumière dorée", action:"s'étirer face au vide, bras grands ouverts et visage rayonnant, dans un élan de liberté joyeuse" },
+      { decor:"une rive de rivière sinueuse au coucher du soleil — méandres et reliefs lointains — sous un ciel traversé de lumière dorée", action:"marcher lentement en effleurant l'eau du bout des doigts, sourire léger et regard apaisé" },
+      { decor:"un sommet dégagé au-dessus des nuages à l'heure dorée — mer de nuages à perte de vue — sous un ciel dramatique traversé de lumière dorée", action:"s'asseoir au bord du sommet, jambes pendantes dans le vide, visage détendu contemplant la mer de nuages" },
+      { decor:"une prairie alpine en fleurs à l'heure dorée — herbes hautes et sommets lointains — sous un ciel traversé de lumière dorée", action:"tourner lentement sur soi-même bras ouverts parmi les herbes hautes, tête renversée en riant doucement" },
+      { decor:"une terrasse suspendue surplombant une vallée tropicale à l'heure dorée — végétation luxuriante et brume légère — sous une lumière chaude et enveloppante", action:"s'appuyer nonchalamment contre la rambarde, un léger sourire aux lèvres, contemplant la vue avec une décontraction totale" },
+      { decor:"une forêt d'automne baignée de lumière dorée — feuillages cuivrés et rayons filtrés — sous un ciel traversé de lumière dorée", action:"marcher sur un sentier de feuilles en riant légèrement, une main tendue pour effleurer une branche" },
+      { decor:"un hamac suspendu entre deux palmiers face à l'océan au coucher du soleil — plage dorée à perte de vue — lumière chaude et enveloppante", action:"se prélasser dans le hamac, un bras replié derrière la tête, souriant paisiblement les yeux mi-clos" },
+      { decor:"une piscine à débordement surplombant des collines lointaines à l'heure dorée — eau calme reflétant le ciel — lumière chaude et enveloppante", action:"se tenir au bord de l'eau, bras détendus le long du corps, visage levé savourant la brise avec un sourire serein" },
+      { decor:"une plaine à perte de vue sous un ciel étoilé s'éclaircissant à l'horizon doré — immensité silencieuse — lumière dorée naissante", action:"s'étirer largement face à l'immensité, tête renversée vers le ciel, un sourire de gratitude paisible" },
+      { decor:"un lagon calme entouré de rochers à l'heure dorée — eau translucide et lumière réfléchie — sous un ciel traversé de lumière dorée", action:"marcher lentement au bord de l'eau, riant doucement, une main effleurant sa nuque dans un geste de détente" },
+      { decor:"une crête venteuse surplombant des collines successives à l'heure dorée — horizon ondulé à perte de vue — sous un ciel dramatique traversé de lumière dorée", action:"se tenir sur la crête bras ouverts face au vent, tête renversée en riant, cheveux et vêtements soulevés par la brise" },
+      { decor:"une clairière baignée de lumière dorée au cœur d'une forêt dense — rayons verticaux filtrant la canopée — sous une lumière dorée tombante", action:"s'asseoir en tailleur au centre de la clairière, mains posées sur les genoux, visage détendu et souriant vers la lumière" },
+      { decor:"une véranda ouverte sur des rizières en terrasses à l'heure dorée — brume légère sur les collines — lumière chaude et enveloppante", action:"s'étirer avec un sourire ample en s'appuyant contre un pilier de bois, regard porté sur les terrasses" },
+      { decor:"un ponton de bois s'avançant sur un lac paisible à l'aube dorée — brume légère effleurant l'eau — lumière douce et enveloppante", action:"s'asseoir au bout du ponton, jambes pendantes au-dessus de l'eau, visage détendu et souriant face au soleil levant" },
+      { decor:"un jardin en terrasses parfumé surplombant la mer à l'heure dorée — bougainvilliers et pierre claire — lumière chaude et enveloppante", action:"marcher entre les massifs en effleurant les fleurs du bout des doigts, sourire léger et démarche détendue" },
+      { decor:"un désert de dunes au coucher du soleil — étendue de sable à perte de vue — sous un ciel dramatique traversé de lumière dorée", action:"courir légèrement au sommet d'une dune bras ouverts, riant, dans un élan de liberté retrouvée" },
     ];
     let hash = 0;
     for(const ch of String(prestation||"")) hash = (hash*31 + ch.charCodeAt(0)) >>> 0;
     const landscape = LANDSCAPE_ARCHETYPES[hash % LANDSCAPE_ARCHETYPES.length];
-    fixed.miseEnScene.sujetPrincipal = "une personne seule, vue de dos ou de profil perdu, habillée sobrement (jamais torse nu, jamais allongée, jamais de scène de soin visible)";
+    let genreHash = 0;
+    for(const ch of String(prestation||"")+String(fixed.messageCentral||"")) genreHash = (genreHash*31 + ch.charCodeAt(0)) >>> 0;
+    const silhouetteGenre = (genreHash % 2 === 0) ? "un homme seul" : "une femme seule";
+    fixed.miseEnScene.sujetPrincipal = `${silhouetteGenre}, vue de dos ou de profil perdu, habillée sobrement (jamais torse nu, jamais allongée, jamais de scène de soin visible)`;
     fixed.miseEnScene.action = `${landscape.action} — aucune scène de soin, aucun contact corporel, aucun praticien visible : seul le résultat ressenti après le soin est représenté, jamais le soin lui-même`;
     fixed.miseEnScene.cadrage = "plan large sur le paysage, sujet en silhouette à l'échelle humaine face à l'immensité ; la brume, la poussière en suspension ou la lumière rasante comptent autant que l'étendue elle-même ; la ligne d'horizon est coupée par le cadre plutôt que centrée, pour suggérer un espace qui dépasse l'image ; jamais de gros plan sur un corps ou un contact corporel";
     // Le décor du Planner est conservé s'il est valide (paysage naturel, potentiellement inspiré du
@@ -4057,7 +4069,7 @@ function buildFixedGuardrailBlocks(brief, platform){
     : brief.presenceSoin==="suggeree" ? "La sensation du soin est suggérée, jamais son déroulé technique."
     : "Une scène de soin peut être visible si elle reste professionnelle, respectueuse, éditoriale et premium.";
   const logoPhrase = wantsRealLogo
-    ? "Aucun logo dessiné : une zone sobre reste dégagée pour l'ajout ultérieur de la signature officielle par Canvas. Interdiction stricte de générer un zèbre décoratif, un faux logo, une tête de zèbre en médaillon, un sceau, un monogramme ou un emblème."
+    ? "Aucun logo dessiné : la zone prévue pour l'ajout ultérieur de la signature officielle par Canvas doit rester une simple continuité naturelle du décor existant (ciel, ombre, paysage) — jamais une forme, un cadre, une plaque, une carte, un panneau ou un rectangle visible d'une couleur différente du reste de la scène, même sombre ou discret. Interdiction stricte de générer un zèbre décoratif, un faux logo, une tête de zèbre en médaillon, un sceau, un monogramme, un emblème, ou toute forme géométrique isolée qui pourrait ressembler à un support de logo."
     : "Aucun logo, médaillon ou monogramme inventé.";
   const negativeItems = String(brief.negativePrompt||"")
     .split(/\s*[,;]\s*/).map(x=>x.trim()).filter(Boolean);
