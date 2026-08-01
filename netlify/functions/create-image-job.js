@@ -33,7 +33,7 @@ exports.handler = async (event) => {
   } catch (e) {
     return { statusCode: 400, headers: { "Content-Type": "application/json" }, body: JSON.stringify({ error: "Corps de requête invalide" }) };
   }
-  const { prompt, size, model, quality, referenceImageUrls, referenceImageData } = payload;
+  const { prompt, size, model, quality, referenceImageUrls, referenceImageData, brandComposition } = payload;
   const referenceRequired = payload.referenceRequired === true;
   if (typeof prompt !== "string" || !prompt.trim()) {
     return { statusCode: 400, headers: { "Content-Type": "application/json" }, body: JSON.stringify({ error: "Le prompt est requis" }) };
@@ -44,9 +44,9 @@ exports.handler = async (event) => {
     const now = Date.now();
     const store = openJobStore();
 
-    // Entrée complète (peut contenir jusqu'à 3 images en base64) écrite en Blobs — jamais transmise
+    // Entrée complète (peut contenir jusqu'à 4 images en base64) écrite en Blobs — jamais transmise
     // telle quelle au déclenchement de la Background Function.
-    await store.set(`jobs/${jobId}/input`, JSON.stringify({ prompt, size, model, quality, referenceImageUrls, referenceImageData, referenceRequired }));
+    await store.set(`jobs/${jobId}/input`, JSON.stringify({ prompt, size, model, quality, referenceImageUrls, referenceImageData, referenceRequired, brandComposition }));
 
     await store.set(`jobs/${jobId}`, JSON.stringify({
       jobId,

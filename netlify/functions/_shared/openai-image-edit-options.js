@@ -2,7 +2,7 @@
 
 function normalizeImageModel(model){
   const normalized = typeof model === "string" ? model.trim() : "";
-  return normalized || "gpt-image-1";
+  return normalized || "gpt-image-2";
 }
 
 function applyImageEditOptions(form, { model, quality } = {}){

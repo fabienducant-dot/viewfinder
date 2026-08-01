@@ -177,25 +177,25 @@ const PLATFORMS = ["Instagram","Facebook","Google Business","Article Blog Wix","
 
 /* V1.0 — format officiel Instagram/Facebook : 1080x1350 (4:5), une seule image pour les deux. */
 const PLATFORM_ASPECT = { "Instagram":"4:5", "Facebook":"4:5", "Google Business":"4:3", "Article Blog Wix":"16:9", "Story":"9:16" };
-// Tailles réellement acceptées par gpt-image-1 (1024x1024, 1024x1536, 1536x1024 — pas les tailles
-// DALL·E 3 comme 1792x1024). Mapping direct par plateforme, pas par ratio calculé.
+// gpt-image-2 accepte les dimensions arbitraires multiples de 16. On génère au plus près du format
+// final afin d'éviter le recadrage destructeur qui vidait les Stories et coupait les compositions.
 const API_IMAGE_SIZE_BY_PLATFORM = {
-  "Story": "1024x1536",
-  "Instagram": "1024x1536",
-  "Facebook": "1024x1536",
-  "Google Business": "1024x1024",
-  "Article Blog Wix": "1536x1024",
+  "Story": "1088x1920",
+  "Instagram": "1088x1360",
+  "Facebook": "1088x1360",
+  "Google Business": "1200x912",
+  "Article Blog Wix": "1920x1088",
 };
-/* V1.0 : plus aucun texte n'est demandé au modèle. L'overlay décrit ce que le POST-TRAITEMENT
-   Canvas incrustera (jamais GPT). "aucun" = image livrée sans texte. */
+/* Le texte est généré dans l'image uniquement sur les formats éditoriaux qui l'autorisent.
+   Google Business et la couverture Wix restent volontairement sans accroche. */
 const PLATFORM_OVERLAY = { "Instagram":"accroche", "Facebook":"accroche", "Google Business":"aucun", "Article Blog Wix":"aucun", "Story":"fort" };
 const PLATFORM_MAXCHARS = { "Instagram":110, "Facebook":120, "Google Business":0, "Article Blog Wix":220, "Story":220 };
 const PLATFORM_NOTE = {
-  "Instagram": "Format portrait 4:5. Aucun texte dans l'image : le tiers inférieur reste calme, une accroche y sera incrustée ensuite en post-traitement.",
-  "Facebook": "Utilise exactement la même image qu'Instagram (4:5) — aucune génération distincte. Aucun texte dans l'image.",
+  "Instagram": "Format portrait 4:5. Accroche courte intégrée par l'API, avec le logo officiel fourni en référence.",
+  "Facebook": "Utilise exactement la même image que l'Instagram 4:5, texte et identité compris.",
   "Google Business": "Aucun texte sur l'image (recommandation Google) — le texte porte tout le SEO.",
   "Article Blog Wix": "Image de couverture éditoriale, sans texte incrusté (les moteurs de recherche ne lisent pas le texte dans une image) — jamais de faux logo, badge ou icône générés par l'IA. Le SEO de l'image passe par un alt text descriptif riche, généré avec le texte de l'article.",
-  "Story": "Format vertical plein écran. Une accroche forte et une courte sous-ligne sont composées par Canvas avec une hiérarchie typographique nette ; le vrai logo SDZ est ajouté séparément. Aucun élément de l'interface Instagram ne fait partie du visuel.",
+  "Story": "Format vertical plein écran. Accroche forte, sous-ligne et identité officielle intégrées par l'API à partir du vrai logo fourni en référence. Aucun élément de l'interface Instagram ne fait partie du visuel.",
 };
 const TEXT_STRUCTURE = {
   "Instagram": "Réponds avec :\n1) Légende structurée : accroche, développement, bénéfice, CTA. Maximum 1 à 2 emojis pertinents utilisés comme points d'accent (jamais en rafale, jamais en substitut des mots)\n2) Maximum 5 hashtags\n3) Une suggestion d'alt text (accessibilité)",
@@ -566,7 +566,7 @@ const state = {
 };
 state.images = Array.isArray(state.images) ? state.images : [];
 state.userReferenceUpload = state.userReferenceUpload || null; // image de référence à la demande, en mémoire seulement
-state.aiLogoIntegration = !!state.aiLogoIntegration; // logo intégré par l'IA (expérimental), désactivé par défaut
+state.aiLogoIntegration = true; // identité officielle obligatoire dans chaque génération publiée
 state.styles = Array.isArray(state.styles) ? state.styles : [];
 state.selectedId = state.images[0] ? state.images[0].id : null;
 (function setDefaultStyle(){
@@ -691,6 +691,8 @@ function normalizeScheduledPost(p){
     overlayWarning: p.overlayWarning || null,
     pendingImageJobId: p.pendingImageJobId || null, // permet de reprendre un job payant après fermeture/interruption Android
     aiLogoIntegrationUsed: !!p.aiLogoIntegrationUsed,
+    serverBrandCompositionUsed: !!p.serverBrandCompositionUsed,
+    brandComposited: !!p.brandComposited,
   };
 }
 function normalizeDirectionArtistique(da){
@@ -1566,10 +1568,8 @@ async function compositeBrandSignature(baseDataUrl, platform, options){
   }
 }
 
-/* V1.0 — L'API gpt-image-1 n'accepte que 1024x1024 / 1024x1536 / 1536x1024 (contrainte OpenAI
-   documentée) : aucune ne correspond au 1080x1350 officiel. L'image générée est donc recadrée et
-   redimensionnée ici, au format exact de la plateforme, avant incrustation. Recadrage centré
-   (cover) : jamais de déformation, jamais de bande noire. */
+/* Normalisation finale légère : gpt-image-2 génère déjà au ratio cible, ce passage ramène seulement
+   les quelques pixels d'écart aux dimensions officielles de publication, sans recadrage notable. */
 async function normalizeToPlatformFormat(dataUrl, platform){
   const target = ASPECTS[PLATFORM_ASPECT[platform]];
   if(!target) return dataUrl;
@@ -1595,8 +1595,8 @@ function logoRequiredFor(platform){
 /* ---------- Logo comme véritable image de référence pour les générations API compatibles ---------- */
 let _brandRefUrlCache = null; // ne recalcule/re-télécharge jamais deux fois dans la même session
 function getBrandReferenceImages(){
-  /* Le logo est une signature, pas une référence créative. Le transmettre au modèle produisait
-     des zèbres, sceaux et médaillons inventés. Canvas est désormais l'unique source. */
+  /* Les références sont préparées en base64 dans prepareCreativeBrief afin de garantir leur ordre :
+     références de scène/produit d'abord, logo officiel en dernier. */
   _brandRefUrlCache = [];
   return _brandRefUrlCache;
 }
@@ -2703,7 +2703,7 @@ REGISTRES VISUELS ACTIFS — ils doivent tous être visibles dans l'image, et pa
 ${(registres||[]).map(r=>`- ${r}`).join("\n") || "- aucun registre supplémentaire"}
 ${buildActiveRegistryDecorContract(registres, prestation) ? `CONTRAT DE DÉCOR DÉTERMINISTE : ${buildActiveRegistryDecorContract(registres, prestation)}.` : ""}
 ${(prestation!=="Luminothérapie PSIO®" && prestation!=="Biorésonance quantique") ? `
-DÉCOR DE CETTE PRESTATION — RÈGLE SPÉCIFIQUE : "decor" ne représente JAMAIS le soin lui-même (aucune table, aucun intérieur, aucune architecture, aucun élément de spa) — uniquement un paysage naturel extérieur à l'heure dorée (montagne, désert, forêt, côte, vallée, plateau...). Choisis ce paysage en t'inspirant du "Sujet demandé par l'utilisateur" ci-dessus s'il évoque un lieu, une culture ou une ambiance précise (ex. "Bali" → végétation tropicale, rizières en terrasses, lagon ; "montagne, Inde" → sommets himalayens) — sans reproduire de monument réel ni de symbole religieux. Si le sujet n'évoque aucun lieu précis, choisis un paysage cohérent avec l'émotion de la prestation. "miseEnScene" décrit une silhouette seule, habillée, vue de dos ou de profil, jamais de scène de soin ni de contact corporel.` : ""}
+CONTRAT DE SCÈNE SPÉCIFIQUE À LA PRESTATION : le visuel montre au premier regard ce qui rend CE soin reconnaissable — geste professionnel réel, zone traitée correctement drapée, matière, accessoire ou posture documentée dans la fiche. Une silhouette seule devant un paysage, une personne qui marche, médite ou ouvre les bras, ou un simple décor doré sans prestation visible constituent un ÉCHEC. Si le soin implique un praticien et un bénéficiaire, montre ces deux rôles de façon éditoriale, habillée ou correctement drapée, jamais suggestive. Le décor comporte plusieurs plans riches et cohérents avec le soin ; les registres cinématographie, architecture et fantastique actifs doivent modifier visiblement la profondeur, la structure et la lumière sans remplacer la prestation réelle.` : ""}
 
 Principes visuels indispensables de la marque SDZ (à respecter impérativement) :
 ${socle}
@@ -2722,9 +2722,9 @@ ${platform==="Story" ? `DIRECTION VISUELLE DE RÉFÉRENCE — STORIES SDZ :
 - composition verticale 9:16 dense et éditoriale, sujet héroïque central, profondeur en plusieurs plans, énergie dorée ascendante ;
 - contraste noir/or spectaculaire, niveau lumineux et éclatant : le noir reste un écrin détaillé, jamais une sous-exposition ;
 - point de vue à hauteur du regard ou en légère contre-plongée valorisante ; aucune vue plongeante qui rapetisse le sujet ;
-- grande zone calme réservée au titre et à la signature officielle ajoutés ensuite par Canvas ;
+- hiérarchie d'affiche lisible, avec une zone calme intégrée à la composition pour l'accroche et l'identité ;
 - ne reproduis aucun élément d'interface Instagram : barre de story, avatar, date, boutons, réactions, vignettes ou navigation ;
-- ne génère aucun texte, aucun logo, aucun zèbre décoratif et aucun symbole de marque : ils seront ajoutés proprement après génération ;
+- ne génère aucun faux logo ni zèbre décoratif : le compositeur serveur appliquera ensuite le fichier officiel exact et les textes exacts dans la zone éditoriale réservée ;
 - interdiction de retomber sur les automatismes des runs précédents : ${V2_MOTIFS_EN_PAUSE.join(", ")}.` : ""}
 
 Archétypes émotionnels autorisés (choisis-en un seul, exactement tel quel dans "archetypeEmotionnel") — chacun est une identité complète, pas une simple catégorie :
@@ -3189,7 +3189,9 @@ function validateAndFixBriefV2(brief, allowed, exclusions, typeCreationImpose, p
   // le RÉSULTAT RESSENTI après le soin — une silhouette seule, habillée, dans un paysage naturel au
   // coucher du soleil. Zéro peau visible, zéro contact corporel décrit : le risque de rejet devient
   // structurellement nul, pas juste réduit par la formulation.
-  if(isBodyContact && fixed.miseEnScene){
+  /* Ancien repli paysage désactivé : il effaçait systématiquement la prestation et produisait
+     exactement les scènes génériques "une personne + montagnes + lac" refusées par la DA. */
+  if(false && isBodyContact && fixed.miseEnScene){
     // Variété de décor par prestation : sans ça, Abhyanga, Balinais, Thaï... produisent tous la
     // même scène montagne/lac, ce qui efface justement la différenciation propre à chaque fiche.
     // Choix déterministe (même prestation = même décor à chaque fois, pour la cohérence de marque),
@@ -3302,6 +3304,26 @@ function validateAndFixBriefV2(brief, allowed, exclusions, typeCreationImpose, p
       "tout logo, sceau ou emblème dessiné sur le sujet ou dans la scène"])];
     corrected = true;
   }
+  /* Contrat déterministe des soins corporels : préserver la scène conçue par le Planner, mais
+     imposer sa lisibilité, son professionnalisme et sa richesse au lieu de la remplacer. */
+  if(isBodyContact && fixed.miseEnScene){
+    const visibleCharacteristic = String(fixed.caracteristiquePrestationVisible || fixed.caracteristiqueSourcePrestation || "").trim();
+    const actualAction = String(fixed.miseEnScene.action||"").trim();
+    fixed.miseEnScene.action = `${actualAction}${actualAction ? "; " : ""}geste professionnel de la prestation clairement visible, bénéficiaire habillé ou correctement drapé, cadrage respectueux et éditorial`;
+    fixed.miseEnScene.cadrage = `${String(fixed.miseEnScene.cadrage||"plan éditorial à plusieurs plans").trim()} ; prestation, geste et matière lisibles au premier regard, sans réduire la scène à une silhouette isolée`;
+    fixed.decor = `${String(fixed.decor||"espace de soin premium structuré en plusieurs plans").trim()} ; décor riche, spécifique à la prestation et visiblement structuré par les registres actifs, jamais paysage générique servant de substitut au soin`;
+    fixed.presenceSoin = "visible_editoriale";
+    if(visibleCharacteristic && !normalizeForContainmentCheck(fixed.miseEnScene.action).includes(normalizeForContainmentCheck(visibleCharacteristic).split(" ")[0])){
+      fixed.miseEnScene.action += ` ; caractéristique distinctive à rendre visible : ${visibleCharacteristic}`;
+    }
+    fixed.compositionInterdite = [...new Set([...(fixed.compositionInterdite||[]),
+      "silhouette seule marchant ou ouvrant les bras devant un lac, une montagne ou un coucher de soleil",
+      "paysage naturel générique sans geste, matière ni matériel distinctif de la prestation",
+      "une seule personne inactive lorsque la prestation exige un praticien et un bénéficiaire",
+      "scène vide, fond noir uniforme ou décor doré sans profondeur ni prestation lisible"] )];
+    corrected = true;
+  }
+
   // Vocabulaire à connotation romantique/sensuelle : à bannir systématiquement des scènes à
   // contact corporel, quel que soit le drapé décrit par ailleurs — probable déclencheur direct du
   // filtre de sécurité OpenAI (safety_violations=[sexual]) observé sur plusieurs générations massage.
@@ -4105,7 +4127,7 @@ function buildFixedGuardrailBlocks(brief, platform){
     : brief.presenceSoin==="suggeree" ? "La sensation du soin est suggérée, jamais son déroulé technique."
     : "Une scène de soin peut être visible si elle reste professionnelle, respectueuse, éditoriale et premium.";
   const logoPhrase = wantsRealLogo
-    ? "Aucun logo dessiné : la zone prévue pour l'ajout ultérieur de la signature officielle par Canvas doit rester une simple continuité naturelle du décor existant (ciel, ombre, paysage) — jamais une forme, un cadre, une plaque, une carte, un panneau ou un rectangle visible d'une couleur différente du reste de la scène, même sombre ou discret. Interdiction stricte de générer un zèbre décoratif, un faux logo, une tête de zèbre en médaillon, un sceau, un monogramme, un emblème, ou toute forme géométrique isolée qui pourrait ressembler à un support de logo."
+    ? `IMAGE BRUTE SANS IDENTITÉ : ne dessine aucun logo, zèbre, sceau, emblème, nom de marque, lettre ou mot. Le serveur ajoutera ensuite le fichier logo officiel et la signature exacte. Réserve une zone visuellement calme, sombre mais détaillée, avec une vraie respiration éditoriale dans la zone « ${String(brief.zoneTexte||brief.zoneLogo||"supérieure")} » ; aucun visage, geste important ni matériel distinctif ne doit empiéter sur cette zone.`
     : "Aucun logo, médaillon ou monogramme inventé.";
   const negativeItems = String(brief.negativePrompt||"")
     .split(/\s*[,;]\s*/).map(x=>x.trim()).filter(Boolean);
@@ -4127,7 +4149,10 @@ function buildFixedGuardrailBlocks(brief, platform){
     ? "VERROU PRODUIT — RETOUCHE À PARTIR DE L'IMAGE 1 : les deux images fournies décrivent le même dispositif officiel Healy. L'image 1, vue de face nette sur fond blanc, est la photographie de base à transformer : conserve exactement la forme carrée à coins arrondis et la base élargie du boîtier. La grande zone circulaire dégradée au centre de la face (là où figure le logo du fabricant) doit devenir une surface plate, mate et unie, de la même couleur noire ou dorée que le reste du boîtier — PAS un médaillon, PAS un anneau, PAS un cercle concentrique, PAS un point central, PAS un blason : une simple portion de surface sans relief ni ornement, comme si cette zone n'avait jamais porté de marquage. Les zones de commande peuvent conserver de simples repères abstraits de boutons (petits cercles, points, traits) à leur emplacement d'origine — c'est un détail normal d'appareil — mais sans aucune icône, pictogramme, lettre ou symbole reconnaissable (pas de bluetooth, pas de symbole batterie, pas de lettre). Image 2 : photographie réelle du dispositif avec son accessoire attaché, référence secondaire pour confirmer le volume et la silhouette complète en trois dimensions. Recolore uniquement les surfaces blanches et les teintes bleues, roses, vertes et turquoise du boîtier en noir profond et or métallique noble SDZ, sans modifier sa géométrie, sa perspective ni sa position. Ignore et ne recopie aucune inscription, marque, mot, lettre, chiffre, logo, médaillon, anneau ou étiquette visible sur le dispositif ou dans les références. Aucun autre dispositif électronique n'est admis. Change uniquement le fond, la lumière et la palette ; conserve le produit de l'image 1 inchangé dans sa forme et son placement."
     : "";
   const registryGuard = buildActiveRegistryDecorContract(brief.registresActifs);
-  return `${charte} ${soinPhrase} Noir profond comme écrin, jamais comme sous-exposition. Sujet, geste et matériel lisibles au premier regard. Or métallique noble, jamais orange, ambre, feu ou incendie. Énergie ascendante et désirable. ${registryGuard ? `CONTRAT DE VISIBILITÉ DES REGISTRES : ${registryGuard}. Le décor doit être immédiatement perceptible derrière et autour du sujet ; une grande surface noire uniforme ou vide constitue un échec.` : ""} L'ombre ou la fragmentation ne peuvent exister qu'en opposition secondaire clairement dépassée par le sujet ; jamais horreur, menace, désespoir sans issue, personnage encapuchonné menaçant, visage central mutilé, crypte, rituel, sorcellerie, astrologie ou signes zodiacaux. Aucun texte n'est incrusté dans l'image ; une zone visuellement calme reste prête à recevoir le texte ajouté ensuite. ${storyGuard} ${psioProductGuard} ${logoPhrase}${eviter ? ` À éviter absolument : ${eviter}.` : ""}
+  const headlinePhrase = (PLATFORM_OVERLAY[platform]==="accroche" || PLATFORM_OVERLAY[platform]==="fort")
+    ? `ZONE D'ACCROCHE : n'inscris aucun texte dans l'image brute. Compose la scène pour que l'accroche exacte « ${String(brief.texteImage||"").replace(/\|/g," — ")} » puisse être rendue ensuite par le serveur dans la zone calme demandée, sans masquer le soin, le sujet ni le matériel.`
+    : "Aucune accroche éditoriale ni identité n'est inscrite dans l'image brute ; le serveur posera uniquement la signature officielle exacte.";
+  return `${charte} ${soinPhrase} Noir profond comme écrin, jamais comme sous-exposition. Sujet, geste et matériel lisibles au premier regard. Or métallique noble, jamais orange, ambre, feu ou incendie. Énergie ascendante et désirable. ${registryGuard ? `CONTRAT DE VISIBILITÉ DES REGISTRES : ${registryGuard}. Le décor doit être immédiatement perceptible derrière et autour du sujet ; une grande surface noire uniforme ou vide constitue un échec.` : ""} L'ombre ou la fragmentation ne peuvent exister qu'en opposition secondaire clairement dépassée par le sujet ; jamais horreur, menace, désespoir sans issue, personnage encapuchonné menaçant, visage central mutilé, crypte, rituel, sorcellerie, astrologie ou signes zodiacaux. ${headlinePhrase} ${storyGuard} ${psioProductGuard} ${logoPhrase}${eviter ? ` À éviter absolument : ${eviter}.` : ""}
 
 ${SAFETY_GUARDRAIL}`;
 }
@@ -4344,8 +4369,15 @@ const RAW_OVERLAY_ANALYSIS_SCHEMA = {
     properties:{
       rawOverlayDetected:{type:"boolean"},
       rawOverlayDescription:{type:"string"},
+      officialLogoPresent:{type:"boolean"},
+      officialLogoConformity:{type:"string",enum:["exact","close","altered","missing","not_checked"]},
+      expectedTextExact:{type:"boolean"},
+      observedText:{type:"string"},
+      unexpectedOverlayDetected:{type:"boolean"},
+      brandValidationNotes:{type:"string"},
     },
-    required:["rawOverlayDetected","rawOverlayDescription"],
+    required:["rawOverlayDetected","rawOverlayDescription","officialLogoPresent","officialLogoConformity",
+      "expectedTextExact","observedText","unexpectedOverlayDetected","brandValidationNotes"],
   },
 };
 /* Analyse l'image RÉELLEMENT obtenue (pas le brief) — c'est cette sortie, pas le brief, qui doit
@@ -4398,6 +4430,22 @@ async function buildProductComparisonForAnalysis(generatedDataUrl, referenceData
     return canvas.toDataURL("image/jpeg",.78);
   }catch(e){ return resizeDataUrlForAnalysis(generatedDataUrl,1024,.7); }
 }
+async function buildBrandComparisonForAnalysis(generatedDataUrl, brandReferenceDataUrl){
+  if(!brandReferenceDataUrl) return resizeDataUrlForAnalysis(generatedDataUrl,1024,.82);
+  try{
+    const [generated,brand]=await Promise.all([loadImage(generatedDataUrl),loadImage(brandReferenceDataUrl)]);
+    const canvas=document.createElement("canvas"); canvas.width=1400; canvas.height=1000;
+    const ctx=canvas.getContext("2d"); ctx.fillStyle="#111"; ctx.fillRect(0,0,canvas.width,canvas.height);
+    const drawContain=(img,x,y,w,h)=>{
+      const scale=Math.min(w/img.width,h/img.height); const dw=img.width*scale,dh=img.height*scale;
+      ctx.drawImage(img,x+(w-dw)/2,y+(h-dh)/2,dw,dh);
+    };
+    drawContain(brand,0,0,360,1000);
+    drawContain(generated,360,0,1040,1000);
+    ctx.strokeStyle="#C9A227"; ctx.lineWidth=4; ctx.beginPath(); ctx.moveTo(360,0); ctx.lineTo(360,1000); ctx.stroke();
+    return canvas.toDataURL("image/jpeg",.86);
+  }catch(e){ return resizeDataUrlForAnalysis(generatedDataUrl,1024,.82); }
+}
 async function analyzeGeneratedImage(dataUrl, brief, options){
   const provider = state.apiProviders.find(p=>p.id===state.selectedProviderId) || DEFAULT_OPENAI_PROVIDER;
   const productReferenceDataUrls=(options&&options.productReferenceDataUrls||[]).filter(Boolean);
@@ -4407,9 +4455,16 @@ async function analyzeGeneratedImage(dataUrl, brief, options){
     : "Il n'y a pas de référence produit séparée : productGeometryConformity vaut not_applicable et tous les critères de productGeometryEvidence valent not_visible, genericVisorOrVrHeadset vaut false.";
   const systemPrompt = `Tu décris uniquement ce qui est visuellement présent dans l'image fournie, jamais ce qui était prévu ou souhaité. Ne complète jamais par supposition. ${comparisonRule} Si un élément du brief n'apparaît pas dans l'image, note-le dans briefMismatch. protectedZones contient les rectangles critiques à ne jamais recouvrir par du texte ou un logo : visage, tête, lunettes ou matériel PSiO®, mains actives et matériel de prestation ; coordonnées x, y, width, height en pourcentage 0-100 de l'image générée. dominantColorCast juge séparément la dominante réellement visible : l'orange ou l'ambre ne sont jamais de l'or officiel. Ne mélange jamais ce verdict chromatique avec productGeometryConformity.`;
   const userPrompt = `Analyse précisément l'image générée et compare-la au brief :\nScène prévue : ${brief.ideeVisuelle}\nSujet prévu : ${brief.sujetPrincipal}\nAction prévue : ${brief.action}\nMatériel distinctif attendu : ${brief.caracteristiquePrestationVisible||"aucun"}`;
-  const rawImage=await resizeDataUrlForAnalysis(dataUrl,1024,.82);
+  const brandIntegrated = !!(options && options.brandIntegrated);
+  const expectedHeadline = String(options&&options.expectedHeadline||"").trim();
+  const brandReferenceDataUrl = options&&options.brandReferenceDataUrl;
+  const rawImage=brandIntegrated
+    ? await buildBrandComparisonForAnalysis(dataUrl,brandReferenceDataUrl)
+    : await resizeDataUrlForAnalysis(dataUrl,1024,.82);
   const deviceIconsAllowed = !!(options && options.deviceIconsAllowed);
-  const overlaySystemPrompt=`Tu es un contrôleur OCR et identité de marque. Inspecte uniquement l'image brute fournie, zone par zone, y compris ses bords et son tiers inférieur. rawOverlayDetected vaut true dès qu'un seul élément graphique ajouté apparaît : lettre, mot, nom de produit (y compris « PSiO »), marque, slogan, URL, prix, logo, emblème, sceau, monogramme ou zèbre de marque. Même un nom normalement attendu sur le produit compte comme overlay interdit : toute typographie et toute signature seront ajoutées ensuite par Canvas. Une simple forme géométrique sans lettre ni identité ne compte pas.${deviceIconsAllowed ? " EXCEPTION : sur la face d'un dispositif électronique officiel de référence, les repères abstraits de boutons ou commandes (cercles, points, lignes, traits, triangles, formes géométriques simples) NE comptent PAS comme overlay interdit, même s'ils évoquent des boutons, un bouton play/power ou une commande — ce sont des détails normaux d'appareil, pas un ajout de l'IA. Compte en revanche comme overlay interdit : tout texte, toute lettre, tout mot, toute marque, ainsi qu'un grand médaillon circulaire, un anneau ou un cercle concentrique décoratif au centre de la face (élément caractéristique d'un logo de fabricant), qui restent interdits quelle que soit leur simplicité apparente." : ""} Décris exactement ce qui est lu ou reconnu dans rawOverlayDescription ; chaîne vide seulement si rien n'est détecté.`;
+  const overlaySystemPrompt=brandIntegrated
+    ? `Tu es le contrôleur final OCR et identité de marque. L'image de contrôle contient le LOGO OFFICIEL DE RÉFÉRENCE à gauche de la ligne dorée et le VISUEL GÉNÉRÉ à droite. Compare le logo du visuel de droite à la référence de gauche : exact = même dessin reconnaissable sans altération ; close = très proche mais détails mineurs différents ; altered = faux dessin, zèbre, sceau ou géométrie modifiés ; missing = absent. Le visuel doit contenir exactement une identité : le logo officiel, « La Santé des Zèbres » et « RAISMES ». ${expectedHeadline ? `Il doit aussi contenir l'accroche exacte suivante, avec « | » servant seulement de séparation hiérarchique et ne devant pas être imprimé : « ${expectedHeadline} ».` : "Aucune autre accroche éditoriale n'est attendue."} Recopie dans observedText tout ce que tu peux réellement lire sur le VISUEL DE DROITE. expectedTextExact vaut true uniquement si chaque mot attendu est lisible, correctement accentué, non tronqué, non dupliqué et si aucun texte parasite n'apparaît. unexpectedOverlayDetected vaut true pour tout faux logo, seconde identité, URL, prix, texte parasite, doublon ou faute. rawOverlayDetected est le verdict bloquant global : true dès que officialLogoConformity n'est pas « exact », si expectedTextExact est false ou si unexpectedOverlayDetected est true ; false uniquement lorsque identité et textes sont conformes. Décris précisément chaque problème dans rawOverlayDescription et brandValidationNotes.`
+    : `Tu es un contrôleur OCR et identité de marque. Inspecte uniquement l'image brute fournie, zone par zone. rawOverlayDetected vaut true dès qu'un texte, logo, emblème, sceau, monogramme ou zèbre de marque apparaît. officialLogoPresent=false, officialLogoConformity="not_checked", expectedTextExact=true, observedText="", unexpectedOverlayDetected=rawOverlayDetected.${deviceIconsAllowed ? " Les simples repères abstraits de commandes sur un dispositif électronique ne sont pas un overlay." : ""}`;
   const [res,overlayRes] = await Promise.all([
     fetch("/.netlify/functions/generate-text", {
       method:"POST", headers:{ "Content-Type":"application/json" },
@@ -4419,7 +4474,7 @@ async function analyzeGeneratedImage(dataUrl, brief, options){
     fetch("/.netlify/functions/generate-text", {
       method:"POST", headers:{ "Content-Type":"application/json" },
       body: JSON.stringify({ kind:provider.kind,model:provider.model,baseUrl:provider.baseUrl,
-        systemPrompt:overlaySystemPrompt,userPrompt:"Détecte tout texte, logo ou identité déjà présent dans cette image brute.",
+        systemPrompt:overlaySystemPrompt,userPrompt:brandIntegrated ? "Valide strictement le logo officiel, la signature, l'accroche et l'absence de texte parasite." : "Détecte tout texte, logo ou identité déjà présent dans cette image brute.",
         responseSchema:RAW_OVERLAY_ANALYSIS_SCHEMA,imageDataUrl:rawImage }),
     }),
   ]);
@@ -4853,55 +4908,50 @@ async function prepareCreativeBrief(inputs){
     catch(err){ referenceError = `Sélection de référence impossible, génération sans référence : ${String(err.message||err)}`; referenceSelections = []; }
   }
 
-  // Image de référence à la demande (fournie par l'utilisateur pour CETTE génération précise) :
-  // toujours incluse, garantie utilisée — jamais soumise au tri automatique ci-dessus. Si le total
-  // dépasserait 3 images envoyées à l'API, on raccourcit d'abord les références automatiques,
-  // jamais celle de l'utilisateur.
+  // Image de référence à la demande (fournie par l'utilisateur pour CETTE génération précise).
+  // Une référence libre peut occuper le quatrième emplacement après les trois vues PSiO® : le logo
+  // n'est plus envoyé au modèle génératif. Il est incrusté sans altération par le compositeur serveur.
   if(inputs.userReferenceDataUrl){
     const userRef = { id: inputs.userReferenceImageId || `user-ref-${Date.now()}`, dataUrl: inputs.userReferenceDataUrl, metadata:{ userSupplied:true } };
-    referenceSelections = [...referenceSelections.slice(0, 2), userRef];
+    // Un produit verrouillé ne perd jamais l'une de ses vues officielles.
+    referenceSelections = (prestation==="Luminothérapie PSIO®" || prestation==="Biorésonance quantique")
+      ? [...referenceSelections, userRef]
+      : [...referenceSelections.slice(0, 2), userRef];
   }
 
-  // Logo intégré par l'IA (expérimental, activé explicitement) : le vrai fichier logo est envoyé
-  // en référence, en plus des autres. Garanti conservé même si le total dépasse 3 (on raccourcit
-  // les références automatiques en premier, jamais le logo demandé explicitement).
-  let aiLogoIntegrationUsed = false;
-  if(inputs.aiLogoIntegration){
-    try{
-      const officialLogo = await getOfficialLogoAsset();
-      if(officialLogo && officialLogo.dataUrl){
-        referenceSelections = [...referenceSelections.slice(0, 2), { id:"official-logo-ai-integration", dataUrl: officialLogo.dataUrl, metadata:{ logoIntegration:true } }];
-        aiLogoIntegrationUsed = true;
-      }
-    }catch(e){ /* logo indisponible : on continue sans, Canvas prendra le relais comme d'habitude */ }
+  // Identité SDZ obligatoire, mais volontairement hors du modèle génératif : le serveur utilise le
+  // fichier exact conservé dans Netlify Blobs et rend aussi les textes exacts. C'est la seule voie
+  // qui garantisse qu'aucun faux zèbre ni aucune faute ne soit publié.
+  let aiLogoIntegrationUsed = false; // champ historique conservé pour compatibilité des données
+  let serverBrandCompositionUsed = false;
+  let brandReferenceDataUrl = null;
+  try{
+    const officialLogo = await getOfficialLogoAsset();
+    if(officialLogo && officialLogo.dataUrl){
+      brandReferenceDataUrl = officialLogo.dataUrl;
+      serverBrandCompositionUsed = true;
+    }else{
+      blockingError = blockingError || "Logo officiel SDZ indisponible — génération bloquée avant l'appel image.";
+    }
+  }catch(e){
+    blockingError = blockingError || `Logo officiel SDZ indisponible — ${String(e.message||e)}`;
+  }
+  referenceSelections = referenceSelections.slice(0, 4);
+  const userReferenceIncluded = referenceSelections.some(r=>r.metadata&&r.metadata.userSupplied&&r.dataUrl);
+  if(inputs.userReferenceDataUrl && !userReferenceIncluded){
+    referenceError = referenceError || "La référence libre n'a pas été transmise : les quatre emplacements de références produit ou de scène sont déjà occupés.";
   }
 
   /* T2 — CONSTRUCTEUR UNIQUE : toute production du prompt image passe par buildFinalImagePrompt.
      prepareCreativeBrief ne construit plus rien lui-même. */
   const built = await buildFinalImagePrompt(brief, platform, aspectKey, !!isCampaign, { blockingError, experimentalMode: inputs.experimentalMode || null });
-  let imagePrompt = prestation==="Luminothérapie PSIO®"
-    ? stripPsioBrandFromImagePrompt(built.prompt)
-    : prestation==="Biorésonance quantique"
-    ? stripHealyBrandFromImagePrompt(built.prompt)
-    : built.prompt;
-  if(inputs.userReferenceDataUrl){
+  // L'identité et le texte font désormais partie du contrat demandé au modèle. Les anciens filtres
+  // qui remplaçaient PSiO®/Healy par des alias neutres créeraient une contradiction avec l'accroche.
+  let imagePrompt = built.prompt;
+  if(userReferenceIncluded){
     imagePrompt = `${imagePrompt}\n\nRÉFÉRENCE SUPPLÉMENTAIRE FOURNIE PAR L'UTILISATEUR : la dernière image de référence montre un élément précis à incorporer fidèlement dans la composition — même forme, mêmes détails caractéristiques. Adapte sa couleur et son éclairage à la charte noir et or SDZ si nécessaire, mais ne le déforme ni ne le simplifie.`;
   }
-  if(aiLogoIntegrationUsed){
-    // Retire l'interdiction standard "aucun logo dessiné" (contradictoire ici, puisqu'on demande au
-    // contraire de reproduire le vrai logo fourni en référence) pour éviter une consigne qui se
-    // contredit elle-même dans le même prompt.
-    const headlineForApi = String(brief.texteImage||"").trim();
-    imagePrompt = imagePrompt.replace(/Aucun logo dessiné[^.]*\.(?:[^.]*\.)?/i, "");
-    imagePrompt = imagePrompt.replace(/Aucun texte n'est incrusté dans l'image[^.]*\./i, "");
-    imagePrompt = `${imagePrompt}
-
-LOGO OFFICIEL FOURNI EN RÉFÉRENCE — CONSIGNE STRICTE : l'image de référence supplémentaire montre le logo officiel exact de la marque (tête de zèbre dorée dans un médaillon circulaire avec symboles zodiacaux et œil au sommet). Reproduis-le à L'IDENTIQUE — mêmes proportions, mêmes détails, mêmes symboles, sans en modifier le dessin, les traits ou la composition. N'invente aucune variante, ne le déforme pas, ne le retouche pas à tort. Intègre-le physiquement dans le décor comme un élément réel de la scène plutôt qu'un autocollant posé dessus : gravé en relief, incrusté dans une matière du décor, fondu dans une surface existante, ou tout autre traitement cohérent avec CE décor précis — la pierre n'est qu'un exemple parmi d'autres, adapte le traitement à la matière réellement présente dans la scène (bois, métal, sable, eau, tissu...). Toujours en harmonie avec la lumière et la matière environnantes, jamais flottant ni plaqué sans profondeur.
-
-SIGNATURE DE MARQUE — À GÉNÉRER DANS L'IMAGE : sous le logo, ou en bas de l'image si la composition s'y prête mieux, fais apparaître le texte "LA SANTÉ DES ZÈBRES" puis en dessous "RAISMES" en plus petit — gravés ou intégrés dans la même matière et le même traitement que le logo, dans une typographie élégante à empattements (serif), sobre et lisible, jamais une police décorative ou fantaisiste.
-
-ACCROCHE — À GÉNÉRER DANS L'IMAGE : fais apparaître le texte suivant, intégré et fondu dans le décor (jamais un bandeau plaqué par-dessus) : "${headlineForApi}". Traite-le en reflets or métallique lumineux sur fond noir, ou dans tout autre traitement cohérent avec la matière et la lumière de CETTE scène précise, tant que le résultat reste premium, luxueux, à la limite du fantastique — jamais un style discount ou générique. Ce texte doit rester parfaitement lisible et orthographié exactement comme fourni ci-dessus, sans faute, sans lettre manquante ou déformée, en rapport visuel direct avec le sujet de la scène.`;
-  }
+  imagePrompt = `${imagePrompt}\n\nSORTIE BRUTE OBLIGATOIRE : aucun texte, aucune lettre, aucun logo, aucun zèbre décoratif et aucun emblème. Le serveur réalise ensuite le lock-up officiel exact dans la zone calme prévue. Ne remplis pas cette zone avec un personnage ou un élément essentiel.`;
   const daWriterUsed = built.daWriterUsed;
   const daWriterFallbackReason = built.daWriterFallbackReason;
   const transmissionCheck = built.transmissionCheck || null; // EXPÉRIENCE brief_complet uniquement — null en production
@@ -4921,7 +4971,8 @@ ACCROCHE — À GÉNÉRER DANS L'IMAGE : fais apparaître le texte suivant, int�
 
   return {
     phase: "prepared", inputs, allowed, exclusions, brief, briefCorrected, plannerError,
-    usedLocalBriefFallback, referenceSelections, referenceError, imagePrompt, steps, blockingError, aiLogoIntegrationUsed,
+    usedLocalBriefFallback, referenceSelections, referenceError, imagePrompt, steps, blockingError,
+    aiLogoIntegrationUsed, serverBrandCompositionUsed, brandReferenceDataUrl,
     daWriterUsed, daWriterFallbackReason, usage, transmissionCheck, instrumentation,
     paquetOrchestrateur, validatorReport,
     appVersion: VF_VERSION,
@@ -4932,8 +4983,9 @@ ACCROCHE — À GÉNÉRER DANS L'IMAGE : fais apparaître le texte suivant, int�
 /* ---------- PHASE B — GÉNÉRATION (PAYANTE, uniquement après confirmation explicite) ----------
    Prend le résultat EXACT de prepareCreativeBrief (rien n'est recalculé) : image -> analyse ->
    texte. Chaque étape a son propre repli, jamais de relance automatique d'un appel image payant. */
-/* B3.1 — POST-TRAITEMENT partagé (extraction validée) : calcule logoInScene et applique le Canvas
-   si le logo n'est pas déjà dans la scène. Fonction PURE : aucune écriture — le handler de
+/* B3.1 — POST-TRAITEMENT partagé : le job serveur renvoie déjà la scène, le fichier logo exact et
+   les textes exacts composés par Sharp/SVG. Canvas ne subsiste que pour les imports manuels
+   historiques. Fonction PURE : aucune écriture — le handler de
    production garde ses écritures (bibliothèque, postImageId, historique, lab) après l'appel ;
    l'exécuteur du Banc n'écrit rien. Une seule implémentation du post-traitement pour les deux. */
 async function finalizeGeneratedImage(flow){
@@ -4951,22 +5003,18 @@ async function finalizeGeneratedImage(flow){
     if(isHealyFlow){
       overlayWarning = `Élément graphique à vérifier sur le boîtier avant publication : ${generatedOverlayViolation.replace(/^overlay ia interdit\s*:\s*/i,"")}`;
     }else{
-      throw new Error(`Image brute refusée avant Canvas : ${generatedOverlayViolation.replace(/^overlay ia interdit\s*:\s*/i,"")}. Le texte et le logo officiels doivent être ajoutés uniquement par Canvas.`);
+      throw new Error(`Image refusée par le contrôle identité/OCR : ${generatedOverlayViolation.replace(/^overlay ia interdit\s*:\s*/i,"")}. Corrige la composition avant publication.`);
     }
   }
   const productViolation=findProductReferenceViolation(flow.analysis);
   if(productViolation){
-    throw new Error(`Image brute refusée avant Canvas : ${productViolation}. Aucune visière générique ne peut remplacer le produit officiel.`);
+    throw new Error(`Image refusée avant publication : ${productViolation}. Aucune visière générique ne peut remplacer le produit officiel.`);
   }
   const paletteViolation=findPaletteViolation(flow.analysis);
   if(paletteViolation){
-    throw new Error(`Image brute refusée avant Canvas : ${paletteViolation}. Canvas n'ajoute jamais sa signature sur une image hors charte.`);
+    throw new Error(`Image refusée avant publication : ${paletteViolation}. Une image hors charte ne peut pas être validée.`);
   }
-  /* Une référence utilisée ne prouve jamais que le logo officiel est présent et exact — SAUF
-     lorsque le logo intégré par l'IA a été explicitement activé pour cette génération (référence
-     envoyée + consigne stricte de reproduction fidèle) : dans ce cas précis, Canvas ne redessine
-     pas le logo par-dessus, pour ne pas le dupliquer. */
-  const logoInScene = !!flow.aiLogoIntegrationUsed;
+  const logoInScene = flow.serverBrandCompositionUsed===true && flow.brandComposited===true;
   /* 1) format officiel de la plateforme */
   let dataUrl = await normalizeToPlatformFormat(flow.dataUrl, platform);
   /* 2) accroche : généralisée (demande explicite) à Instagram/Facebook/Story pour TOUTE prestation,
@@ -4981,9 +5029,11 @@ async function finalizeGeneratedImage(flow){
         voir logoInScene ci-dessus). Un seul appel, même fonction pour les deux besoins — aucune
         duplication, aucun chemin parallèle. */
   const needLogo = logoRequiredFor(platform) && !logoInScene;
-  let logoApplied = false;
-  let headlineApplied = false;
-  let layoutReport = { version:"canvas-layout-v4", skipped:true };
+  let logoApplied = logoInScene;
+  let headlineApplied = logoInScene && (PLATFORM_OVERLAY[platform]==="accroche" || PLATFORM_OVERLAY[platform]==="fort");
+  let layoutReport = logoInScene
+    ? { version:"server-brand-compositor-v1", skipped:true, serverComposited:true }
+    : { version:"canvas-layout-v4", skipped:true };
   if(needLogo || headline){
     const composited = await compositeBrandSignature(dataUrl, platform, {
       headline, withLogo:needLogo, brief:flow.brief||null, analysis:flow.analysis||null
@@ -5056,6 +5106,7 @@ async function confirmAndGenerateImage(prepared, onStatus, cancelToken){
   const psioReferenceRequired = inputs.prestation==="Luminothérapie PSIO®";
   const healyReferenceRequired = inputs.prestation==="Biorésonance quantique";
   const productReferenceRequired = psioReferenceRequired || healyReferenceRequired;
+  const brandReferenceRequired = logoRequiredFor(platform);
 
   if(prepared.blockingError){
     return {
@@ -5078,7 +5129,7 @@ async function confirmAndGenerateImage(prepared, onStatus, cancelToken){
     };
   }
 
-  if(logoRequiredFor(platform)){
+  if(brandReferenceRequired){
     onStatus && onStatus("Vérification du logo officiel...");
     const officialLogo = await getOfficialLogoAsset();
     if(!officialLogo){
@@ -5087,11 +5138,26 @@ async function confirmAndGenerateImage(prepared, onStatus, cancelToken){
         error:"Logo officiel indisponible : génération bloquée avant l'appel image. Aucun crédit image n'a été consommé. Définis d'abord le logo officiel dans la Bibliothèque.",
       };
     }
+    const syncResult = await syncOfficialLogoToServer();
+    if(!syncResult.ok && state.images.some(i=>i.assetType==="logo")){
+      return {
+        ...prepared, phase:"image_failed", ok:false, stage:"preflight",
+        error:`Logo officiel non synchronisé avec le compositeur serveur : ${syncResult.reason||"cause inconnue"}. Aucun crédit image n'a été consommé.`,
+      };
+    }
   }
 
   onStatus && onStatus("Génération de l'image...");
+  const brandReferenceDataUrl = prepared.brandReferenceDataUrl || (await getOfficialLogoAsset())?.dataUrl || null;
+  if(brandReferenceRequired && !brandReferenceDataUrl){
+    return { ...prepared, phase:"image_failed", ok:false, stage:"preflight",
+      error:"Fichier du logo officiel absent : génération bloquée avant l'appel image. Aucun crédit image n'a été consommé." };
+  }
   const smartReferenceDataUrls = (referenceSelections||[]).map(r=>r.dataUrl).filter(Boolean);
-  let dataUrl, usedReference = false, referenceFallbackReason = null, logoSentAsReference = false, imageUsage = null;
+  const expectedHeadline = (PLATFORM_OVERLAY[platform]==="accroche" || PLATFORM_OVERLAY[platform]==="fort")
+    ? String(brief.texteImage||"").trim() : "";
+  let dataUrl, usedReference = false, referenceFallbackReason = null, logoSentAsReference = false,
+    brandComposited = false, imageUsage = null;
   let safetyRetryCount = 0;
   const MAX_SAFETY_RETRIES = 2; // rejets "safety_violations" documentés comme non déterministes :
     // le même prompt peut donner un rendu différent d'une tentative à l'autre. Plafonné pour
@@ -5101,12 +5167,19 @@ async function confirmAndGenerateImage(prepared, onStatus, cancelToken){
       const genResult = await callProviderImage(prepared.imagePrompt, size, undefined, onStatus, cancelToken, {
         smartReferenceDataUrls,
         referenceRequired: productReferenceRequired,
-        model: productReferenceRequired ? "gpt-image-2" : undefined,
-        quality: productReferenceRequired ? "high" : "medium",
+        brandComposition: {
+          enabled: true,
+          platform,
+          headline: expectedHeadline,
+          zoneText: String(brief.zoneTexte || brief.zoneLogo || ""),
+        },
+        model: "gpt-image-2",
+        quality: "high",
         onJobCreated: prepared.onImageJobCreated,
         resumeJobId: safetyRetryCount===0 ? prepared.resumeJobId : undefined,
       });
-      dataUrl = genResult.dataUrl; usedReference = genResult.usedReference; referenceFallbackReason = genResult.referenceFallbackReason; logoSentAsReference = !!genResult.logoSentAsReference; imageUsage = genResult.imageUsage || null;
+      dataUrl = genResult.dataUrl; usedReference = genResult.usedReference; referenceFallbackReason = genResult.referenceFallbackReason;
+      logoSentAsReference = false; brandComposited = genResult.brandComposited===true; imageUsage = genResult.imageUsage || null;
       break;
     }catch(err){
       const isSafetyRejection = /safety_violations/i.test(String(err.message||err));
@@ -5124,8 +5197,12 @@ async function confirmAndGenerateImage(prepared, onStatus, cancelToken){
   if(productReferenceRequired && !usedReference){
     return {
       ...prepared, phase:"image_failed", ok:false, stage:"image",
-      error:`Image refusée : la référence produit officielle (${psioReferenceRequired ? "PSiO®" : "Healy"}) n'a pas été utilisée${referenceFallbackReason ? ` (${referenceFallbackReason})` : ""}.`,
+      error:`Image refusée : les références produit obligatoires (${psioReferenceRequired ? "PSiO®" : "Healy"}) n'ont pas été utilisées${referenceFallbackReason ? ` (${referenceFallbackReason})` : ""}.`,
     };
+  }
+  if(brandReferenceRequired && !brandComposited){
+    return { ...prepared, phase:"image_failed", ok:false, stage:"brand-compositor",
+      error:"Image refusée : le compositeur serveur n'a pas appliqué le logo et les textes officiels exacts." };
   }
 
   onStatus && onStatus("Analyse de l'image obtenue...");
@@ -5135,6 +5212,9 @@ async function confirmAndGenerateImage(prepared, onStatus, cancelToken){
     analysis = await analyzeGeneratedImage(dataUrl, brief, {
       productReferenceDataUrls:productReferences.map(r=>r.dataUrl),
       deviceIconsAllowed: healyReferenceRequired,
+      brandIntegrated: brandComposited,
+      brandReferenceDataUrl,
+      expectedHeadline,
     });
   }catch(err){
     analysisError = `Échec de l'analyse d'image : ${String(err.message||err)} — image conservée, alt text prudent utilisé.`;
@@ -5146,6 +5226,9 @@ async function confirmAndGenerateImage(prepared, onStatus, cancelToken){
         deviceCabling:"not_visible", genericVisorOrVrHeadset:false } };
     analysis.rawOverlayDetected=true;
     analysis.rawOverlayDescription="Contrôle du texte et du logo indisponible : validation impossible.";
+    analysis.officialLogoPresent=false; analysis.officialLogoConformity="not_checked";
+    analysis.expectedTextExact=false; analysis.observedText="";
+    analysis.unexpectedOverlayDetected=false; analysis.brandValidationNotes="Analyse indisponible.";
   }
 
   onStatus && onStatus("Rédaction du texte...");
@@ -5156,7 +5239,8 @@ async function confirmAndGenerateImage(prepared, onStatus, cancelToken){
     textError = `Échec de la génération de texte : ${String(err.message||err)} — image conservée, relance du texte seul possible.`;
   }
 
-  return { ...prepared, phase:"completed", ok:true, dataUrl, usedReference, referenceFallbackReason, logoSentAsReference, imageUsage,
+  return { ...prepared, phase:"completed", ok:true, dataUrl, usedReference, referenceFallbackReason, logoSentAsReference,
+    serverBrandCompositionUsed:true, brandComposited, imageUsage,
     analysis, analysisError, content, textError };
 }
 
@@ -5369,14 +5453,14 @@ async function callProviderImage(prompt, size, extraReferenceDataUrls, onStatus,
   }
   const referenceImageUrls = getBrandReferenceImages();
   // Références visuelles validées en premier (assetType "reference"), puis l'éventuelle image de
-  // cohérence de campagne déjà existante (siblingImage) — combinées, plafonnées à 3 (repris côté
+  // cohérence de campagne déjà existante (siblingImage) — combinées, plafonnées à 4 (repris côté
   // serveur). SAUF si options.smartReferenceDataUrls est explicitement fourni (Creative Planner) :
   // dans ce cas elle est utilisée telle quelle, MÊME VIDE — un tableau vide signifie "zéro référence
   // choisie", jamais un signal pour retomber sur les 3 premières références génériques de la
   // Bibliothèque. On teste donc la présence du tableau (Array.isArray), pas sa longueur.
   const referenceImageData = Array.isArray(options.smartReferenceDataUrls)
-    ? [...options.smartReferenceDataUrls, ...(extraReferenceDataUrls||[])].filter(Boolean).slice(0,3)
-    : [...getValidatedReferenceImageData(), ...(extraReferenceDataUrls||[])].filter(Boolean).slice(0,3);
+    ? [...options.smartReferenceDataUrls, ...(extraReferenceDataUrls||[])].filter(Boolean).slice(0,4)
+    : [...getValidatedReferenceImageData(), ...(extraReferenceDataUrls||[])].filter(Boolean).slice(0,4);
 
   if(onStatus) onStatus("Génération lancée…");
   const createRes = await fetch("/.netlify/functions/create-image-job", {
@@ -5389,6 +5473,7 @@ async function callProviderImage(prompt, size, extraReferenceDataUrls, onStatus,
       referenceImageUrls: referenceImageUrls.length ? referenceImageUrls : undefined,
       referenceImageData: referenceImageData.length ? referenceImageData : undefined,
       referenceRequired: options.referenceRequired===true,
+      brandComposition: options.brandComposition || undefined,
     }),
   });
   const createData = await fetchJsonOrThrowRaw(createRes, "création du travail");
@@ -5407,11 +5492,7 @@ async function callProviderImage(prompt, size, extraReferenceDataUrls, onStatus,
 
   try{
     const result = await pollImageJob(jobId, onStatus, cancelToken);
-    // logoSentAsReference est déterminé ICI, dans la portée où referenceImageUrls existe :
-    // getBrandReferenceImages() ne contient que le logo officiel — sa présence signifie exactement
-    // "le logo faisait partie des références envoyées à OpenAI". pollImageJob, fonction séparée
-    // (réutilisée par la reprise de job après rechargement), n'a pas accès à cette variable.
-    return { ...result, logoSentAsReference: referenceImageUrls.length > 0 };
+    return { ...result, logoSentAsReference:false };
   } finally {
     try{
       const raw = sessionStorage.getItem(IMAGE_JOB_SESSION_KEY);
@@ -5449,7 +5530,10 @@ async function pollImageJob(jobId, onStatus, cancelToken){
       const dataUrl = await fetchImageAsDataUrl(statusData.result.resultUrl);
       vfTrace("4-dataUrl-recupere", { dataUrlLength: dataUrl ? dataUrl.length : 0, prefix: dataUrl ? dataUrl.slice(0,30) : null });
       // logoSentAsReference est ajouté par callProviderImage (seule portée où les URLs de référence existent).
-      return { dataUrl, usedReference: !!statusData.result.usedReference, referenceFallbackReason: statusData.result.referenceFallbackReason || null, imageUsage: statusData.result.usage || null };
+      return { dataUrl, usedReference: !!statusData.result.usedReference,
+        referenceFallbackReason: statusData.result.referenceFallbackReason || null,
+        brandComposited: statusData.result.brandComposited===true,
+        imageUsage: statusData.result.usage || null };
     }
     if(onStatus) onStatus(statusData.status==="processing" ? "Génération OpenAI en cours…" : "Préparation de l'image…");
   }
@@ -5611,6 +5695,7 @@ async function generateCampaignPosts(topic, missionKey, onProgress){
       imagePrompt: prepared.imagePrompt,
       creativeBrief: prepared.brief || null,
       aiLogoIntegrationUsed: !!prepared.aiLogoIntegrationUsed,
+      serverBrandCompositionUsed: !!prepared.serverBrandCompositionUsed,
       plannerVersion: prepared.plannerVersion,
       blockingError: prepared.blockingError || null,
       plannerError: prepared.plannerError || null,
@@ -6841,17 +6926,11 @@ function buildPostTab(){
   });
   frag.appendChild(refInput);
 
-  // Logo intégré par l'IA (expérimental, activable) : au lieu du logo posé par Canvas après coup,
-  // le vrai fichier logo est envoyé en référence à l'API avec consigne de le reproduire à
-  // l'identique et de l'intégrer physiquement dans le décor (gravé dans la roche, en relief...).
-  // Désactivé par défaut : Canvas garantit un logo pixel-parfait à chaque fois, l'IA peut
-  // introduire de petites variations d'une génération à l'autre sur un dessin aussi fin.
+  // Le vrai logo et les textes sont rendus exactement par le compositeur serveur, puis contrôlés.
   const aiLogoRow = el("div",{style:"display:flex;align-items:center;gap:8px;margin:4px 0 14px;"});
-  const aiLogoCheckbox = el("input",{type:"checkbox"});
-  aiLogoCheckbox.checked = !!state.aiLogoIntegration;
-  aiLogoCheckbox.addEventListener("change", ()=>{ state.aiLogoIntegration = aiLogoCheckbox.checked; });
+  const aiLogoCheckbox = el("input",{type:"checkbox",checked:true,disabled:true});
   aiLogoRow.appendChild(aiLogoCheckbox);
-  aiLogoRow.appendChild(el("label",{}, "Logo intégré par l'IA dans le décor (expérimental — gravé/en relief) au lieu du logo posé par Canvas"));
+  aiLogoRow.appendChild(el("label",{}, "Identité officielle et textes composés exactement côté serveur (obligatoire)"));
   frag.appendChild(aiLogoRow);
 
   if(isCampaign){
@@ -6945,7 +7024,7 @@ function buildPostTab(){
         regenTextBtn.style.display = "inline-block";
         relaunchAnalysisBtn.style.display = "inline-block";
         relaunchAnalysisBtn.textContent = flow.finalizationError
-          ? "Recontrôler puis appliquer Canvas (sans nouvelle image)"
+          ? "Recontrôler l’image finalisée (sans nouvelle génération)"
           : "Relancer l'analyse de l'image";
       }
       const details = el("details",{open:true, style:"margin:10px 0;"});
@@ -7036,9 +7115,7 @@ function buildPostTab(){
             ? "2 vues chargées et obligatoires ✓" : "Jeu incomplet — génération bloquée"));
       }
       if(flow.phase!=="prepared") body.appendChild(row("Référence réellement utilisée", flow.usedReference ? "Oui ✓" : (flow.referenceFallbackReason ? "Non — repli : "+flow.referenceFallbackReason : "Non demandée")));
-      body.appendChild(row("Modèle", (flow.inputs?.prestation==="Luminothérapie PSIO®"||flow.inputs?.prestation==="Biorésonance quantique")
-        ? "gpt-image-2 · retouche produit verrouillée · qualité haute"
-        : "gpt-image-1"));
+      body.appendChild(row("Modèle", "gpt-image-2 · références obligatoires · qualité haute"));
       body.appendChild(row("Rédacteur DA", flow.daWriterUsed ? "Utilisé ✓ (prompt narratif)" : (flow.daWriterFallbackReason ? "Repli sur l'assemblage classique — "+flow.daWriterFallbackReason : "Désactivé")));
       if(flow.validatorReport){
         const vr = flow.validatorReport;
@@ -7071,7 +7148,7 @@ function buildPostTab(){
       if(flow.finalizationError && flow.dataUrl){
         body.appendChild(el("p",{style:"font-weight:600;margin:12px 0 6px;color:var(--red);"},
           "Image brute refusée — contrôle uniquement, publication bloquée"));
-        body.appendChild(el("img",{src:flow.dataUrl,alt:"Image brute refusée avant Canvas",
+        body.appendChild(el("img",{src:flow.dataUrl,alt:"Image finalisée mise en quarantaine",
           style:"width:100%;display:block;border:1px solid var(--red);border-radius:12px;"}));
         body.appendChild(el("a",{href:flow.dataUrl,download:`image-brute-refusee-${Date.now()}.png`,
           class:"btn-secondary",style:"display:flex;text-decoration:none;margin-top:8px;justify-content:center;"},
@@ -7119,7 +7196,7 @@ function buildPostTab(){
         const flow = await confirmAndGenerateImage(state.lastCreativeFlow, (label)=>{ imgApiStatus.textContent = label; }, cancelToken);
         state.lastCreativeFlow = flow;
         if(!flow.ok){
-          logToLab({ provider:"OpenAI", model:(flow.inputs?.prestation==="Luminothérapie PSIO®"||flow.inputs?.prestation==="Biorésonance quantique")?"gpt-image-2":"gpt-image-1", type:"image", prompt: flow.imagePrompt, promptHash: hashPrompt(flow.imagePrompt||""), cost:null, durationMs: Date.now()-t0, status:"refused", reason: flow.error });
+          logToLab({ provider:"OpenAI", model:"gpt-image-2", type:"image", prompt: flow.imagePrompt, promptHash: hashPrompt(flow.imagePrompt||""), cost:null, durationMs: Date.now()-t0, status:"refused", reason: flow.error });
           imgApiStatus.textContent = flow.error;
           renderCreativeInspector();
           confirmBtn.disabled = false; imgCancelBtn.style.display = "none"; activeCancelToken = null;
@@ -7132,14 +7209,16 @@ function buildPostTab(){
         const logoApplied=finalized.logoApplied;
         vfTrace("6-postImageId-ecrit", { postImageId: stored.id, imagesApres: state.images.length,
           persiste: LS.get("vf-post-image-id", null) });
-        logToLab({ provider:"OpenAI", model:(flow.inputs?.prestation==="Luminothérapie PSIO®"||flow.inputs?.prestation==="Biorésonance quantique")?"gpt-image-2":"gpt-image-1", type:"image", prompt: flow.imagePrompt, promptHash: hashPrompt(flow.imagePrompt), cost:null, durationMs: Date.now()-t0, status:"accepted" });
+        logToLab({ provider:"OpenAI", model:"gpt-image-2", type:"image", prompt: flow.imagePrompt, promptHash: hashPrompt(flow.imagePrompt), cost:null, durationMs: Date.now()-t0, status:"accepted" });
 
         let referenceLabel;
         if(flow.usedReference) referenceLabel = "Référence visuelle utilisée ✓";
         else if(flow.referenceFallbackReason) referenceLabel = "Référence non utilisée — génération standard de secours.";
         else referenceLabel = "Génération standard — aucune référence visuelle fournie.";
-        const parts = [logoRequiredFor(platform) ? (logoApplied?"Image générée, logo appliqué ✓":"Image générée — aucun logo marqué comme actif de marque.") : "Image générée et ajoutée à ta bibliothèque ✓", referenceLabel];
-        if(finalized.layoutReport && !finalized.layoutReport.skipped){
+        const parts = [finalized.logoInScene ? "Image générée, identité et texte contrôlés ✓" : (logoRequiredFor(platform) ? (logoApplied?"Image générée, logo appliqué ✓":"Image générée — aucun logo marqué comme actif de marque.") : "Image générée et ajoutée à ta bibliothèque ✓"), referenceLabel];
+        if(finalized.layoutReport && finalized.layoutReport.serverComposited){
+          parts.push("Composition serveur premium exacte ✓");
+        }else if(finalized.layoutReport && !finalized.layoutReport.skipped){
           parts.push(`Composition Canvas premium ✓ (texte : ${finalized.layoutReport.textZone||"aucun"} · logo : ${finalized.layoutReport.logoZone||"aucun"})`);
         }
         if(flow.content) parts.push("Texte inséré dans la zone de publication ci-dessous ✓");
@@ -7199,7 +7278,7 @@ function buildPostTab(){
           logToLab({provider:"OpenAI",model:"gpt-image-2",type:"image",prompt:flow.imagePrompt,
             promptHash:hashPrompt(flow.imagePrompt||""),cost:null,durationMs:null,status:"accepted",
             reason:"Image brute récupérée après nouveau contrôle factuel, sans nouvelle génération image."});
-          imgApiStatus.textContent = "Image brute récupérée ✓ Analyse conforme, Canvas appliqué et image ajoutée à la Bibliothèque — aucun nouvel appel image facturé.";
+          imgApiStatus.textContent = "Image récupérée ✓ Analyse conforme et image finalisée ajoutée à la Bibliothèque — aucun nouvel appel image facturé.";
           renderMain();
           return;
         }
@@ -7233,7 +7312,7 @@ function buildPostTab(){
           deviceIconsAllowed: flow.inputs?.prestation==="Biorésonance quantique",
         });
         flow.analysisError=null;
-        imgApiStatus.textContent="Rédaction du texte puis application Canvas...";
+        imgApiStatus.textContent="Rédaction du texte puis composition de secours de l’import manuel...";
         flow.content=await generateContentFromBrief(flow.brief,flow.analysis,flow.inputs.platform,flow.inputs.mission);
         flow.textError=null;
         flow.phase="completed";
@@ -7241,7 +7320,7 @@ function buildPostTab(){
         const finalized=await finalizeGeneratedImage(flow);
         storeFinalizedCreativeFlow(flow,finalized);
         flow.finalizationError=null;
-        imgApiStatus.textContent="Image brute récupérée ✓ Contrôle conforme, Canvas appliqué et image ajoutée à la Bibliothèque — aucun nouvel appel image facturé.";
+        imgApiStatus.textContent="Import manuel récupéré ✓ Contrôle conforme et image ajoutée à la Bibliothèque — aucun nouvel appel image facturé.";
         renderMain();
       }catch(err){
         flow.dataUrl=null;
@@ -7291,7 +7370,7 @@ function buildPostTab(){
     }
   }}, [svgIcon(ICONS.wand,16), el("span",{}, platform==="Story" ? "Générer l'image (accroche + logo intégrés)" : imageOnlyMode ? "Générer l'image" : "Générer image + texte")]));
 
-  if(imageOnlyMode) frag.appendChild(el("p",{class:"sublabel", style:"margin-top:-8px;"}, "Mode image seule — aucun texte ne sera généré. Passe par \"Créer un post\" si tu as aussi besoin d'une légende."));
+  if(imageOnlyMode) frag.appendChild(el("p",{class:"sublabel", style:"margin-top:-8px;"}, "Mode image seule — aucune légende de publication ne sera générée. L'accroche prévue dans le brief reste intégrée au visuel lorsqu'elle est autorisée sur cette plateforme."));
 
   if(state.imagePrompt){
     const txtDetail = textModulesDetail(platform);
@@ -7301,7 +7380,7 @@ function buildPostTab(){
       textMods: txtDetail.kept, textIgnored: txtDetail.ignored, imageMods: imgDetail.kept, imageIgnored: imgDetail.ignored,
       duplicatesRemoved: txtDetail.duplicatesRemoved + imgDetail.duplicatesRemoved,
       aspect: PLATFORM_ASPECT[platform],
-      overlayRule: platform==="Story" ? "titre de prestation + sous-ligne courte, composition Canvas adaptative + signature officielle" : (PLATFORM_OVERLAY[platform]==="aucun" ? "aucun texte sur l'image ; signature officielle Canvas uniquement" : `accroche courte + signature officielle, composition Canvas adaptative (${PLATFORM_MAXCHARS[platform]} car. max)`),
+      overlayRule: platform==="Story" ? "accroche courte + logo officiel + signature, composés exactement côté serveur puis contrôlés" : (PLATFORM_OVERLAY[platform]==="aucun" ? "aucune accroche éditoriale ; logo officiel et signature composés exactement côté serveur" : `accroche courte + logo officiel + signature, composés exactement côté serveur puis contrôlés (${PLATFORM_MAXCHARS[platform]} car. max)`),
     }));
 
     const risks = currentRiskFlags();
@@ -7710,11 +7789,14 @@ async function generateImageForCampaignItem(item, onStatus, cancelToken){
   const finalizedItem = await finalizeGeneratedImage({
     inputs:{ platform:item.platform, prestation:state.prestationName }, dataUrl: phaseB.dataUrl,
     logoSentAsReference:false, usedReference, content: phaseB.content || item.contentData || null,
-    brief:item.creativeBrief, aiLogoIntegrationUsed: !!item.aiLogoIntegrationUsed,
+    brief:item.creativeBrief, analysis:phaseB.analysis||null,
+    aiLogoIntegrationUsed:false, serverBrandCompositionUsed:true,
+    brandComposited:phaseB.brandComposited===true,
   });
   const dataUrl = finalizedItem.dataUrl;
   const logoApplied = finalizedItem.logoApplied;
   item.imageDataUrl = dataUrl; item.logoApplied = logoApplied; item.usedReference = usedReference; item.referenceFallbackReason = referenceFallbackReason;
+  item.serverBrandCompositionUsed = true; item.brandComposited = phaseB.brandComposited===true;
   item.layoutReport = finalizedItem.layoutReport||null;
   item.analysis = phaseB.analysis || null; item.analysisError = phaseB.analysisError || null;
   item.contentData = phaseB.content || item.contentData || null; item.textError = phaseB.textError || null;
@@ -7726,7 +7808,7 @@ async function generateImageForCampaignItem(item, onStatus, cancelToken){
   item.headlineApplied = !!finalizedItem.headlineApplied; // texte déjà présent : accroche posée dès la génération
   item.overlayWarning = finalizedItem.overlayWarning || null;
   const saved = LS.set("vf-scheduled", state.scheduled);
-  logToLab({ provider:"OpenAI", model:"gpt-image-1-mini", type:"image", prompt:item.imagePrompt, promptHash:hashPrompt(item.imagePrompt), cost:null, durationMs:Date.now()-t0, status:"accepted" });
+  logToLab({ provider:"OpenAI", model:"gpt-image-2", type:"image", prompt:item.imagePrompt, promptHash:hashPrompt(item.imagePrompt), cost:null, durationMs:Date.now()-t0, status:"accepted" });
   let referenceLabel;
   if(usedReference) referenceLabel = "Référence visuelle utilisée ✓";
   else if(referenceFallbackReason) referenceLabel = "Référence non utilisée — génération standard de secours.";
@@ -8424,7 +8506,7 @@ function buildApiTab(){
   });
 
   frag.appendChild(el("p",{class:"label", style:"margin-top:18px;"},"Génération d'image"));
-  frag.appendChild(el("p",{class:"sublabel"},"OpenAI (gpt-image-1) est câblé en appel direct via la fonction serveur, si OPENAI_API_KEY est configurée. Les autres générateurs d'images (Stability, Ideogram, Flux/Fal) restent en mode manuel pour l'instant — chacun a un format d'API différent et mérite d'être fait proprement plutôt que rapidement."));
+  frag.appendChild(el("p",{class:"sublabel"},"OpenAI (gpt-image-2) est câblé en appel direct via la fonction serveur, si OPENAI_API_KEY est configurée. Les références produit et le logo officiel sont transmis au modèle, puis leur conformité et les textes sont contrôlés avant publication."));
 
   return frag;
 }
@@ -8441,7 +8523,7 @@ function buildApiTab(){
 ============================================================ */
 
 /* ---- Versionnage ---- */
-const VF_VERSION = "2.2.20-meta-spacing"; // semver manuelle : à incrémenter à chaque déploiement touchant le moteur
+const VF_VERSION = "2.4.0-server-brand-compositor"; // scène gpt-image-2, identité exacte Sharp/SVG côté serveur
 /* Hash déterministe de l'état des règles : deux runs au même hash = strictement les mêmes règles.
    Couvre : modules (contenu+état), UNIVERS_SDZ, charte condensée, garde-fou sécurité. */
 function computeModulesHash(){
@@ -8624,7 +8706,9 @@ const BENCH_PRICE_TABLE = Object.freeze({
     "gpt-5-mini": { in: 0.25, out: 2.00 },
     "gpt-5-nano": { in: 0.05, out: 0.40 },
   }),
-  // Images gpt-image-1 : trois types de tokens ($ / 1M) — entrée texte, entrée image, sortie image.
+  // Ancienne grille conservée uniquement pour relire les runs historiques. Aucun tarif
+  // gpt-image-2 n'est inventé ici : son coût reste null tant qu'une grille versionnée n'est pas
+  // renseignée explicitement.
   imagePerMTokens: Object.freeze({
     "gpt-image-1": { textIn: 5.00, imageIn: 10.00, imageOut: 40.00 },
   }),
@@ -8641,7 +8725,7 @@ function computeMeasuredTextCost(usage){
 /* Coût image MESURÉ depuis les tokens réels du job — null si tokens ou tarif inconnus. */
 function computeMeasuredImageCost(imageUsage, model){
   if(!imageUsage || imageUsage.output_tokens==null) return null;
-  const p = BENCH_PRICE_TABLE.imagePerMTokens[model||"gpt-image-1"];
+  const p = BENCH_PRICE_TABLE.imagePerMTokens[model||"gpt-image-2"];
   if(!p) return null;
   const det = imageUsage.input_tokens_details || {};
   const textIn = det.text_tokens ?? null, imageIn = det.image_tokens ?? 0;
@@ -8950,7 +9034,7 @@ registerBenchExecutor({
         imageId = `${(ctx&&ctx.runId)||"run"}_${testCase.caseId}`;
         const blob = await (await fetch(finalized.dataUrl)).blob();
         await ctx.storage.saveCaseImage(imageId, blob);
-        imageCostUsd = computeMeasuredImageCost(phaseB.imageUsage, "gpt-image-1");
+        imageCostUsd = computeMeasuredImageCost(phaseB.imageUsage, "gpt-image-2");
       }
       const vr = prepared.validatorReport || {};
       const u = prepared.usage || {};
@@ -9038,7 +9122,7 @@ registerBenchExecutor({
         imageId = `${(ctx&&ctx.runId)||"run"}_${testCase.caseId}`;
         const blob = await (await fetch(finalized.dataUrl)).blob();
         await ctx.storage.saveCaseImage(imageId, blob);
-        imageCostUsd = computeMeasuredImageCost(phaseB.imageUsage, "gpt-image-1");
+        imageCostUsd = computeMeasuredImageCost(phaseB.imageUsage, "gpt-image-2");
       }
       const vr = prepared.validatorReport || {};
       const u = prepared.usage || {};
@@ -9129,7 +9213,7 @@ function makePrioritesExecutor(variante){
           imageId = `${(ctx&&ctx.runId)||"run"}_${testCase.caseId}`;
           const blob = await (await fetch(finalized.dataUrl)).blob();
           await ctx.storage.saveCaseImage(imageId, blob);
-          imageCostUsd = computeMeasuredImageCost(phaseB.imageUsage, "gpt-image-1");
+          imageCostUsd = computeMeasuredImageCost(phaseB.imageUsage, "gpt-image-2");
         }
         const vr = prepared.validatorReport || {};
         const u = prepared.usage || {};
@@ -9221,7 +9305,7 @@ registerBenchExecutor({
         imageId = `${(ctx&&ctx.runId)||"run"}_${testCase.caseId}`;
         const blob = await (await fetch(finalized.dataUrl)).blob();
         await ctx.storage.saveCaseImage(imageId, blob);
-        imageCostUsd = computeMeasuredImageCost(phaseB.imageUsage, "gpt-image-1");
+        imageCostUsd = computeMeasuredImageCost(phaseB.imageUsage, "gpt-image-2");
       }
       const vr = prepared.validatorReport || {};
       const u = prepared.usage || {};
@@ -9283,7 +9367,7 @@ function collectBenchEnvironment(){
   return Object.freeze({
     env, host,
     providerTexte: textProvider.label, modeleTexte: textProvider.model,
-    modeleRedacteur: DA_WRITER_MODEL, modeleImage: "gpt-image-1", providerImage: "OpenAI (create-image-job)",
+    modeleRedacteur: DA_WRITER_MODEL, modeleImage: "gpt-image-2", providerImage: "OpenAI (create-image-job)",
     navigateur: (typeof navigator!=="undefined" && navigator.userAgent) || "inconnu",
   });
 }
@@ -9570,7 +9654,7 @@ function buildGenerationAuditTab(){
     perfCard.appendChild(trow(["Médiane", (med/1000).toFixed(1)+" s"]));
     perfCard.appendChild(trow(["Minimum", (ds[0]/1000).toFixed(1)+" s"]));
     perfCard.appendChild(trow(["Maximum", (ds[ds.length-1]/1000).toFixed(1)+" s"]));
-    perfCard.appendChild(el("p",{style:"font-size:11px;color:var(--muted2);margin-top:6px;"},"Durées mesurées côté client (création du job + attente complète), non joignables aux images individuelles — vf-images ne stocke pas le hash de prompt nécessaire à la jointure. Note : le champ \"model\" du Laboratoire vaut \"gpt-image-1-mini\" pour les campagnes alors que le serveur applique toujours gpt-image-1 (étiquetage erroné, confirmé par l'audit du code serveur) — il est ignoré ici."));
+    perfCard.appendChild(el("p",{style:"font-size:11px;color:var(--muted2);margin-top:6px;"},"Durées mesurées côté client (création du job + attente complète), non joignables aux images individuelles — vf-images ne stocke pas encore le hash de prompt nécessaire à cette jointure. Les nouvelles générations sont journalisées sous gpt-image-2."));
   }
   frag.appendChild(perfCard);
 
