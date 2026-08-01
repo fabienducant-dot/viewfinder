@@ -5,6 +5,11 @@
 [functions]
   node_bundler = "esbuild"
 
+# Sharp contient un module natif : Netlify doit le copier sans l'inliner dans l'artefact de la
+# Background Function qui réalise la composition exacte du logo et des textes.
+[functions."process-image-job-background"]
+  external_node_modules = ["sharp"]
+
 [functions."check-scheduled-posts"]
   schedule = "*/15 * * * *"
 
