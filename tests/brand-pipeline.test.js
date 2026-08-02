@@ -95,7 +95,13 @@ test("un logo opaque sur fond noir est détouré avant composition", async () =>
 test("le contrôle final fait confiance au logo exact composé par le serveur et bloque encore l'OCR", () => {
   assert.match(index, /officialLogoConformity="exact"/);
   assert.match(index, /overlay\.rawOverlayDetected=overlay\.expectedTextExact!==true/);
-  assert.match(index, /2\.4\.1-server-brand-fontfix/);
+  assert.match(index, /2\.4\.2-server-brand-controlfix/);
+});
+
+test("la finalisation et le recontrôle reconnaissent toujours l'identité composée côté serveur", () => {
+  assert.match(index, /const logoInScene = flow\.serverBrandCompositionUsed===true && flow\.brandComposited===true;[\s\S]*generatedOverlayViolation=logoInScene \? "" : findGeneratedOverlayViolation/);
+  assert.match(index, /brandIntegrated: flow\.serverBrandCompositionUsed===true && flow\.brandComposited===true/);
+  assert.match(index, /expectedHeadline: \(PLATFORM_OVERLAY\[flow\.inputs\?\.platform\]===/);
 });
 
 test("les formats gpt-image-2 suivent les ratios de publication", () => {
