@@ -2451,11 +2451,33 @@ function contientMotifV2EnPause(value){
   const norm = normalizeForContainmentCheck(value);
   return V2_MOTIF_PATTERNS.some(pattern => pattern.test(norm));
 }
-function buildActiveRegistryDecorContract(registres, varietyKey){
+/* Rotation de lieux : les registres actifs imposent maintenant une géographie concrète, et plus
+   seulement quelques adjectifs autour d'une pièce noire. Les familles récemment acceptées sont
+   exclues du prochain choix, toutes plateformes confondues. */
+const REGISTRY_ENVIRONMENT_FAMILIES = [
+  { id:"terrasse_minerale_suspendue", label:"terrasse minérale suspendue", description:"vaste terrasse de pierre noire entièrement ouverte sur un relief lointain, bassin linéaire latéral, murets bas et strates rocheuses ; ciel et horizon occupent une part visible du cadre, aucune pièce fermée" },
+  { id:"jardin_eau_architectural", label:"jardin d'eau architectural", description:"jardin nocturne habité par des bassins réfléchissants, passerelles asymétriques en pierre sombre, végétation sculpturale et pavillon très ouvert fondu dans le paysage ; profondeur extérieure lisible" },
+  { id:"amphitheatre_rocheux", label:"amphithéâtre rocheux à ciel ouvert", description:"gradins minéraux irréguliers creusés dans un cirque naturel, plateforme de soin sobre au premier plan et parois éclairées en profondeur ; architecture paysagère monumentale sans enceinte fermée" },
+  { id:"verriere_biophilique", label:"grande verrière biophilique", description:"haute structure vitrée et acier noir ouverte sur la nuit, végétation graphique, reflets de pluie et plusieurs niveaux de passerelles ; volume aérien lumineux, jamais petite salle sombre" },
+  { id:"pavillon_lacustre", label:"pavillon lacustre ouvert", description:"plateforme asymétrique au bord d'une eau noire, toiture flottante très légère et un seul écran minéral latéral ; paysage, eau et ciel restent visibles autour de la prestation" },
+  { id:"canyon_jardin", label:"canyon-jardin monumental", description:"soin installé sur une terrasse protégée au cœur d'un canyon végétalisé, falaises sombres, filets d'eau et traces bâties horizontales ; lumière venue du ciel, échelle spectaculaire et crédible" },
+];
+function selectRegistryEnvironmentFamily(actifs, varietyKey){
+  if(!actifs.some(r=>["cinematographie","architecture","fantastique"].includes(r))) return null;
+  const recent = (state.imageHistory||[]).slice(-6).map(e=>e.sceneFamily).filter(Boolean);
+  const available = REGISTRY_ENVIRONMENT_FAMILIES.filter(f=>!recent.includes(f.id));
+  const pool = available.length ? available : REGISTRY_ENVIRONMENT_FAMILIES;
+  const seed = parseInt(hashPrompt(`${String(varietyKey||"")}|${(state.imageHistory||[]).length}|${actifs.join("|")}`), 36) || 0;
+  return pool[Math.abs(seed) % pool.length];
+}
+function buildActiveRegistryDecorContract(registres, varietyKey, forcedFamilyId){
   const actifs = [...new Set((Array.isArray(registres) ? registres : [])
     .filter(r=>KNOWN_REGISTRES.includes(r)))];
   if(!actifs.length) return "";
   const directions = [];
+  const environment = REGISTRY_ENVIRONMENT_FAMILIES.find(f=>f.id===forcedFamilyId)
+    || selectRegistryEnvironmentFamily(actifs, varietyKey);
+  if(environment) directions.push(`FAMILLE DE LIEU IMPOSÉE « ${environment.label} » : ${environment.description}`);
   if(actifs.includes("cinematographie")){
     directions.push("profondeur cinématographique nettement lisible sur trois plans, avec premier plan sombre texturé, sujet parfaitement détaché au plan principal et arrière-plan éclairé par une lumière latérale");
   }
@@ -3096,6 +3118,8 @@ function validateAndFixBriefV2(brief, allowed, exclusions, typeCreationImpose, p
   const fixed = { ...brief };
   fixed.registresActifs = [...new Set((Array.isArray(registres) ? registres : [])
     .filter(r=>KNOWN_REGISTRES.includes(r)))];
+  const environmentFamily = selectRegistryEnvironmentFamily(fixed.registresActifs, prestation);
+  fixed.sceneFamily = environmentFamily ? environmentFamily.id : "";
   let corrected = false;
 
   // 5. Confinement archétype — correction silencieuse, même mécanique que l'archétype narratif V1.
@@ -3462,6 +3486,13 @@ function validateAndFixBriefV2(brief, allowed, exclusions, typeCreationImpose, p
       fixed.texteImage = `${titreCourt} | ${sousLigneCourte}`;
       corrected = true;
     }
+  }
+
+  /* Le serveur applique un lock-up bas unique. Le Planner ne peut plus remettre l'accroche en
+     haut sur le visage du praticien, ni séparer arbitrairement logo et texte. */
+  if(["Instagram","Facebook","Story"].includes(platform) && PLATFORM_OVERLAY[platform]!=="aucun"){
+    if(fixed.zoneTexte!=="inférieure"){ fixed.zoneTexte="inférieure"; corrected=true; }
+    if(fixed.zoneLogo!=="inférieure"){ fixed.zoneLogo="inférieure"; corrected=true; }
   }
 
   // 1. Interdits absolus : correction locale déterministe pour ne pas condamner tout un item
@@ -4114,6 +4145,7 @@ function buildPromptHeader(brief, platform, aspectKey, isCampaign){
 }
 function buildFixedGuardrailBlocks(brief, platform){
   const wantsRealLogo = logoRequiredFor(platform);
+  const brandSafePercent = platform === "Story" ? 32 : 38;
   const isPsio = /psio/i.test([
     brief.sujetPrincipal, brief.action, brief.caracteristiquePrestationVisible,
     brief.caracteristiqueSourcePrestation,
@@ -4127,7 +4159,7 @@ function buildFixedGuardrailBlocks(brief, platform){
     : brief.presenceSoin==="suggeree" ? "La sensation du soin est suggérée, jamais son déroulé technique."
     : "Une scène de soin peut être visible si elle reste professionnelle, respectueuse, éditoriale et premium.";
   const logoPhrase = wantsRealLogo
-    ? `IMAGE BRUTE SANS IDENTITÉ : ne dessine aucun logo, zèbre, sceau, emblème, nom de marque, lettre ou mot. Le serveur ajoutera ensuite le fichier logo officiel et la signature exacte. Réserve une zone visuellement calme, sombre mais détaillée, avec une vraie respiration éditoriale dans la zone « ${String(brief.zoneTexte||brief.zoneLogo||"supérieure")} » ; aucun visage, geste important ni matériel distinctif ne doit empiéter sur cette zone.`
+    ? `IMAGE BRUTE SANS IDENTITÉ : ne dessine aucun logo, zèbre, sceau, emblème, nom de marque, lettre ou mot. Le serveur ajoutera ensuite le fichier logo officiel et la signature exacte. CONTRAT DE MISE EN PAGE : réserve les ${brandSafePercent}% inférieurs du cadre comme champ éditorial sombre, détaillé et respirant ; place tout visage, toute main active, le geste essentiel et le matériel distinctif au-dessus de cette limite. Cette zone basse ne doit contenir qu'un drapé, une matière, un sol, de l'eau ou un décor secondaire sans importance. Le serveur y composera, dans cet ordre et avec de vrais espacements : accroche, filet, logo officiel, puis signature. Aucun visage ni geste important ne doit être placé derrière ces éléments.`
     : "Aucun logo, médaillon ou monogramme inventé.";
   const negativeItems = String(brief.negativePrompt||"")
     .split(/\s*[,;]\s*/).map(x=>x.trim()).filter(Boolean);
@@ -4148,9 +4180,9 @@ function buildFixedGuardrailBlocks(brief, platform){
     : isHealy
     ? "VERROU PRODUIT — RETOUCHE À PARTIR DE L'IMAGE 1 : les deux images fournies décrivent le même dispositif officiel Healy. L'image 1, vue de face nette sur fond blanc, est la photographie de base à transformer : conserve exactement la forme carrée à coins arrondis et la base élargie du boîtier. La grande zone circulaire dégradée au centre de la face (là où figure le logo du fabricant) doit devenir une surface plate, mate et unie, de la même couleur noire ou dorée que le reste du boîtier — PAS un médaillon, PAS un anneau, PAS un cercle concentrique, PAS un point central, PAS un blason : une simple portion de surface sans relief ni ornement, comme si cette zone n'avait jamais porté de marquage. Les zones de commande peuvent conserver de simples repères abstraits de boutons (petits cercles, points, traits) à leur emplacement d'origine — c'est un détail normal d'appareil — mais sans aucune icône, pictogramme, lettre ou symbole reconnaissable (pas de bluetooth, pas de symbole batterie, pas de lettre). Image 2 : photographie réelle du dispositif avec son accessoire attaché, référence secondaire pour confirmer le volume et la silhouette complète en trois dimensions. Recolore uniquement les surfaces blanches et les teintes bleues, roses, vertes et turquoise du boîtier en noir profond et or métallique noble SDZ, sans modifier sa géométrie, sa perspective ni sa position. Ignore et ne recopie aucune inscription, marque, mot, lettre, chiffre, logo, médaillon, anneau ou étiquette visible sur le dispositif ou dans les références. Aucun autre dispositif électronique n'est admis. Change uniquement le fond, la lumière et la palette ; conserve le produit de l'image 1 inchangé dans sa forme et son placement."
     : "";
-  const registryGuard = buildActiveRegistryDecorContract(brief.registresActifs);
+  const registryGuard = buildActiveRegistryDecorContract(brief.registresActifs, null, brief.sceneFamily);
   const headlinePhrase = (PLATFORM_OVERLAY[platform]==="accroche" || PLATFORM_OVERLAY[platform]==="fort")
-    ? `ZONE D'ACCROCHE : n'inscris aucun texte dans l'image brute. Compose la scène pour que l'accroche exacte « ${String(brief.texteImage||"").replace(/\|/g," — ")} » puisse être rendue ensuite par le serveur dans la zone calme demandée, sans masquer le soin, le sujet ni le matériel.`
+    ? `ZONE D'ACCROCHE : n'inscris aucun texte dans l'image brute. Compose la scène pour que l'accroche exacte « ${String(brief.texteImage||"").replace(/\|/g," — ")} » puisse être rendue ensuite dans le champ éditorial inférieur, sans masquer le soin, le sujet ni le matériel.`
     : "Aucune accroche éditoriale ni identité n'est inscrite dans l'image brute ; le serveur posera uniquement la signature officielle exacte.";
   return `${charte} ${soinPhrase} Noir profond comme écrin, jamais comme sous-exposition. Sujet, geste et matériel lisibles au premier regard. Or métallique noble, jamais orange, ambre, feu ou incendie. Énergie ascendante et désirable. ${registryGuard ? `CONTRAT DE VISIBILITÉ DES REGISTRES : ${registryGuard}. Le décor doit être immédiatement perceptible derrière et autour du sujet ; une grande surface noire uniforme ou vide constitue un échec.` : ""} L'ombre ou la fragmentation ne peuvent exister qu'en opposition secondaire clairement dépassée par le sujet ; jamais horreur, menace, désespoir sans issue, personnage encapuchonné menaçant, visage central mutilé, crypte, rituel, sorcellerie, astrologie ou signes zodiacaux. ${headlinePhrase} ${storyGuard} ${psioProductGuard} ${logoPhrase}${eviter ? ` À éviter absolument : ${eviter}.` : ""}
 
@@ -4321,6 +4353,7 @@ function recordStructuredImageEntry(inputs, brief, referenceIds, imagePrompt, im
     prestation: inputs.prestation || null, topic: inputs.topic, archetype: brief.archetypeNarratif,
     subject: brief.sujetPrincipal, action: brief.action, decor: brief.decor, framing: brief.cadrage,
     pointOfView: brief.pointDeVue, lighting: brief.lumiere, careScene: brief.presenceSoin,
+    sceneFamily: brief.sceneFamily || null,
     referenceIds: referenceIds || [], promptImage: imagePrompt, imageId,
   };
   state.imageHistory.push(entry);
@@ -8541,7 +8574,7 @@ function buildApiTab(){
 ============================================================ */
 
 /* ---- Versionnage ---- */
-const VF_VERSION = "2.4.2-server-brand-controlfix"; // identité serveur exacte jamais reclassée comme overlay IA
+const VF_VERSION = "2.5.0-scene-rotation-safe-lockup"; // cartouche bas protégé + rotation réelle des décors
 /* Hash déterministe de l'état des règles : deux runs au même hash = strictement les mêmes règles.
    Couvre : modules (contenu+état), UNIVERS_SDZ, charte condensée, garde-fou sécurité. */
 function computeModulesHash(){

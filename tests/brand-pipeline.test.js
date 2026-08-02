@@ -95,7 +95,24 @@ test("un logo opaque sur fond noir est détouré avant composition", async () =>
 test("le contrôle final fait confiance au logo exact composé par le serveur et bloque encore l'OCR", () => {
   assert.match(index, /officialLogoConformity="exact"/);
   assert.match(index, /overlay\.rawOverlayDetected=overlay\.expectedTextExact!==true/);
-  assert.match(index, /2\.4\.2-server-brand-controlfix/);
+  assert.match(index, /2\.5\.0-scene-rotation-safe-lockup/);
+});
+
+test("le lock-up serveur protège le sujet et sépare accroche, logo et signature", () => {
+  const compositor = fs.readFileSync(path.join(root, "netlify/functions/_shared/brand-compositor.js"), "utf8");
+  assert.match(compositor, /\["Instagram","Facebook","Story"\]\.includes\(platform\)/);
+  assert.match(compositor, /const dividerY = headlineEnd/);
+  assert.match(index, /const brandSafePercent = platform === "Story" \? 32 : 38/);
+  assert.match(index, /réserve les \$\{brandSafePercent\}% inférieurs du cadre comme champ éditorial/);
+  assert.match(index, /fixed\.zoneTexte="inférieure"/);
+});
+
+test("les registres actifs imposent une rotation de vraies familles de lieux", () => {
+  assert.match(index, /REGISTRY_ENVIRONMENT_FAMILIES/);
+  assert.match(index, /terrasse_minerale_suspendue/);
+  assert.match(index, /amphitheatre_rocheux/);
+  assert.match(index, /verriere_biophilique/);
+  assert.match(index, /sceneFamily: brief\.sceneFamily/);
 });
 
 test("la finalisation et le recontrôle reconnaissent toujours l'identité composée côté serveur", () => {
