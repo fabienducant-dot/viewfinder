@@ -1,10 +1,33 @@
 "use strict";
 
+const fs = require("fs");
 const sharp = require("sharp");
+const opentype = require("opentype.js");
 
 const GOLD = "#D9AD3B";
 const PALE_GOLD = "#F0D889";
 const IVORY = "#F7F2E8";
+
+/* Netlify n'embarque pas les polices système utilisées par librsvg. Avec un simple <text>
+   SVG, les accents français devenaient donc des carrés. Les lettres sont maintenant converties
+   en tracés vectoriels à partir d'une police Cinzel embarquée : le rendu est identique sur tous
+   les environnements et l'OCR reçoit de vraies lettres lisibles. */
+function loadFont(relativeFile){
+  const file = require.resolve(`@fontsource/cinzel/files/${relativeFile}`);
+  const buffer = fs.readFileSync(file);
+  const arrayBuffer = buffer.buffer.slice(buffer.byteOffset, buffer.byteOffset + buffer.byteLength);
+  return opentype.parse(arrayBuffer);
+}
+
+function loadFontSet(weight){
+  return {
+    latin: loadFont(`cinzel-latin-${weight}-normal.woff`),
+    extended: loadFont(`cinzel-latin-ext-${weight}-normal.woff`),
+  };
+}
+
+const DISPLAY_FONT = loadFontSet(600);
+const TEXT_FONT = loadFontSet(400);
 
 function dataUrlToBuffer(dataUrl){
   const match = String(dataUrl || "").match(/^data:image\/[a-zA-Z0-9.+-]+;base64,(.+)$/);
@@ -53,6 +76,27 @@ function headlineParts(headline){
   return { title: parts[0] || "", subtitle: parts.slice(1).join(" — ") };
 }
 
+function vectorText(fontSet, text, centerX, baselineY, fontSize, className){
+  const value = String(text || "");
+  if(!value) return "";
+  const runs = Array.from(value).map(character=>{
+    const latinGlyph = fontSet.latin.charToGlyph(character);
+    const useExtended = latinGlyph.index === 0 && character !== "\0";
+    const font = useExtended ? fontSet.extended : fontSet.latin;
+    const glyph = useExtended ? font.charToGlyph(character) : latinGlyph;
+    return { font, glyph };
+  });
+  const advances = runs.map(({font,glyph})=>(glyph.advanceWidth || font.unitsPerEm*.38) * fontSize / font.unitsPerEm);
+  const width = advances.reduce((sum, advance)=>sum+advance, 0);
+  let x = centerX - width / 2;
+  const paths = runs.map(({glyph}, index)=>{
+    const node = glyph.getPath(x, baselineY, fontSize).toPathData(2);
+    x += advances[index];
+    return node;
+  }).join("");
+  return `<path d="${paths}" class="${className}"/>`;
+}
+
 function layoutFor(width, height, platform, requestedZone, hasHeadline){
   const zone = normalizedZone(requestedZone, platform);
   const portrait = height > width * 1.35;
@@ -78,15 +122,16 @@ function buildOverlaySvg(width, height, layout, platform, headline){
   const titleLines = wrapWords(title.toUpperCase(), layout.portrait ? 24 : 31, 2);
   const subtitleLines = wrapWords(subtitle.toUpperCase(), layout.portrait ? 34 : 44, 2);
   const centerX = layout.x + layout.width / 2;
-  const logoSpace = Math.round(layout.height * (headline ? 0.32 : 0.48));
-  const brandY = layout.y + logoSpace;
-  let textY = brandY + brandSize * 2.35;
+  const plannedLogoWidth = Math.round(layout.width * (layout.portrait ? 0.19 : 0.16));
+  const plannedLogoTop = layout.y + Math.round(layout.height * 0.025);
+  const brandY = plannedLogoTop + plannedLogoWidth + Math.round(brandSize * 1.05);
+  let textY = brandY + brandSize * 1.38 + citySize + titleSize * 1.12;
   const titleNodes = titleLines.map((line, index)=>
-    `<text x="${centerX}" y="${textY + index * titleSize * 1.05}" class="title">${escapeXml(line)}</text>`
+    vectorText(DISPLAY_FONT, line, centerX, textY + index * titleSize * 1.05, titleSize, "title")
   ).join("");
   textY += titleLines.length * titleSize * 1.05 + subtitleSize * 0.55;
   const subtitleNodes = subtitleLines.map((line, index)=>
-    `<text x="${centerX}" y="${textY + index * subtitleSize * 1.10}" class="subtitle">${escapeXml(line)}</text>`
+    vectorText(TEXT_FONT, line, centerX, textY + index * subtitleSize * 1.10, subtitleSize, "subtitle")
   ).join("");
   const scrimTop = Math.max(0, layout.y - Math.round(height * 0.025));
   const scrimBottom = Math.min(height, layout.y + layout.height + Math.round(height * 0.025));
@@ -102,21 +147,55 @@ function buildOverlaySvg(width, height, layout, platform, headline){
         </linearGradient>
         <filter id="shadow"><feGaussianBlur stdDeviation="5"/></filter>
         <style>
-          .brand,.city,.title,.subtitle { text-anchor:middle; font-family:Georgia,'Times New Roman',serif; paint-order:stroke fill; stroke:#050505; stroke-opacity:.72; }
-          .brand { fill:${IVORY}; font-size:${brandSize}px; font-weight:600; letter-spacing:${Math.round(brandSize*.09)}px; stroke-width:2px; }
-          .city { fill:${GOLD}; font-size:${citySize}px; font-weight:600; letter-spacing:${Math.round(citySize*.28)}px; stroke-width:1px; }
-          .title { fill:${IVORY}; font-size:${titleSize}px; font-weight:600; letter-spacing:${Math.round(titleSize*.07)}px; stroke-width:3px; }
-          .subtitle { fill:${PALE_GOLD}; font-size:${subtitleSize}px; font-weight:500; letter-spacing:${Math.round(subtitleSize*.09)}px; stroke-width:2px; }
+          .brand,.city,.title,.subtitle { paint-order:stroke fill; stroke:#050505; stroke-opacity:.72; }
+          .brand { fill:${IVORY}; stroke-width:2px; }
+          .city { fill:${GOLD}; stroke-width:1px; }
+          .title { fill:${IVORY}; stroke-width:3px; }
+          .subtitle { fill:${PALE_GOLD}; stroke-width:2px; }
         </style>
       </defs>
       <rect x="0" y="${scrimTop}" width="${width}" height="${scrimBottom-scrimTop}" fill="url(#scrim)"/>
       <rect x="${Math.round(width*.018)}" y="${Math.round(height*.012)}" width="${Math.round(width*.964)}" height="${Math.round(height*.976)}" rx="${Math.round(width*.004)}" fill="none" stroke="${GOLD}" stroke-opacity=".68" stroke-width="${border}"/>
-      <line x1="${layout.x + layout.width*.16}" y1="${brandY - brandSize*.62}" x2="${layout.x + layout.width*.36}" y2="${brandY - brandSize*.62}" stroke="${GOLD}" stroke-width="${border}" stroke-opacity=".82"/>
-      <line x1="${layout.x + layout.width*.64}" y1="${brandY - brandSize*.62}" x2="${layout.x + layout.width*.84}" y2="${brandY - brandSize*.62}" stroke="${GOLD}" stroke-width="${border}" stroke-opacity=".82"/>
-      <text x="${centerX}" y="${brandY}" class="brand">LA SANTÉ DES ZÈBRES</text>
-      <text x="${centerX}" y="${brandY + brandSize*1.38}" class="city">RAISMES</text>
+      <line x1="${layout.x + layout.width*.14}" y1="${brandY - brandSize*.62}" x2="${layout.x + layout.width*.31}" y2="${brandY - brandSize*.62}" stroke="${GOLD}" stroke-width="${border}" stroke-opacity=".82"/>
+      <line x1="${layout.x + layout.width*.69}" y1="${brandY - brandSize*.62}" x2="${layout.x + layout.width*.86}" y2="${brandY - brandSize*.62}" stroke="${GOLD}" stroke-width="${border}" stroke-opacity=".82"/>
+      ${vectorText(DISPLAY_FONT, "LA SANTÉ DES ZÈBRES", centerX, brandY, brandSize, "brand")}
+      ${vectorText(DISPLAY_FONT, "RAISMES", centerX, brandY + brandSize*1.38, citySize, "city")}
       ${titleNodes}${subtitleNodes}
     </svg>`);
+}
+
+async function prepareLogoOverlay(logoBuffer){
+  const source = sharp(logoBuffer, { failOn: "none" }).rotate().ensureAlpha();
+  const { data, info } = await source.raw().toBuffer({ resolveWithObject: true });
+  const px = Buffer.from(data);
+  const borderDepth = Math.max(2, Math.round(Math.min(info.width, info.height) * .025));
+  let borderSamples = 0;
+  let opaqueDarkBorder = 0;
+  for(let y=0; y<info.height; y++){
+    for(let x=0; x<info.width; x++){
+      if(x>=borderDepth && x<info.width-borderDepth && y>=borderDepth && y<info.height-borderDepth) continue;
+      const offset=(y*info.width+x)*info.channels;
+      borderSamples++;
+      if(Math.max(px[offset],px[offset+1],px[offset+2])<50 && px[offset+3]>245) opaqueDarkBorder++;
+    }
+  }
+  const opaqueDarkBorderRatio = borderSamples ? opaqueDarkBorder / borderSamples : 0;
+
+  /* Certains logos enregistrés sont des JPEG/PNG opaques sur rectangle noir. On ne détoure que
+     si au moins trois coins prouvent ce fond. Les pixels dorés restent intacts ; le noir de fond
+     devient transparent et ne forme plus de vignette rectangulaire sur l'affiche. */
+  if(opaqueDarkBorderRatio >= .60){
+    for(let i=0; i<px.length; i+=info.channels){
+      const luminance = Math.max(px[i], px[i+1], px[i+2]);
+      const backgroundAlpha = luminance <= 16 ? 0 : luminance >= 62 ? 1 : (luminance - 16) / 46;
+      px[i+3] = Math.round(px[i+3] * backgroundAlpha);
+    }
+  }
+
+  return sharp(px, { raw: info })
+    .trim({ background: { r:0, g:0, b:0, alpha:0 } })
+    .png()
+    .toBuffer();
 }
 
 async function composeBrandPoster({ imageBuffer, logoDataUrl, platform, headline, zoneText }){
@@ -132,7 +211,8 @@ async function composeBrandPoster({ imageBuffer, logoDataUrl, platform, headline
   const logoWidth = Math.round(layout.width * (layout.portrait ? 0.19 : 0.16));
   const logoTop = layout.y + Math.round(layout.height * 0.025);
   const logoLeft = Math.round(layout.x + (layout.width - logoWidth) / 2);
-  const resizedLogo = await sharp(logoBuffer, { failOn: "none" })
+  const cleanLogo = await prepareLogoOverlay(logoBuffer);
+  const resizedLogo = await sharp(cleanLogo, { failOn: "none" })
     .resize({ width: logoWidth, withoutEnlargement: false, fit: "inside" })
     .png().toBuffer();
   const overlaySvg = buildOverlaySvg(width, height, layout, platform, headline);
@@ -145,4 +225,4 @@ async function composeBrandPoster({ imageBuffer, logoDataUrl, platform, headline
     .toBuffer();
 }
 
-module.exports = { composeBrandPoster, dataUrlToBuffer, escapeXml, wrapWords, normalizedZone };
+module.exports = { composeBrandPoster, dataUrlToBuffer, escapeXml, wrapWords, normalizedZone, prepareLogoOverlay, vectorText };
