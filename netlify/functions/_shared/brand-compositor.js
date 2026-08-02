@@ -98,17 +98,21 @@ function vectorText(fontSet, text, centerX, baselineY, fontSize, className){
 }
 
 function layoutFor(width, height, platform, requestedZone, hasHeadline){
-  const zone = normalizedZone(requestedZone, platform);
+  /* L'identité et l'accroche forment un cartouche éditorial unique en bas de l'image. L'ancien
+     empilement en haut traversait régulièrement le visage et serrait la signature contre le logo. */
+  const zone = hasHeadline && ["Instagram","Facebook","Story"].includes(platform)
+    ? "bottom"
+    : normalizedZone(requestedZone, platform);
   const portrait = height > width * 1.35;
   const landscape = width > height * 1.35;
   const margin = Math.round(width * (portrait ? 0.065 : 0.052));
   const boxW = landscape ? Math.round(width * 0.56) : width - margin * 2;
-  const boxH = Math.round(height * (hasHeadline ? (portrait ? 0.39 : 0.43) : 0.23));
+  const boxH = Math.round(height * (hasHeadline ? (portrait ? 0.32 : 0.38) : 0.23));
   const x = landscape ? margin : margin;
   let y;
   if(zone === "top") y = Math.round(height * 0.055);
   else if(zone === "center") y = Math.round((height - boxH) * 0.50);
-  else y = height - boxH - Math.round(height * 0.055);
+  else y = height - boxH - Math.round(height * (portrait ? 0.035 : 0.045));
   return { x, y, width: boxW, height: boxH, margin, portrait, landscape };
 }
 
@@ -117,22 +121,25 @@ function buildOverlaySvg(width, height, layout, platform, headline){
   const scale = Math.max(0.78, Math.min(1.55, width / 1088));
   const titleSize = Math.round((layout.portrait ? 67 : 62) * scale);
   const subtitleSize = Math.round((layout.portrait ? 42 : 38) * scale);
-  const brandSize = Math.round((layout.portrait ? 31 : 29) * scale);
-  const citySize = Math.round(16 * scale);
+  const brandSize = Math.round((layout.portrait ? 29 : 27) * scale);
+  const citySize = Math.round(15 * scale);
   const titleLines = wrapWords(title.toUpperCase(), layout.portrait ? 24 : 31, 2);
   const subtitleLines = wrapWords(subtitle.toUpperCase(), layout.portrait ? 34 : 44, 2);
   const centerX = layout.x + layout.width / 2;
-  const plannedLogoWidth = Math.round(layout.width * (layout.portrait ? 0.19 : 0.16));
-  const plannedLogoTop = layout.y + Math.round(layout.height * 0.025);
-  const brandY = plannedLogoTop + plannedLogoWidth + Math.round(brandSize * 1.05);
-  let textY = brandY + brandSize * 1.38 + citySize + titleSize * 1.12;
+  const plannedLogoWidth = Math.round(layout.width * (layout.portrait ? 0.115 : 0.10));
+  const textTop = layout.y + Math.round(layout.height * 0.12);
+  let textY = textTop + titleSize;
   const titleNodes = titleLines.map((line, index)=>
     vectorText(DISPLAY_FONT, line, centerX, textY + index * titleSize * 1.05, titleSize, "title")
   ).join("");
-  textY += titleLines.length * titleSize * 1.05 + subtitleSize * 0.55;
+  textY += titleLines.length * titleSize * 1.05 + subtitleSize * 0.45;
   const subtitleNodes = subtitleLines.map((line, index)=>
     vectorText(TEXT_FONT, line, centerX, textY + index * subtitleSize * 1.10, subtitleSize, "subtitle")
   ).join("");
+  const headlineEnd = textY + Math.max(1, subtitleLines.length) * subtitleSize * 1.10;
+  const dividerY = headlineEnd + Math.round(layout.height * 0.055);
+  const plannedLogoTop = dividerY + Math.round(layout.height * 0.055);
+  const brandY = plannedLogoTop + plannedLogoWidth + Math.round(brandSize * 1.18);
   const scrimTop = Math.max(0, layout.y - Math.round(height * 0.025));
   const scrimBottom = Math.min(height, layout.y + layout.height + Math.round(height * 0.025));
   const border = Math.max(2, Math.round(width * 0.0017));
@@ -156,8 +163,7 @@ function buildOverlaySvg(width, height, layout, platform, headline){
       </defs>
       <rect x="0" y="${scrimTop}" width="${width}" height="${scrimBottom-scrimTop}" fill="url(#scrim)"/>
       <rect x="${Math.round(width*.018)}" y="${Math.round(height*.012)}" width="${Math.round(width*.964)}" height="${Math.round(height*.976)}" rx="${Math.round(width*.004)}" fill="none" stroke="${GOLD}" stroke-opacity=".68" stroke-width="${border}"/>
-      <line x1="${layout.x + layout.width*.14}" y1="${brandY - brandSize*.62}" x2="${layout.x + layout.width*.31}" y2="${brandY - brandSize*.62}" stroke="${GOLD}" stroke-width="${border}" stroke-opacity=".82"/>
-      <line x1="${layout.x + layout.width*.69}" y1="${brandY - brandSize*.62}" x2="${layout.x + layout.width*.86}" y2="${brandY - brandSize*.62}" stroke="${GOLD}" stroke-width="${border}" stroke-opacity=".82"/>
+      <line x1="${layout.x + layout.width*.30}" y1="${dividerY}" x2="${layout.x + layout.width*.70}" y2="${dividerY}" stroke="${GOLD}" stroke-width="${border}" stroke-opacity=".82"/>
       ${vectorText(DISPLAY_FONT, "LA SANTÉ DES ZÈBRES", centerX, brandY, brandSize, "brand")}
       ${vectorText(DISPLAY_FONT, "RAISMES", centerX, brandY + brandSize*1.38, citySize, "city")}
       ${titleNodes}${subtitleNodes}
@@ -208,8 +214,18 @@ async function composeBrandPoster({ imageBuffer, logoDataUrl, platform, headline
   if(!width || !height) throw new Error("Dimensions de l'image générée introuvables.");
   const hasHeadline = Boolean(String(headline || "").trim());
   const layout = layoutFor(width, height, platform, zoneText, hasHeadline);
-  const logoWidth = Math.round(layout.width * (layout.portrait ? 0.19 : 0.16));
-  const logoTop = layout.y + Math.round(layout.height * 0.025);
+  const { title, subtitle } = headlineParts(headline);
+  const scale = Math.max(0.78, Math.min(1.55, width / 1088));
+  const titleSize = Math.round((layout.portrait ? 67 : 62) * scale);
+  const subtitleSize = Math.round((layout.portrait ? 42 : 38) * scale);
+  const titleLines = wrapWords(title.toUpperCase(), layout.portrait ? 24 : 31, 2);
+  const subtitleLines = wrapWords(subtitle.toUpperCase(), layout.portrait ? 34 : 44, 2);
+  const textTop = layout.y + Math.round(layout.height * 0.12);
+  const textY = textTop + titleSize + titleLines.length * titleSize * 1.05 + subtitleSize * 0.45;
+  const headlineEnd = textY + Math.max(1, subtitleLines.length) * subtitleSize * 1.10;
+  const dividerY = headlineEnd + Math.round(layout.height * 0.055);
+  const logoWidth = Math.round(layout.width * (layout.portrait ? 0.115 : 0.10));
+  const logoTop = Math.round(dividerY + layout.height * 0.055);
   const logoLeft = Math.round(layout.x + (layout.width - logoWidth) / 2);
   const cleanLogo = await prepareLogoOverlay(logoBuffer);
   const resizedLogo = await sharp(cleanLogo, { failOn: "none" })
