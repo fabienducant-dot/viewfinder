@@ -6,7 +6,7 @@ const fs = require("node:fs");
 const path = require("node:path");
 const sharp = require("sharp");
 const { applyImageEditOptions, normalizeImageModel } = require("../netlify/functions/_shared/openai-image-edit-options");
-const { composeBrandPoster } = require("../netlify/functions/_shared/brand-compositor");
+const { composeBrandPoster, prepareLogoOverlay, vectorText } = require("../netlify/functions/_shared/brand-compositor");
 
 const root = path.resolve(__dirname, "..");
 const index = fs.readFileSync(path.join(root, "index.html"), "utf8");
@@ -64,6 +64,38 @@ test("le compositeur serveur produit un PNG final au bon format", async () => {
   assert.equal(meta.width, 1088);
   assert.equal(meta.height, 1920);
   assert.ok(finalBuffer.length > 20_000);
+});
+
+test("les textes de marque sont rendus en tracés vectoriels, accents compris", async () => {
+  const imageBuffer = await sharp({
+    create: { width:1088, height:1360, channels:4, background:"#17120b" },
+  }).png().toBuffer();
+  const logoBuffer = fs.readFileSync(path.join(root, "icons/icon-512.png"));
+  const finalBuffer = await composeBrandPoster({
+    imageBuffer,
+    logoDataUrl:`data:image/png;base64,${logoBuffer.toString("base64")}`,
+    platform:"Instagram",
+    headline:"MASSAGE JAPONAIS | ÉCLAT NATUREL",
+    zoneText:"supérieure",
+  });
+  assert.ok(finalBuffer.length > 30_000);
+  assert.doesNotMatch(fs.readFileSync(path.join(root, "netlify/functions/_shared/brand-compositor.js"), "utf8"), /<text /);
+});
+
+test("un logo opaque sur fond noir est détouré avant composition", async () => {
+  const opaqueLogo = await sharp({
+    create: { width:120, height:120, channels:4, background:{ r:0, g:0, b:0, alpha:1 } },
+  }).composite([{ input:Buffer.from('<svg width="120" height="120"><circle cx="60" cy="60" r="34" fill="#D9AD3B"/></svg>') }]).png().toBuffer();
+  const clean = await prepareLogoOverlay(opaqueLogo);
+  const { data, info } = await sharp(clean).ensureAlpha().raw().toBuffer({ resolveWithObject:true });
+  assert.ok(info.width < 100 && info.height < 100);
+  assert.equal(data[3], 0);
+});
+
+test("le contrôle final fait confiance au logo exact composé par le serveur et bloque encore l'OCR", () => {
+  assert.match(index, /officialLogoConformity="exact"/);
+  assert.match(index, /overlay\.rawOverlayDetected=overlay\.expectedTextExact!==true/);
+  assert.match(index, /2\.4\.1-server-brand-fontfix/);
 });
 
 test("les formats gpt-image-2 suivent les ratios de publication", () => {

@@ -4458,12 +4458,13 @@ async function analyzeGeneratedImage(dataUrl, brief, options){
   const brandIntegrated = !!(options && options.brandIntegrated);
   const expectedHeadline = String(options&&options.expectedHeadline||"").trim();
   const brandReferenceDataUrl = options&&options.brandReferenceDataUrl;
-  const rawImage=brandIntegrated
-    ? await buildBrandComparisonForAnalysis(dataUrl,brandReferenceDataUrl)
-    : await resizeDataUrlForAnalysis(dataUrl,1024,.82);
+  /* La conformité géométrique du logo n'est plus confiée à un jugement probabiliste : le serveur
+     vient de composer le fichier officiel lui-même. L'analyse visuelle finale contrôle donc le
+     texte réellement lisible et les éventuels overlays parasites sur l'affiche seule. */
+  const rawImage=await resizeDataUrlForAnalysis(dataUrl,1024,.86);
   const deviceIconsAllowed = !!(options && options.deviceIconsAllowed);
   const overlaySystemPrompt=brandIntegrated
-    ? `Tu es le contrôleur final OCR et identité de marque. L'image de contrôle contient le LOGO OFFICIEL DE RÉFÉRENCE à gauche de la ligne dorée et le VISUEL GÉNÉRÉ à droite. Compare le logo du visuel de droite à la référence de gauche : exact = même dessin reconnaissable sans altération ; close = très proche mais détails mineurs différents ; altered = faux dessin, zèbre, sceau ou géométrie modifiés ; missing = absent. Le visuel doit contenir exactement une identité : le logo officiel, « La Santé des Zèbres » et « RAISMES ». ${expectedHeadline ? `Il doit aussi contenir l'accroche exacte suivante, avec « | » servant seulement de séparation hiérarchique et ne devant pas être imprimé : « ${expectedHeadline} ».` : "Aucune autre accroche éditoriale n'est attendue."} Recopie dans observedText tout ce que tu peux réellement lire sur le VISUEL DE DROITE. expectedTextExact vaut true uniquement si chaque mot attendu est lisible, correctement accentué, non tronqué, non dupliqué et si aucun texte parasite n'apparaît. unexpectedOverlayDetected vaut true pour tout faux logo, seconde identité, URL, prix, texte parasite, doublon ou faute. rawOverlayDetected est le verdict bloquant global : true dès que officialLogoConformity n'est pas « exact », si expectedTextExact est false ou si unexpectedOverlayDetected est true ; false uniquement lorsque identité et textes sont conformes. Décris précisément chaque problème dans rawOverlayDescription et brandValidationNotes.`
+    ? `Tu es le contrôleur final OCR d'une affiche dont le fichier logo officiel vient d'être composé de façon déterministe côté serveur. Ne réinterprète pas et ne redessine pas ce logo : renseigne officialLogoPresent=true et officialLogoConformity="exact". Contrôle uniquement que les textes « LA SANTÉ DES ZÈBRES » et « RAISMES » sont réellement lisibles. ${expectedHeadline ? `L'accroche exacte attendue est « ${expectedHeadline} » ; le caractère « | » indique seulement une séparation hiérarchique et ne doit pas nécessairement être imprimé.` : "Aucune autre accroche éditoriale n'est attendue."} Recopie dans observedText tout ce que tu peux réellement lire. expectedTextExact vaut true uniquement si chaque mot attendu est lisible, correctement accentué, non tronqué et non dupliqué. unexpectedOverlayDetected vaut true seulement pour un second logo, une seconde identité, une URL, un prix, un texte parasite, un doublon ou une faute — jamais pour le logo officiel déjà composé. rawOverlayDetected vaut true si expectedTextExact est false ou si unexpectedOverlayDetected est true ; sinon false. Décris précisément chaque problème textuel dans rawOverlayDescription et brandValidationNotes.`
     : `Tu es un contrôleur OCR et identité de marque. Inspecte uniquement l'image brute fournie, zone par zone. rawOverlayDetected vaut true dès qu'un texte, logo, emblème, sceau, monogramme ou zèbre de marque apparaît. officialLogoPresent=false, officialLogoConformity="not_checked", expectedTextExact=true, observedText="", unexpectedOverlayDetected=rawOverlayDetected.${deviceIconsAllowed ? " Les simples repères abstraits de commandes sur un dispositif électronique ne sont pas un overlay." : ""}`;
   const [res,overlayRes] = await Promise.all([
     fetch("/.netlify/functions/generate-text", {
@@ -4486,7 +4487,16 @@ async function analyzeGeneratedImage(dataUrl, brief, options){
   if(!res.ok||data.error) throw new Error(data.error||`Erreur analyse ${res.status}`);
   if(!overlayRes.ok||overlayData.error) throw new Error(overlayData.error||`Erreur contrôle overlay ${overlayRes.status}`);
   try{
-    return {...JSON.parse(data.text),...JSON.parse(overlayData.text)};
+    const overlay=JSON.parse(overlayData.text);
+    if(brandIntegrated){
+      /* Le logo est exact par construction (mêmes octets source, uniquement redimensionnés et
+         détourés). Le contrôle probabiliste ne peut plus annuler ce fait déterministe. */
+      overlay.officialLogoPresent=true;
+      overlay.officialLogoConformity="exact";
+      overlay.rawOverlayDetected=overlay.expectedTextExact!==true || overlay.unexpectedOverlayDetected===true;
+      if(!overlay.rawOverlayDetected && /^logo/i.test(String(overlay.rawOverlayDescription||""))) overlay.rawOverlayDescription="";
+    }
+    return {...JSON.parse(data.text),...overlay};
   }catch(e){ throw new Error("Un contrôleur d'image n'a pas renvoyé un JSON exploitable."); }
 }
 
@@ -8523,7 +8533,7 @@ function buildApiTab(){
 ============================================================ */
 
 /* ---- Versionnage ---- */
-const VF_VERSION = "2.4.0-server-brand-compositor"; // scène gpt-image-2, identité exacte Sharp/SVG côté serveur
+const VF_VERSION = "2.4.1-server-brand-fontfix"; // texte vectoriel embarqué + logo officiel détouré côté serveur
 /* Hash déterministe de l'état des règles : deux runs au même hash = strictement les mêmes règles.
    Couvre : modules (contenu+état), UNIVERS_SDZ, charte condensée, garde-fou sécurité. */
 function computeModulesHash(){
