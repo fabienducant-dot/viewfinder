@@ -5001,7 +5001,12 @@ async function prepareCreativeBrief(inputs){
 async function finalizeGeneratedImage(flow){
   const platform = flow.inputs.platform;
   const isHealyFlow = flow.inputs.prestation==="Biorésonance quantique";
-  const generatedOverlayViolation=findGeneratedOverlayViolation(flow.analysis);
+  const logoInScene = flow.serverBrandCompositionUsed===true && flow.brandComposited===true;
+  /* Une identité composée par le serveur provient du fichier logo officiel et de chaînes exactes
+     rendues en tracés vectoriels. Elle ne peut donc pas être requalifiée en overlay IA interdit
+     par un contrôle vision probabiliste, notamment après un recontrôle manuel. Le contrôle des
+     overlays reste strict pour les images réellement brutes et les imports historiques. */
+  const generatedOverlayViolation=logoInScene ? "" : findGeneratedOverlayViolation(flow.analysis);
   let overlayWarning = null;
   if(generatedOverlayViolation){
     /* Healy : un blocage strict ici s'est révélé peu fiable — le modèle d'image ne parvient jamais
@@ -5024,7 +5029,6 @@ async function finalizeGeneratedImage(flow){
   if(paletteViolation){
     throw new Error(`Image refusée avant publication : ${paletteViolation}. Une image hors charte ne peut pas être validée.`);
   }
-  const logoInScene = flow.serverBrandCompositionUsed===true && flow.brandComposited===true;
   /* 1) format officiel de la plateforme */
   let dataUrl = await normalizeToPlatformFormat(flow.dataUrl, platform);
   /* 2) accroche : généralisée (demande explicite) à Instagram/Facebook/Story pour TOUTE prestation,
@@ -7279,6 +7283,10 @@ function buildPostTab(){
         const analysis = await analyzeGeneratedImage(flow.dataUrl, flow.brief, {
           productReferenceDataUrls:productReferences.map(r=>r.dataUrl),
           deviceIconsAllowed: flow.inputs?.prestation==="Biorésonance quantique",
+          brandIntegrated: flow.serverBrandCompositionUsed===true && flow.brandComposited===true,
+          brandReferenceDataUrl: flow.brandReferenceDataUrl || null,
+          expectedHeadline: (PLATFORM_OVERLAY[flow.inputs?.platform]==="accroche" || PLATFORM_OVERLAY[flow.inputs?.platform]==="fort")
+            ? String(flow.brief?.texteImage||"").trim() : "",
         });
         flow.analysis = analysis; flow.analysisError = null;
         if(wasQuarantined){
@@ -8533,7 +8541,7 @@ function buildApiTab(){
 ============================================================ */
 
 /* ---- Versionnage ---- */
-const VF_VERSION = "2.4.1-server-brand-fontfix"; // texte vectoriel embarqué + logo officiel détouré côté serveur
+const VF_VERSION = "2.4.2-server-brand-controlfix"; // identité serveur exacte jamais reclassée comme overlay IA
 /* Hash déterministe de l'état des règles : deux runs au même hash = strictement les mêmes règles.
    Couvre : modules (contenu+état), UNIVERS_SDZ, charte condensée, garde-fou sécurité. */
 function computeModulesHash(){
