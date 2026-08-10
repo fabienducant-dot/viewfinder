@@ -66,6 +66,8 @@ exports.handler = async (event) => {
             usedReference: !!job.usedReference,
             referenceFallbackReason: job.referenceFallbackReason || null,
             brandComposited: job.brandComposited === true,
+            v3Plan: job.v3Plan || null,
+            v3Finalization: job.v3Finalization || null,
             usage: job.usage || null,
           },
         }),

@@ -1,0 +1,14 @@
+"use strict";
+
+const ANALYSIS_SCHEMA={name:"viewfinder_v3_image_analysis",strict:true,schema:{type:"object",additionalProperties:false,properties:{faces:{type:"array",items:{type:"string"}},activeHands:{type:"array",items:{type:"string"}},equipment:{type:"array",items:{type:"string"}},subjects:{type:"array",items:{type:"string"}},gazeDirection:{type:"string"},protectedZones:{type:"array",items:{type:"string"}},calmZones:{type:"array",items:{type:"string"}},availableContrast:{type:"number"},density:{type:"number"},negativeSpace:{type:"array",items:{type:"string"}},peopleCount:{type:"integer"},businessCompliance:{type:"boolean"},requiredActionVisible:{type:"boolean"},compositeStages:{type:"array",items:{type:"string"}},parasites:{type:"array",items:{type:"string"}},paletteDrift:{type:"number"}},required:["faces","activeHands","equipment","subjects","gazeDirection","protectedZones","calmZones","availableContrast","density","negativeSpace","peopleCount","businessCompliance","requiredActionVisible","compositeStages","parasites","paletteDrift"]}};
+
+async function analyzeImageWithOpenAI({key,imageBuffer,plan,fetchImpl=fetch}){
+ if(!key)throw new Error("Clé OpenAI absente pour l'analyse V3.");
+ const dataUrl=`data:image/png;base64,${imageBuffer.toString("base64")}`;
+ const contract=plan.contract;
+ const response=await fetchImpl("https://api.openai.com/v1/chat/completions",{method:"POST",headers:{"Content-Type":"application/json",Authorization:`Bearer ${key}`},body:JSON.stringify({model:"gpt-4o-mini",messages:[{role:"system",content:"Analyse uniquement les pixels de la photographie brute. N'infère jamais une étape invisible. Retourne les zones sous forme de libellés top-left, top, top-right, left, center, right, bottom-left, bottom, bottom-right. paletteDrift est entre 0 (noir/or) et 1 (forte dérive hors palette). Tout texte, logo, URL, pictogramme ou appareil inventé va dans parasites."},{role:"user",content:[{type:"text",text:`Prestation : ${contract.name}. Nombre obligatoire : ${contract.people}. Action obligatoire : ${contract.requiredAction}. Signes reconnaissables : ${contract.recognition}. Étapes composites attendues : ${contract.type==="offre composite"?contract.story:"aucune"}. Matériel interdit : ${contract.forbiddenEquipment}; ${contract.forbiddenAccessories}. Décris seulement les étapes réellement visibles.`},{type:"image_url",image_url:{url:dataUrl,detail:"high"}}]}],response_format:{type:"json_schema",json_schema:ANALYSIS_SCHEMA}})});
+ if(!response.ok)throw new Error(`Analyse V3 refusée (${response.status}) : ${(await response.text()).slice(0,240)}`);
+ const data=await response.json();const content=data.choices?.[0]?.message?.content;if(!content)throw new Error("Analyse V3 vide.");
+ try{return JSON.parse(content);}catch(error){throw new Error("Analyse V3 non JSON.");}
+}
+module.exports={ANALYSIS_SCHEMA,analyzeImageWithOpenAI};

@@ -23,6 +23,14 @@ function openJobStore(){
   return getStore({ name: "viewfinder-image-jobs", ...opts });
 }
 
+function buildJobInput(payload){
+  let {prompt,size,model,quality,referenceImageUrls,referenceImageData,brandComposition}=payload;
+  let v3Plan=null;
+  if(payload.v3){v3Plan=planV3(payload.v3);prompt=v3Plan.photoBrief.prompt;}
+  if(typeof prompt!=="string"||!prompt.trim())throw new Error("Le prompt est requis");
+  return {prompt,size,model,quality,referenceImageUrls,referenceImageData,referenceRequired:payload.referenceRequired===true,brandComposition,v3Plan};
+}
+
 exports.handler = async (event) => {
   if (event.httpMethod !== "POST") {
     return { statusCode: 405, body: "Method Not Allowed" };
@@ -34,16 +42,9 @@ exports.handler = async (event) => {
   } catch (e) {
     return { statusCode: 400, headers: { "Content-Type": "application/json" }, body: JSON.stringify({ error: "Corps de requête invalide" }) };
   }
-  let { prompt, size, model, quality, referenceImageUrls, referenceImageData, brandComposition } = payload;
-  let v3Plan = null;
-  if(payload.v3){
-    try { v3Plan = planV3(payload.v3); prompt = v3Plan.photoBrief.prompt; }
-    catch(error){ return { statusCode:400, headers:{"Content-Type":"application/json"}, body:JSON.stringify({error:String(error.message||error)}) }; }
-  }
-  const referenceRequired = payload.referenceRequired === true;
-  if (typeof prompt !== "string" || !prompt.trim()) {
-    return { statusCode: 400, headers: { "Content-Type": "application/json" }, body: JSON.stringify({ error: "Le prompt est requis" }) };
-  }
+  let input;
+  try{input=buildJobInput(payload);}catch(error){return {statusCode:400,headers:{"Content-Type":"application/json"},body:JSON.stringify({error:String(error.message||error)})};}
+  const {prompt,size,model,quality,referenceImageUrls,referenceImageData,referenceRequired,brandComposition,v3Plan}=input;
 
   try {
     const jobId = crypto.randomUUID();
@@ -52,7 +53,7 @@ exports.handler = async (event) => {
 
     // Entrée complète (peut contenir jusqu'à 4 images en base64) écrite en Blobs — jamais transmise
     // telle quelle au déclenchement de la Background Function.
-    await store.set(`jobs/${jobId}/input`, JSON.stringify({ prompt, size, model, quality, referenceImageUrls, referenceImageData, referenceRequired, brandComposition, v3Plan }));
+    await store.set(`jobs/${jobId}/input`, JSON.stringify(input));
 
     await store.set(`jobs/${jobId}`, JSON.stringify({
       jobId,
@@ -126,3 +127,5 @@ exports.handler = async (event) => {
     };
   }
 };
+
+exports.buildJobInput=buildJobInput;

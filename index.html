@@ -174,8 +174,9 @@ const ASPECTS = {
 };
 
 const PLATFORMS = ["Instagram","Facebook","Google Business","Article Blog Wix","Story"];
+const LOCKED_BRAND_CONTACTS = Object.freeze({domain:"la-sante-des-zebres.com",phone:"06.84.40.69.54",address:"11 cour Dupas, Raismes",email:"fabien.ducant@gmail.com"});
 
-/* V1.0 — format officiel Instagram/Facebook : 1080x1350 (4:5), une seule image pour les deux. */
+/* V3 — Instagram et Facebook gardent le ratio 4:5 mais utilisent des compositions distinctes. */
 const PLATFORM_ASPECT = { "Instagram":"4:5", "Facebook":"4:5", "Google Business":"4:3", "Article Blog Wix":"16:9", "Story":"9:16" };
 // gpt-image-2 accepte les dimensions arbitraires multiples de 16. On génère au plus près du format
 // final afin d'éviter le recadrage destructeur qui vidait les Stories et coupait les compositions.
@@ -192,7 +193,7 @@ const PLATFORM_OVERLAY = { "Instagram":"accroche", "Facebook":"accroche", "Googl
 const PLATFORM_MAXCHARS = { "Instagram":110, "Facebook":120, "Google Business":0, "Article Blog Wix":220, "Story":220 };
 const PLATFORM_NOTE = {
   "Instagram": "Format portrait 4:5. Accroche courte intégrée par l'API, avec le logo officiel fourni en référence.",
-  "Facebook": "Utilise exactement la même image que l'Instagram 4:5, texte et identité compris.",
+  "Facebook": "Composition éditoriale Facebook dédiée, distincte de l'affiche Instagram.",
   "Google Business": "Aucun texte sur l'image (recommandation Google) — le texte porte tout le SEO.",
   "Article Blog Wix": "Image de couverture éditoriale, sans texte incrusté (les moteurs de recherche ne lisent pas le texte dans une image) — jamais de faux logo, badge ou icône générés par l'IA. Le SEO de l'image passe par un alt text descriptif riche, généré avec le texte de l'article.",
   "Story": "Format vertical plein écran. Accroche forte, sous-ligne et identité officielle intégrées par l'API à partir du vrai logo fourni en référence. Aucun élément de l'interface Instagram ne fait partie du visuel.",
@@ -681,6 +682,9 @@ function normalizeScheduledPost(p){
     preparedDiagnostics: (p.preparedDiagnostics && typeof p.preparedDiagnostics==="object") ? p.preparedDiagnostics : null,
     contentData: (p.contentData && typeof p.contentData==="object") ? p.contentData : null,
     analysis: (p.analysis && typeof p.analysis==="object") ? p.analysis : null,
+    v3Plan: (p.v3Plan&&typeof p.v3Plan==="object") ? p.v3Plan : null,
+    v3Finalization: (p.v3Finalization&&typeof p.v3Finalization==="object") ? p.v3Finalization : null,
+    v3Quality: (p.v3Quality&&typeof p.v3Quality==="object") ? p.v3Quality : null,
     analysisError: p.analysisError || null,
     textError: p.textError || null,
     usedReference: !!p.usedReference,
@@ -4674,6 +4678,11 @@ async function generateContentFromBrief(brief, analysis, platform, mission){
   let content;
   try{ content = JSON.parse(data.text); } catch(e){ throw new Error("Sortie non exploitable."); }
   if(Array.isArray(content.hashtags)) content.hashtags = content.hashtags.slice(0,5);
+  const contactLine=[LOCKED_BRAND_CONTACTS.domain,LOCKED_BRAND_CONTACTS.phone,LOCKED_BRAND_CONTACTS.address,LOCKED_BRAND_CONTACTS.email].join(" · ");
+  if(typeof content.caption==="string"){
+    content.caption=content.caption.replace(/(?:https?:\/\/|www\.)\S+|\b[\w.+-]+@[\w.-]+\.[A-Za-z]{2,}\b|\b(?:\+33|0)[\d .-]{8,}\d\b/gi,"").trim();
+    if(["Facebook","Google Business","Article Blog Wix"].includes(platform))content.caption=`${content.caption}\n\n${contactLine}`.trim();
+  }
   if((platform==="Instagram" || platform==="Facebook") && !String(content.imageHeadline||"").trim()){
     const source = String(brief.texteImage || brief.messageCentral || "Révélez votre énergie").replace(/\|/g," ").trim();
     content.imageHeadline = source.split(/\s+/).slice(0,9).join(" ");
@@ -5227,6 +5236,8 @@ async function confirmAndGenerateImage(prepared, onStatus, cancelToken){
       });
       dataUrl = genResult.dataUrl; usedReference = genResult.usedReference; referenceFallbackReason = genResult.referenceFallbackReason;
       logoSentAsReference = false; brandComposited = genResult.brandComposited===true; imageUsage = genResult.imageUsage || null;
+      prepared.v3Plan=genResult.v3Plan||prepared.v3Plan||null;
+      prepared.v3Finalization=genResult.v3Finalization||null;
       break;
     }catch(err){
       const isSafetyRejection = /safety_violations/i.test(String(err.message||err));
@@ -5247,7 +5258,7 @@ async function confirmAndGenerateImage(prepared, onStatus, cancelToken){
       error:`Image refusée : les références produit obligatoires (${psioReferenceRequired ? "PSiO®" : "Healy"}) n'ont pas été utilisées${referenceFallbackReason ? ` (${referenceFallbackReason})` : ""}.`,
     };
   }
-  if(brandReferenceRequired && !brandComposited){
+  if(brandReferenceRequired && !brandComposited && !(prepared.v3Finalization&&prepared.v3Finalization.quality&&prepared.v3Finalization.quality.ok===false)){
     return { ...prepared, phase:"image_failed", ok:false, stage:"brand-compositor",
       error:"Image refusée : le compositeur serveur n'a pas appliqué le logo et les textes officiels exacts." };
   }
@@ -5288,7 +5299,7 @@ async function confirmAndGenerateImage(prepared, onStatus, cancelToken){
 
   return { ...prepared, phase:"completed", ok:true, dataUrl, usedReference, referenceFallbackReason, logoSentAsReference,
     serverBrandCompositionUsed:true, brandComposited, imageUsage,
-    analysis, analysisError, content, textError };
+    analysis, analysisError, content, textError, v3Plan:prepared.v3Plan||null, v3Finalization:prepared.v3Finalization||null };
 }
 
 /* T2 : runLegacyImageGeneration supprimée — code mort (zéro appelant) qui produisait un prompt
@@ -5588,6 +5599,8 @@ async function pollImageJob(jobId, onStatus, cancelToken){
       return { dataUrl, usedReference: !!statusData.result.usedReference,
         referenceFallbackReason: statusData.result.referenceFallbackReason || null,
         brandComposited: statusData.result.brandComposited===true,
+        v3Plan: statusData.result.v3Plan || null,
+        v3Finalization: statusData.result.v3Finalization || null,
         imageUsage: statusData.result.usage || null };
     }
     if(onStatus) onStatus(statusData.status==="processing" ? "Génération OpenAI en cours…" : "Préparation de l'image…");
@@ -7092,9 +7105,9 @@ function buildPostTab(){
       const combinedText = `========================\nVERSION MOTEUR\n========================\n\n${engineVersion}\n\n========================\nPROMPT OPENAI\n========================\n\n${promptText}\n\n========================\nSTRUCTURED OUTPUT\n========================\n\n${jsonText}`;
 
       // Décision créative visible avant le clic payant : concept, famille et justification.
-      const conceptV3 = (flow.brief && (flow.brief.concept || flow.brief.ideeDirectrice || flow.brief.histoire)) || flow.inputs?.prestation || "—";
-      const layoutV3 = (flow.brief && (flow.brief.layoutFamily || flow.brief.familleLayout || flow.brief.layout)) || "sélection finale après analyse de l’image réelle";
-      const rationaleV3 = (flow.brief && (flow.brief.layoutRationale || flow.brief.justificationLayout)) || "Le layout final protégera visages, mains actives et matériel selon les zones calmes réellement détectées.";
+      const conceptV3 = flow.v3Plan?.preflight?.concept || "Plan V3 non chargé";
+      const layoutV3 = flow.v3Plan?.preflight?.layout || "—";
+      const rationaleV3 = flow.v3Plan?.preflight?.justification || "—";
       details.appendChild(el("div",{class:"card",style:"margin:10px 0;"},[
         el("strong",{},"Direction Artistique V3 — avant génération payante"),
         el("p",{},`Concept : ${conceptV3}`), el("p",{},`Layout : ${layoutV3}`), el("p",{},`Justification : ${rationaleV3}`)
@@ -7238,6 +7251,12 @@ function buildPostTab(){
       imgApiStatus.textContent = "Préparation de la création (Creative Planner)...";
       try{
         const prepared = await prepareCreativeBrief({ mission: state.mission, platform, prestation: state.prestationName, topic: state.topic, aspectKey: PLATFORM_ASPECT[platform], size: API_IMAGE_SIZE_BY_PLATFORM[platform]||"1024x1024", isCampaign:false, registres: Array.isArray(state.registres) ? [...state.registres] : [], userReferenceDataUrl: state.userReferenceUpload && state.userReferenceUpload.dataUrl, userReferenceImageId: state.userReferenceUpload && state.userReferenceUpload.id, aiLogoIntegration: !!state.aiLogoIntegration });
+        if(state.prestationName&&state.prestationName!=="Tous sujets"){
+          const planResponse=await fetch("/.netlify/functions/plan-v3",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({service:state.prestationName,platform:platform==="Article Blog Wix"?"Blog":platform,marketingObjective:state.mission||"Faire réserver",audience:"clientèle La Santé des Zèbres"})});
+          const planData=await fetchJsonOrThrowRaw(planResponse,"Direction Artistique V3");
+          if(!planResponse.ok||planData.error)throw new Error(planData.error||"Plan V3 indisponible");
+          prepared.v3Plan=planData;
+        }
         state.lastCreativeFlow = prepared;
         imgApiStatus.textContent = prepared.plannerError
           ? `Brief préparé (avec repli local — voir Inspector) ✓ Relis le prompt avant de confirmer.`
@@ -7805,32 +7824,12 @@ function buildPostTab(){
    ONGLET CALENDRIER — programmation et archive des publications
 ============================================================ */
 const SCHEDULE_STATUS_LABEL = { "brouillon":"📝 Brouillon", "validé":"☑️ Validé", "programmé":"⏳ Programmé", "envoyé":"✅ Envoyé", "erreur":"⚠️ Erreur" };
-/* Génération d'image pour un post de campagne — extrait pour être appelé à la fois par le bouton
-   individuel et par le bouton "Générer les 5". Gère la réutilisation Facebook<-Instagram, aucun
-   chemin dupliqué. Retourne un message de statut, ou lève une erreur (jamais de génération payante
-   relancée automatiquement). */
+/* Génération d'image pour un post de campagne — chaque plateforme suit son template V3 propre.
+   Retourne un message de statut, ou lève une erreur (jamais de génération payante relancée automatiquement). */
 async function generateImageForCampaignItem(item, onStatus, cancelToken){
   if(item.blockingError) throw new Error("Génération bloquée : " + item.blockingError);
   const t0 = Date.now();
   const size = API_IMAGE_SIZE_BY_PLATFORM[item.platform] || "1024x1024";
-  /* V1.0 — Facebook réutilise EXACTEMENT l'image Instagram de la même campagne : aucune seconde
-     génération, aucune seconde facturation. Même format (4:5), image identique. */
-  if(item.platform==="Facebook"){
-    const twin = getCampaignSiblingImage(item.campaignId, item.id, "Instagram");
-    if(!twin){
-      throw new Error("Génère d'abord l'image Instagram de cette campagne : Facebook réutilise exactement la même image.");
-    }
-    // L'image reprise porte déjà le logo/l'accroche appliqués par Instagram — copier ces indicateurs
-    // aussi, sinon le rapport de campagne signale à tort "logo non appliqué" sur une image qui l'a.
-    const twinItem = state.scheduled.find(p=> p.campaignId===item.campaignId && p.id!==item.id && p.platform==="Instagram" && p.imageDataUrl);
-    item.imageDataUrl = twin; item.usedReference = false; item.referenceFallbackReason = null;
-    item.logoApplied = twinItem ? !!twinItem.logoApplied : true;
-    item.headlineApplied = twinItem ? !!twinItem.headlineApplied : false;
-    item.reusedFrom = "Instagram";
-    const okSave = LS.set("vf-scheduled", state.scheduled);
-    return okSave ? "Image Instagram réutilisée à l'identique ✓ (aucun crédit consommé)"
-                  : "Image réutilisée, mais échec d'enregistrement (stockage plein ?).";
-  }
   const referenceSelections = await resolveReferenceSelectionsByIds(item.referenceSelectionIds||[]);
   let phaseB;
   try{
@@ -7852,9 +7851,12 @@ async function generateImageForCampaignItem(item, onStatus, cancelToken){
   }
   if(!phaseB.ok) throw new Error(phaseB.error || "Échec de la génération");
   const { usedReference, referenceFallbackReason } = phaseB;
+  item.v3Plan=phaseB.v3Plan||null;
+  item.v3Finalization=phaseB.v3Finalization||null;
+  const v3Rejected=!!(item.v3Finalization&&item.v3Finalization.quality&&item.v3Finalization.quality.ok===false);
   /* Post-traitement : MÊME fonction que la génération unitaire (format officiel, accroche,
      logo) — aucun code dupliqué, aucun chemin parallèle. */
-  const finalizedItem = await finalizeGeneratedImage({
+  const finalizedItem = v3Rejected ? {dataUrl:phaseB.dataUrl,logoApplied:false,headlineApplied:false,layoutReport:item.v3Finalization.layout||null,overlayWarning:"Image V3 refusée par le contrôle qualité — photographie brute conservée."} : await finalizeGeneratedImage({
     inputs:{ platform:item.platform, prestation:state.prestationName }, dataUrl: phaseB.dataUrl,
     logoSentAsReference:false, usedReference, content: phaseB.content || item.contentData || null,
     brief:item.creativeBrief, analysis:phaseB.analysis||null,
@@ -7875,6 +7877,8 @@ async function generateImageForCampaignItem(item, onStatus, cancelToken){
   }
   item.headlineApplied = !!finalizedItem.headlineApplied; // texte déjà présent : accroche posée dès la génération
   item.overlayWarning = finalizedItem.overlayWarning || null;
+  item.v3Quality=item.v3Finalization&&item.v3Finalization.quality||null;
+  if(v3Rejected)item.status="refusé";
   const saved = LS.set("vf-scheduled", state.scheduled);
   logToLab({ provider:"OpenAI", model:"gpt-image-2", type:"image", prompt:item.imagePrompt, promptHash:hashPrompt(item.imagePrompt), cost:null, durationMs:Date.now()-t0, status:"accepted" });
   let referenceLabel;
@@ -8202,6 +8206,12 @@ function buildCalendarTab(){
       if(it.overlayWarning) issues.push(it.overlayWarning);
       if(it.imageDataUrl && logoRequiredFor(it.platform) && !it.logoApplied) issues.push("logo officiel non appliqué");
       if(it.imageDataUrl && it.creativeBrief && !it.headlineApplied && PLATFORM_OVERLAY[it.platform]!=="aucun") issues.push("accroche non incrustée sur l'image");
+      if(it.v3Quality){
+        if(!it.v3Quality.technical?.ok)issues.push(`conformité technique : ${(it.v3Quality.technical.errors||[]).join(", ")}`);
+        if(!it.v3Quality.business?.ok)issues.push(`conformité métier : ${(it.v3Quality.business.errors||[]).join(", ")}`);
+        if(!it.v3Quality.artistic?.ok)issues.push(`qualité artistique : ${(it.v3Quality.artistic.errors||[]).join(", ")}`);
+        for(const warning of (it.v3Quality.warnings||[]))issues.push(`avertissement artistique : ${warning}`);
+      }
       anomalies += issues.length;
       lines.push(`${it.platform} : ${issues.length ? "⚠ "+issues.join(" | ") : "OK ✓"}`);
     });

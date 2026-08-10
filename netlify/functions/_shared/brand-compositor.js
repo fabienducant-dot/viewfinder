@@ -3,6 +3,7 @@
 const fs = require("fs");
 const sharp = require("sharp");
 const opentype = require("opentype.js");
+const { PLATFORM_TEMPLATES, normalizePlatform } = require("./v3-layout-engine");
 
 const GOLD = "#D9AD3B";
 const PALE_GOLD = "#F0D889";
@@ -101,7 +102,14 @@ function vectorText(fontSet, text, centerX, baselineY, fontSize, className){
   return `<path d="${paths}" class="${className}"/>`;
 }
 
-function layoutFor(width, height, platform, requestedZone, hasHeadline){
+function layoutFor(width, height, platform, requestedZone, hasHeadline, selectedLayout){
+  const normalized=normalizePlatform(platform);
+  const template=(selectedLayout&&selectedLayout.template)||PLATFORM_TEMPLATES[normalized];
+  if(template){
+    const spec=template.lockup;
+    const margin=Math.round(width*template.margins);
+    return {x:Math.round(width*spec.x),y:Math.round(height*spec.y),width:Math.round(width*spec.width),height:Math.min(Math.round(height*(hasHeadline?.28:.22)),height-Math.round(height*spec.y)-margin),margin,portrait:height>width*1.35,landscape:width>height*1.35,template,align:spec.align};
+  }
   /* L'identité et l'accroche forment un cartouche éditorial unique en bas de l'image. L'ancien
      empilement en haut traversait régulièrement le visage et serrait la signature contre le logo. */
   const zone = hasHeadline && ["Instagram","Facebook","Story"].includes(platform)
@@ -147,6 +155,9 @@ function buildOverlaySvg(width, height, layout, platform, headline){
   const scrimTop = Math.max(0, layout.y - Math.round(height * 0.025));
   const scrimBottom = Math.min(height, layout.y + layout.height + Math.round(height * 0.025));
   const border = Math.max(2, Math.round(width * 0.0017));
+  const contactFields=(layout.template&&layout.template.contactFields)||[];
+  const contactText=contactFields.map(key=>BRAND_CONTACTS[key]).filter(Boolean).join(" · ");
+  const contactY=Math.min(height-Math.max(18,Math.round(height*.025)),layout.y+layout.height-Math.round(layout.height*.06));
   return Buffer.from(`
     <svg width="${width}" height="${height}" viewBox="0 0 ${width} ${height}" xmlns="http://www.w3.org/2000/svg">
       <defs>
@@ -163,6 +174,7 @@ function buildOverlaySvg(width, height, layout, platform, headline){
           .city { fill:${GOLD}; stroke-width:1px; }
           .title { fill:${IVORY}; stroke-width:3px; }
           .subtitle { fill:${PALE_GOLD}; stroke-width:2px; }
+          .contact { fill:${IVORY}; stroke-width:1px; }
         </style>
       </defs>
       <rect x="0" y="${scrimTop}" width="${width}" height="${scrimBottom-scrimTop}" fill="url(#scrim)"/>
@@ -170,6 +182,7 @@ function buildOverlaySvg(width, height, layout, platform, headline){
       <line x1="${layout.x + layout.width*.30}" y1="${dividerY}" x2="${layout.x + layout.width*.70}" y2="${dividerY}" stroke="${GOLD}" stroke-width="${border}" stroke-opacity=".82"/>
       ${vectorText(DISPLAY_FONT, "LA SANTÉ DES ZÈBRES", centerX, brandY, brandSize, "brand")}
       ${vectorText(DISPLAY_FONT, "RAISMES", centerX, brandY + brandSize*1.38, citySize, "city")}
+      ${vectorText(TEXT_FONT, contactText, centerX, contactY, Math.max(13,Math.round(citySize*.82)), "contact")}
       ${titleNodes}${subtitleNodes}
     </svg>`);
 }
@@ -208,7 +221,7 @@ async function prepareLogoOverlay(logoBuffer){
     .toBuffer();
 }
 
-async function composeBrandPoster({ imageBuffer, logoDataUrl, platform, headline, zoneText }){
+async function composeBrandPoster({ imageBuffer, logoDataUrl, platform, headline, zoneText, selectedLayout }){
   if(!imageBuffer || !Buffer.isBuffer(imageBuffer)) throw new Error("Image générée absente du compositeur.");
   const logoBuffer = dataUrlToBuffer(logoDataUrl);
   const image = sharp(imageBuffer, { failOn: "none" }).rotate();
@@ -217,7 +230,7 @@ async function composeBrandPoster({ imageBuffer, logoDataUrl, platform, headline
   const height = meta.height;
   if(!width || !height) throw new Error("Dimensions de l'image générée introuvables.");
   const hasHeadline = Boolean(String(headline || "").trim());
-  const layout = layoutFor(width, height, platform, zoneText, hasHeadline);
+  const layout = layoutFor(width, height, platform, zoneText, hasHeadline, selectedLayout);
   const { title, subtitle } = headlineParts(headline);
   const scale = Math.max(0.78, Math.min(1.55, width / 1088));
   const titleSize = Math.round((layout.portrait ? 67 : 62) * scale);
@@ -250,4 +263,4 @@ async function composeBrandPoster({ imageBuffer, logoDataUrl, platform, headline
     .toBuffer();
 }
 
-module.exports = { composeBrandPoster, dataUrlToBuffer, escapeXml, wrapWords, normalizedZone, prepareLogoOverlay, vectorText, BRAND_CONTACTS };
+module.exports = { composeBrandPoster, dataUrlToBuffer, escapeXml, wrapWords, normalizedZone, prepareLogoOverlay, vectorText, layoutFor, BRAND_CONTACTS };
