@@ -223,6 +223,15 @@ exports.handler = async (event) => {
       return { statusCode: 200, body: JSON.stringify({ ok: false, error: "Aucune image reçue du fournisseur." }) };
     }
 
+    // V3 conserve toujours la photographie éditoriale brute, y compris lorsqu'une composition ou
+    // un contrôle aval la refuse. Elle reste distincte de l'affiche finale et du texte du post.
+    const rawResultKey = `jobs/${jobId}/raw-result`;
+    try { await store.set(rawResultKey, JSON.stringify({ b64, url, preserved:true })); }
+    catch(rawWriteErr){
+      await safeSetJobStatus(store, jobId, { status:"failed", error:{ message:`Conservation de la photographie brute impossible : ${String(rawWriteErr.message||rawWriteErr)}`, source:"storage" } });
+      return { statusCode:200, body:JSON.stringify({ok:false,error:"Conservation de la photographie brute impossible"}) };
+    }
+
     let brandComposited = false;
     if(brandComposition && brandComposition.enabled === true){
       try{
@@ -247,6 +256,7 @@ exports.handler = async (event) => {
           error: { message: `Composition de marque impossible : ${String(compositionErr.message || compositionErr)}`, source: "brand-compositor" },
           usedReference,
           referenceFallbackReason,
+          rawResultKey,
         });
         return { statusCode: 200, body: JSON.stringify({ ok: false, error: "Composition de marque impossible" }) };
       }
@@ -263,7 +273,7 @@ exports.handler = async (event) => {
     // usage réel OpenAI Images (tokens texte/image) : persisté dans le STATUT (léger — jamais le b64)
     // pour l'archivage des coûts mesurés côté client. Additif, rétrocompatible.
     const usage = data.usage ? { input_tokens: data.usage.input_tokens ?? null, output_tokens: data.usage.output_tokens ?? null, input_tokens_details: data.usage.input_tokens_details ?? null } : null;
-    await safeSetJobStatus(store, jobId, { status: "completed", error: null, resultKey, usedReference, referenceFallbackReason, brandComposited, usage });
+    await safeSetJobStatus(store, jobId, { status: "completed", error: null, resultKey, rawResultKey, usedReference, referenceFallbackReason, brandComposited, usage });
 
     // Nettoyage de l'entrée après usage réussi — best-effort, non bloquant si ça échoue.
     try { await store.delete(`jobs/${jobId}/input`); } catch (deleteErr) { /* pas grave, l'entrée reste simplement, sans impact fonctionnel */ }

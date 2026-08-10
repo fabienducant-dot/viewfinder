@@ -5521,6 +5521,14 @@ async function callProviderImage(prompt, size, extraReferenceDataUrls, onStatus,
       referenceImageData: referenceImageData.length ? referenceImageData : undefined,
       referenceRequired: options.referenceRequired===true,
       brandComposition: options.brandComposition || undefined,
+      // V3 : le serveur reconstruit le PhotoBrief contractuel. Le modèle image ne reçoit donc
+      // jamais le prompt d'affiche historique contenant logo ou typographie.
+      v3: options.v3 || (state.prestationName && state.prestationName!=="Tous sujets" ? {
+        service:state.prestationName,
+        platform:(options.brandComposition?.platform || state.network)==="Article Blog Wix" ? "Blog" : (options.brandComposition?.platform || state.network),
+        marketingObjective:state.mission || "Faire réserver",
+        audience:"clientèle La Santé des Zèbres",
+      } : undefined),
     }),
   });
   const createData = await fetchJsonOrThrowRaw(createRes, "création du travail");
@@ -7082,6 +7090,15 @@ function buildPostTab(){
       const jsonText = JSON.stringify(flow.brief, null, 2);
       const engineVersion = flow.appVersion || "ancienne/non identifiée";
       const combinedText = `========================\nVERSION MOTEUR\n========================\n\n${engineVersion}\n\n========================\nPROMPT OPENAI\n========================\n\n${promptText}\n\n========================\nSTRUCTURED OUTPUT\n========================\n\n${jsonText}`;
+
+      // Décision créative visible avant le clic payant : concept, famille et justification.
+      const conceptV3 = (flow.brief && (flow.brief.concept || flow.brief.ideeDirectrice || flow.brief.histoire)) || flow.inputs?.prestation || "—";
+      const layoutV3 = (flow.brief && (flow.brief.layoutFamily || flow.brief.familleLayout || flow.brief.layout)) || "sélection finale après analyse de l’image réelle";
+      const rationaleV3 = (flow.brief && (flow.brief.layoutRationale || flow.brief.justificationLayout)) || "Le layout final protégera visages, mains actives et matériel selon les zones calmes réellement détectées.";
+      details.appendChild(el("div",{class:"card",style:"margin:10px 0;"},[
+        el("strong",{},"Direction Artistique V3 — avant génération payante"),
+        el("p",{},`Concept : ${conceptV3}`), el("p",{},`Layout : ${layoutV3}`), el("p",{},`Justification : ${rationaleV3}`)
+      ]));
 
       // ---- Bandeau récapitulatif (lecture seule de flow.inputs/flow.brief/state.modules — aucune invention) ----
       const safe = v => (v===undefined || v===null || v==="") ? "—" : v;

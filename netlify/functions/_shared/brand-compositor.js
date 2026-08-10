@@ -7,6 +7,10 @@ const opentype = require("opentype.js");
 const GOLD = "#D9AD3B";
 const PALE_GOLD = "#F0D889";
 const IVORY = "#F7F2E8";
+const BRAND_CONTACTS = Object.freeze({
+  domain:"la-sante-des-zebres.com", phone:"06.84.40.69.54",
+  address:"11 cour Dupas, Raismes", email:"fabien.ducant@gmail.com",
+});
 
 /* Netlify n'embarque pas les polices système utilisées par librsvg. Avec un simple <text>
    SVG, les accents français devenaient donc des carrés. Les lettres sont maintenant converties
@@ -224,10 +228,15 @@ async function composeBrandPoster({ imageBuffer, logoDataUrl, platform, headline
   const textY = textTop + titleSize + titleLines.length * titleSize * 1.05 + subtitleSize * 0.45;
   const headlineEnd = textY + Math.max(1, subtitleLines.length) * subtitleSize * 1.10;
   const dividerY = headlineEnd + Math.round(layout.height * 0.055);
-  const logoWidth = Math.round(layout.width * (layout.portrait ? 0.115 : 0.10));
-  const logoTop = Math.round(dividerY + layout.height * 0.055);
-  const logoLeft = Math.round(layout.x + (layout.width - logoWidth) / 2);
   const cleanLogo = await prepareLogoOverlay(logoBuffer);
+  const logoMeta = await sharp(cleanLogo).metadata();
+  const desiredLogoWidth = Math.round(layout.width * (layout.portrait ? 0.115 : 0.10));
+  const minimumBottomMargin = Math.max(Math.round(height*.035), 24);
+  const availableHeight = Math.max(24, height - minimumBottomMargin - Math.round(dividerY + layout.height*.055));
+  const sourceRatio = (logoMeta.width||1)/(logoMeta.height||1);
+  const logoWidth = Math.max(24, Math.min(desiredLogoWidth, Math.floor(availableHeight*sourceRatio)));
+  const logoTop = Math.min(height-minimumBottomMargin-Math.ceil(logoWidth/sourceRatio), Math.round(dividerY + layout.height * 0.055));
+  const logoLeft = Math.round(layout.x + (layout.width - logoWidth) / 2);
   const resizedLogo = await sharp(cleanLogo, { failOn: "none" })
     .resize({ width: logoWidth, withoutEnlargement: false, fit: "inside" })
     .png().toBuffer();
@@ -241,4 +250,4 @@ async function composeBrandPoster({ imageBuffer, logoDataUrl, platform, headline
     .toBuffer();
 }
 
-module.exports = { composeBrandPoster, dataUrlToBuffer, escapeXml, wrapWords, normalizedZone, prepareLogoOverlay, vectorText };
+module.exports = { composeBrandPoster, dataUrlToBuffer, escapeXml, wrapWords, normalizedZone, prepareLogoOverlay, vectorText, BRAND_CONTACTS };

@@ -11,6 +11,7 @@
 const { getStore } = require("@netlify/blobs");
 const crypto = require("crypto");
 const { resolveInvocationBaseUrl } = require("./_shared/netlify-invocation-url");
+const { planV3 } = require("./_shared/v3-pipeline");
 
 function openJobStore(){
   const opts = { consistency: "strong" }; // écriture puis relecture quasi immédiate du statut : la
@@ -33,7 +34,12 @@ exports.handler = async (event) => {
   } catch (e) {
     return { statusCode: 400, headers: { "Content-Type": "application/json" }, body: JSON.stringify({ error: "Corps de requête invalide" }) };
   }
-  const { prompt, size, model, quality, referenceImageUrls, referenceImageData, brandComposition } = payload;
+  let { prompt, size, model, quality, referenceImageUrls, referenceImageData, brandComposition } = payload;
+  let v3Plan = null;
+  if(payload.v3){
+    try { v3Plan = planV3(payload.v3); prompt = v3Plan.photoBrief.prompt; }
+    catch(error){ return { statusCode:400, headers:{"Content-Type":"application/json"}, body:JSON.stringify({error:String(error.message||error)}) }; }
+  }
   const referenceRequired = payload.referenceRequired === true;
   if (typeof prompt !== "string" || !prompt.trim()) {
     return { statusCode: 400, headers: { "Content-Type": "application/json" }, body: JSON.stringify({ error: "Le prompt est requis" }) };
@@ -46,7 +52,7 @@ exports.handler = async (event) => {
 
     // Entrée complète (peut contenir jusqu'à 4 images en base64) écrite en Blobs — jamais transmise
     // telle quelle au déclenchement de la Background Function.
-    await store.set(`jobs/${jobId}/input`, JSON.stringify({ prompt, size, model, quality, referenceImageUrls, referenceImageData, referenceRequired, brandComposition }));
+    await store.set(`jobs/${jobId}/input`, JSON.stringify({ prompt, size, model, quality, referenceImageUrls, referenceImageData, referenceRequired, brandComposition, v3Plan }));
 
     await store.set(`jobs/${jobId}`, JSON.stringify({
       jobId,
