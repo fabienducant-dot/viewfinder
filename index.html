@@ -5221,6 +5221,12 @@ async function confirmAndGenerateImage(prepared, onStatus, cancelToken){
   while(true){
     try{
       const genResult = await callProviderImage(prepared.imagePrompt, size, undefined, onStatus, cancelToken, {
+        v3: prepared.v3Plan ? {
+          service: prepared.v3Plan.artDirection.service,
+          platform: prepared.v3Plan.artDirection.platform,
+          marketingObjective: prepared.v3Plan.artDirection.marketingObjective,
+          audience: prepared.v3Plan.artDirection.audience,
+        } : undefined,
         smartReferenceDataUrls,
         referenceRequired: productReferenceRequired,
         brandComposition: {
