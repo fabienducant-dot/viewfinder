@@ -7099,10 +7099,13 @@ function buildPostTab(){
       details.appendChild(el("summary",{style:"cursor:pointer;font-size:13px;color:var(--muted);"}, "Prompt Inspector — moteur créatif"));
 
       // ---- Textes bruts nécessaires aux boutons de copie (calculés une seule fois) ----
-      const promptText = flow.imagePrompt || "";
+      // Contrat unique : ce texte est exactement celui que buildJobInput() substitue au prompt
+      // historique avant d'enregistrer le job. Le prompt V2 ne doit jamais être présenté comme envoyé.
+      const promptText = flow.v3Plan?.photoBrief?.prompt || flow.imagePrompt || "";
+      const legacyPromptText = flow.v3Plan?.photoBrief?.prompt && flow.imagePrompt!==promptText ? (flow.imagePrompt||"") : "";
       const jsonText = JSON.stringify(flow.brief, null, 2);
       const engineVersion = flow.appVersion || "ancienne/non identifiée";
-      const combinedText = `========================\nVERSION MOTEUR\n========================\n\n${engineVersion}\n\n========================\nPROMPT OPENAI\n========================\n\n${promptText}\n\n========================\nSTRUCTURED OUTPUT\n========================\n\n${jsonText}`;
+      const combinedText = `========================\nVERSION MOTEUR\n========================\n\n${engineVersion}\n\n========================\nPROMPT OPENAI — RÉELLEMENT TRANSMIS\n========================\n\n${promptText}\n\n========================\nSTRUCTURED OUTPUT\n========================\n\n${jsonText}`;
 
       // Décision créative visible avant le clic payant : concept, famille et justification.
       const conceptV3 = flow.v3Plan?.preflight?.concept || "Plan V3 non chargé";
@@ -7233,8 +7236,14 @@ function buildPostTab(){
       }
       body.appendChild(el("p",{style:"font-weight:600;margin:8px 0 4px;"}, "Creative Brief (JSON)"));
       body.appendChild(el("pre",{style:"white-space:pre-wrap;font-size:11px;"}, jsonText));
-      body.appendChild(el("p",{style:"font-weight:600;margin:8px 0 4px;"}, "Prompt image compact (exactement celui qui sera/a été envoyé)"));
+      body.appendChild(el("p",{style:"font-weight:600;margin:8px 0 4px;"}, "PROMPT OPENAI — réellement transmis"));
       body.appendChild(el("pre",{style:"white-space:pre-wrap;font-size:11px;"}, promptText));
+      if(legacyPromptText){
+        const legacyDetails=el("details",{style:"margin-top:10px;"});
+        legacyDetails.appendChild(el("summary",{style:"cursor:pointer;color:var(--muted2);"},"Ancien prompt V2 — non transmis au générateur"));
+        legacyDetails.appendChild(el("pre",{style:"white-space:pre-wrap;font-size:11px;opacity:.75;"},legacyPromptText));
+        body.appendChild(legacyDetails);
+      }
       if(flow.content){
         body.appendChild(el("p",{style:"font-weight:600;margin:8px 0 4px;"}, "Texte final"));
         body.appendChild(el("pre",{style:"white-space:pre-wrap;font-size:11px;"}, JSON.stringify(flow.content, null, 2)));
