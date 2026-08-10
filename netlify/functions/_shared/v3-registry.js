@@ -1,7 +1,7 @@
 "use strict";
 
 const LAYOUT_FAMILIES = ["Hero","Split","Minimal","Monumental","Editorial","Magazine","Storytelling","Immersif","Portrait","Paysage"];
-const REQUIRED_FIELDS = ["type","people","primarySubject","secondarySubject","requiredAction","recognition","allowedEquipment","forbiddenEquipment","forbiddenAccessories","outfit","position","bodyZones","visualPlanes","story","emotion","detailLevel","recommendedLayout","compatibleLayouts","firstLook","secondLook","thirdLook","referencePolicy","blockingConditions"];
+const REQUIRED_FIELDS = ["type","people","uniqueIdentityCount","visibleRepresentationPolicy","requiredCompositeStages","primarySubject","secondarySubject","requiredAction","recognition","allowedEquipment","forbiddenEquipment","forbiddenAccessories","outfit","position","bodyZones","visualPlanes","story","emotion","detailLevel","recommendedLayout","compatibleLayouts","firstLook","secondLook","thirdLook","referencePolicy","blockingConditions"];
 
 const definitions = [
   ["Massage Zébré","massage signature",2,"receveur sur table","praticien","enchaînement personnalisé fluide","alternance de gestes enveloppants et ciblés","table, drap noir","appareil médical, pierres","bougies, fleurs, bol spa","tenue noire professionnelle","allongé, praticien debout","dos, jambes, épaules"],
@@ -27,7 +27,9 @@ const definitions = [
 function makeContract(d){
   const [name,type,people,primarySubject,secondarySubject,requiredAction,recognition,allowedEquipment,forbiddenEquipment,forbiddenAccessories,outfit,position,bodyZones]=d;
   const composite=type==="offre composite";
+  const requiredCompositeStages=name==="Offre Gold"?["massage personnalisé","imposition des mains Reiki","séance avec lunettes PSiO® officielles"]:name==="Offre Sylver"?["Massage Abhyanga OU Massage Zébré","séance avec lunettes PSiO® officielles"]:[];
   return Object.freeze({ name,type,people,primarySubject,secondarySubject,requiredAction,recognition,allowedEquipment,forbiddenEquipment,forbiddenAccessories,outfit,position,bodyZones,
+    uniqueIdentityCount:people, visibleRepresentationPolicy:composite?`exactement ${people} identités humaines cohérentes ; les mêmes identités peuvent être représentées aux ${requiredCompositeStages.length} moments successifs sans compter comme de nouvelles personnes ; aucune identité étrangère`:`chaque identité n'apparaît qu'une fois`,requiredCompositeStages,
     visualPlanes: composite ? "plans narratifs continus explicitement ordonnés" : "premier plan gestuel, sujet principal net, arrière-plan sobre",
     story: composite ? requiredAction : `une scène authentique où ${requiredAction}`,
     emotion:"confiance, apaisement premium", detailLevel:"élevé et anatomiquement cohérent",
@@ -35,7 +37,7 @@ function makeContract(d){
     compatibleLayouts: composite ? ["Storytelling","Magazine","Split"] : ["Hero","Editorial","Portrait","Paysage","Minimal"],
     firstLook:primarySubject, secondLook:requiredAction, thirdLook:secondarySubject,
     referencePolicy: name.includes("PSIO")||composite ? "références PSiO® uniquement dans le plan réellement centré PSiO®, fidélité produit obligatoire" : "référence facultative, jamais copiée comme identité",
-    blockingConditions:[`nombre de personnes différent de ${people}`,"prestation non reconnaissable","geste obligatoire absent","matériel ou accessoire interdit","texte ou logo dans la photographie brute",...(composite?["une étape composite absente","continuité visuelle absente"]:[])],
+    blockingConditions:[composite?`nombre d'identités humaines uniques différent de ${people}, sans compter leurs répétitions narratives`:`nombre de personnes différent de ${people}`,"prestation non reconnaissable","geste obligatoire absent","matériel ou accessoire interdit","texte ou logo dans la photographie brute",...(composite?["une étape composite absente","continuité du bénéficiaire ou du praticien absente","identité étrangère présente"]:[])],
   });
 }
 const SERVICE_REGISTRY=Object.freeze(Object.fromEntries(definitions.map(d=>[d[0],makeContract(d)])));
