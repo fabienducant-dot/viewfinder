@@ -5225,6 +5225,7 @@ async function confirmAndGenerateImage(prepared, onStatus, cancelToken){
   while(true){
     try{
       const genResult = await callProviderImage(prepared.imagePrompt, size, undefined, onStatus, cancelToken, {
+        v3Plan: prepared.v3Plan || undefined,
         v3: prepared.v3Plan ? {
           service: prepared.v3Plan.artDirection.service,
           platform: prepared.v3Plan.artDirection.platform,
@@ -5554,8 +5555,9 @@ async function callProviderImage(prompt, size, extraReferenceDataUrls, onStatus,
       costMode: options.costMode || state.costMode || "test",
       costConfirmed: options.costConfirmed === true,
       clientRequestId: options.clientRequestId || undefined,
-      // V3 : le serveur reconstruit le PhotoBrief contractuel. Le modèle image ne reçoit donc
-      // jamais le prompt d'affiche historique contenant logo ou typographie.
+      v3Plan: options.v3Plan || undefined,
+      // V3 : le serveur réutilise sans reconstruction le plan préparé et son identifiant stable.
+      // Le modèle image ne reçoit jamais le prompt d'affiche historique contenant logo ou typographie.
       v3: options.v3 || (state.prestationName && state.prestationName!=="Tous sujets" ? {
         service:state.prestationName,
         platform:(options.brandComposition?.platform || state.network)==="Article Blog Wix" ? "Blog" : (options.brandComposition?.platform || state.network),
@@ -7286,7 +7288,7 @@ function buildPostTab(){
       try{
         const prepared = await prepareCreativeBrief({ mission: state.mission, platform, prestation: state.prestationName, topic: state.topic, aspectKey: PLATFORM_ASPECT[platform], size: API_IMAGE_SIZE_BY_PLATFORM[platform]||"1024x1024", isCampaign:false, registres: Array.isArray(state.registres) ? [...state.registres] : [], userReferenceDataUrl: state.userReferenceUpload && state.userReferenceUpload.dataUrl, userReferenceImageId: state.userReferenceUpload && state.userReferenceUpload.id, aiLogoIntegration: !!state.aiLogoIntegration });
         if(state.prestationName&&state.prestationName!=="Tous sujets"){
-          const planResponse=await fetch("/.netlify/functions/plan-v3",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({service:state.prestationName,platform:platform==="Article Blog Wix"?"Blog":platform,marketingObjective:state.mission||"Faire réserver",audience:"clientèle La Santé des Zèbres",artHistory:(state.imageHistory||[]).map(x=>x.artFingerprint).filter(Boolean).slice(-10),creativeSeed:`${state.prestationName}-${state.topic}-${Date.now()}`})});
+          const planResponse=await fetch("/.netlify/functions/plan-v3",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({service:state.prestationName,platform:platform==="Article Blog Wix"?"Blog":platform,marketingObjective:state.mission||"Faire réserver",audience:"clientèle La Santé des Zèbres",artHistory:(state.imageHistory||[]).map(x=>x.artFingerprint).filter(Boolean).slice(-10),creativeSeed:`${state.prestationName}-${state.topic}-${Date.now()}`,artDirectionKey:prepared.brief?.sceneFamily||prepared.sceneFamily||null})});
           const planData=await fetchJsonOrThrowRaw(planResponse,"Direction Artistique V3");
           if(!planResponse.ok||planData.error)throw new Error(planData.error||"Plan V3 indisponible");
           prepared.v3Plan=planData;
