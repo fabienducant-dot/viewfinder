@@ -61,7 +61,7 @@ test("le compositeur serveur produit un PNG final au bon format", async () => {
   });
   const meta = await sharp(finalBuffer).metadata();
   assert.equal(meta.format, "png");
-  assert.equal(meta.width, 1088);
+  assert.equal(meta.width, 1080);
   assert.equal(meta.height, 1920);
   assert.ok(finalBuffer.length > 20_000);
 });

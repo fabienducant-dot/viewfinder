@@ -12,6 +12,7 @@ const { getStore } = require("@netlify/blobs");
 const crypto = require("crypto");
 const { resolveInvocationBaseUrl } = require("./_shared/netlify-invocation-url");
 const { planV3 } = require("./_shared/v3-pipeline");
+const {costMode,buildCostAudit}=require("./_shared/v3-cost-control");
 
 function openJobStore(){
   const opts = { consistency: "strong" }; // écriture puis relecture quasi immédiate du statut : la
@@ -26,9 +27,13 @@ function openJobStore(){
 function buildJobInput(payload){
   let {prompt,size,model,quality,referenceImageUrls,referenceImageData,brandComposition}=payload;
   let v3Plan=null;
+  const mode=costMode(payload.costMode||"test");
+  if(mode.id==="recompose")throw new Error("La recomposition doit utiliser l’endpoint gratuit dédié.");
+  if(mode.requiresConfirmation&&payload.costConfirmed!==true)throw new Error(`Confirmation explicite requise pour le coût estimé (${mode.estimatedPhotoEur.toFixed(2)} €).`);
   if(payload.v3){v3Plan=planV3(payload.v3);prompt=v3Plan.photoBrief.prompt;}
   if(typeof prompt!=="string"||!prompt.trim())throw new Error("Le prompt est requis");
-  return {prompt,size,model,quality,referenceImageUrls,referenceImageData,referenceRequired:payload.referenceRequired===true,brandComposition,v3Plan};
+  const referenceImageCount=(referenceImageUrls||[]).length+(referenceImageData||[]).length;
+  return {prompt,size,model:model||"gpt-image-2",quality:mode.quality,referenceImageUrls,referenceImageData,referenceRequired:payload.referenceRequired===true,brandComposition,v3Plan,costMode:mode.id,clientRequestId:String(payload.clientRequestId||""),costAudit:buildCostAudit({mode:mode.id,referenceImageCount})};
 }
 
 exports.handler = async (event) => {
@@ -50,6 +55,10 @@ exports.handler = async (event) => {
     const jobId = crypto.randomUUID();
     const now = Date.now();
     const store = openJobStore();
+    const idempotencyKey=input.clientRequestId||crypto.createHash("sha256").update(JSON.stringify({prompt:input.prompt,size:input.size,costMode:input.costMode,brandComposition:input.brandComposition})).digest("hex");
+    const existingRaw=await store.get(`idempotency/${idempotencyKey}`);
+    if(existingRaw){const existing=JSON.parse(existingRaw);return {statusCode:200,headers:{"Content-Type":"application/json"},body:JSON.stringify({ok:true,jobId:existing.jobId,status:existing.status||"queued",deduplicated:true})};}
+    await store.set(`idempotency/${idempotencyKey}`,JSON.stringify({jobId,status:"queued",createdAt:now}));
 
     // Entrée complète (peut contenir jusqu'à 4 images en base64) écrite en Blobs — jamais transmise
     // telle quelle au déclenchement de la Background Function.
@@ -64,6 +73,8 @@ exports.handler = async (event) => {
       resultKey: null,
       usedReference: null,
       referenceFallbackReason: null,
+      costAudit:input.costAudit,
+      idempotencyKey,
     }));
 
     // Le job doit déclencher la Background Function du MÊME déploiement. Sur une Deploy Preview,

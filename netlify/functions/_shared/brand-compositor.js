@@ -226,10 +226,12 @@ async function prepareLogoOverlay(logoBuffer){
 async function composeBrandPoster({ imageBuffer, logoDataUrl, platform, headline, zoneText, selectedLayout }){
   if(!imageBuffer || !Buffer.isBuffer(imageBuffer)) throw new Error("Image générée absente du compositeur.");
   const logoBuffer = dataUrlToBuffer(logoDataUrl);
-  const image = sharp(imageBuffer, { failOn: "none" }).rotate();
-  const meta = await image.metadata();
-  const width = meta.width;
-  const height = meta.height;
+  const template=(selectedLayout&&selectedLayout.template)||PLATFORM_TEMPLATES[normalizePlatform(platform)];
+  const sourceImage=sharp(imageBuffer,{failOn:"none"}).rotate();
+  const image=template?sourceImage.resize({width:template.width,height:template.height,fit:"cover",position:selectedLayout?.cropPosition||"attention"}):sourceImage;
+  const meta = await sourceImage.metadata();
+  const width = template?.width || meta.width;
+  const height = template?.height || meta.height;
   if(!width || !height) throw new Error("Dimensions de l'image générée introuvables.");
   const hasHeadline = Boolean(String(headline || "").trim());
   const layout = layoutFor(width, height, platform, zoneText, hasHeadline, selectedLayout);

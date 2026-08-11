@@ -1,12 +1,13 @@
 "use strict";
 
-const PLATFORM_ALIASES=Object.freeze({"Article Blog Wix":"Blog"});
+const PLATFORM_ALIASES=Object.freeze({"Article Blog Wix":"Blog","Instagram":"Instagram Portrait"});
 const PLATFORM_TEMPLATES=Object.freeze({
- Instagram:{width:1088,height:1360,margins:.06,ratioVariant:"4x5-feed",layouts:["Storytelling","Hero","Portrait","Editorial"],lockup:{x:.08,y:.66,width:.84,align:"center"},contactFields:[]},
+ "Instagram Square":{width:1080,height:1080,margins:.06,ratioVariant:"1x1-feed",layouts:["Storytelling","Hero","Editorial"],lockup:{x:.08,y:.64,width:.84,align:"center"},contactFields:[]},
+ "Instagram Portrait":{width:1080,height:1350,margins:.06,ratioVariant:"4x5-feed",layouts:["Storytelling","Hero","Portrait","Editorial"],lockup:{x:.08,y:.66,width:.84,align:"center"},contactFields:[]},
  Facebook:{width:1200,height:1500,margins:.055,ratioVariant:"4x5-social",layouts:["Storytelling","Editorial","Split","Magazine"],lockup:{x:.055,y:.08,width:.58,align:"left"},contactFields:["domain"]},
- Story:{width:1088,height:1920,margins:.07,ratioVariant:"9x16-fullscreen",layouts:["Storytelling","Immersif","Portrait"],lockup:{x:.07,y:.70,width:.86,align:"center"},contactFields:["domain"]},
+ Story:{width:1080,height:1920,margins:.07,ratioVariant:"9x16-fullscreen",layouts:["Storytelling","Immersif","Portrait"],lockup:{x:.07,y:.70,width:.86,align:"center"},contactFields:["domain"]},
  "Google Business":{width:1200,height:900,margins:.06,ratioVariant:"4x3-local",layouts:["Storytelling","Paysage","Hero","Minimal"],lockup:{x:.06,y:.62,width:.50,align:"left"},contactFields:["phone","address"]},
- Blog:{width:1920,height:1088,margins:.05,ratioVariant:"16x9-editorial",layouts:["Storytelling","Paysage","Magazine","Editorial"],lockup:{x:.54,y:.12,width:.41,align:"center"},contactFields:["domain"]},
+ Blog:{width:1920,height:1080,margins:.05,ratioVariant:"16x9-editorial",layouts:["Storytelling","Paysage","Magazine","Editorial"],lockup:{x:.54,y:.12,width:.41,align:"center"},contactFields:["domain"]},
  Bannière:{width:1920,height:640,margins:.045,ratioVariant:"3x1-banner",layouts:["Storytelling","Monumental","Minimal","Paysage"],lockup:{x:.045,y:.18,width:.44,align:"left"},contactFields:["domain","phone"]},
 });
 function normalizePlatform(platform){return PLATFORM_ALIASES[platform]||platform;}

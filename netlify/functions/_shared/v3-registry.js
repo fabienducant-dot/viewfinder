@@ -1,7 +1,8 @@
 "use strict";
+const {ART_WORLDS}=require("./v3-art-worlds");
 
 const LAYOUT_FAMILIES = ["Hero","Split","Minimal","Monumental","Editorial","Magazine","Storytelling","Immersif","Portrait","Paysage"];
-const REQUIRED_FIELDS = ["type","people","uniqueIdentityCount","visibleRepresentationPolicy","requiredCompositeStages","practitionerGender","practitionerIdentity","practitionerGenderRequired","primarySubject","secondarySubject","requiredAction","recognition","allowedEquipment","forbiddenEquipment","forbiddenAccessories","outfit","position","bodyZones","visualPlanes","story","emotion","detailLevel","recommendedLayout","compatibleLayouts","firstLook","secondLook","thirdLook","referencePolicy","blockingConditions"];
+const REQUIRED_FIELDS = ["type","people","uniqueIdentityCount","visibleRepresentationPolicy","requiredCompositeStages","practitionerGender","practitionerIdentity","practitionerGenderRequired","compatibleArtWorlds","discouragedRecentArtWorlds","visualNarrativeVariants","requiredRealityAnchors","allowedSymbolicAmplifiers","forbiddenSubstitutions","minimumRecognitionEvidence","antiRepetitionWindow","primarySubject","secondarySubject","requiredAction","recognition","allowedEquipment","forbiddenEquipment","forbiddenAccessories","outfit","position","bodyZones","visualPlanes","story","emotion","detailLevel","recommendedLayout","compatibleLayouts","firstLook","secondLook","thirdLook","referencePolicy","blockingConditions"];
 
 const definitions = [
   ["Massage Zébré","massage signature",2,"receveur sur table","praticien","enchaînement personnalisé fluide","alternance de gestes enveloppants et ciblés","table, drap noir","appareil médical, pierres","bougies, fleurs, bol spa","tenue noire professionnelle","allongé, praticien debout","dos, jambes, épaules"],
@@ -27,10 +28,12 @@ const definitions = [
 function makeContract(d){
   const [name,type,people,primarySubject,secondarySubject,requiredAction,recognition,allowedEquipment,forbiddenEquipment,forbiddenAccessories,outfit,position,bodyZones]=d;
   const composite=type==="offre composite";
+  const practitionerRequired=people>=2;
   const requiredCompositeStages=name==="Offre Gold"?["massage personnalisé","imposition des mains Reiki","séance avec lunettes PSiO® officielles"]:name==="Offre Sylver"?["Massage Abhyanga OU Massage Zébré","séance avec lunettes PSiO® officielles"]:[];
   return Object.freeze({ name,type,people,primarySubject,secondarySubject,requiredAction,recognition,allowedEquipment,forbiddenEquipment,forbiddenAccessories,outfit,position,bodyZones,
     uniqueIdentityCount:people, visibleRepresentationPolicy:composite?`exactement ${people} identités humaines cohérentes ; les mêmes identités peuvent être représentées aux ${requiredCompositeStages.length} moments successifs sans compter comme de nouvelles personnes ; aucune identité étrangère`:`chaque identité n'apparaît qu'une fois`,requiredCompositeStages,
-    practitionerGender:composite?"male":"unspecified", practitionerIdentity:composite?"Fabien, praticien masculin adulte":"praticien conforme à la prestation", practitionerGenderRequired:composite,
+    practitionerGender:practitionerRequired?"male":"not_applicable", practitionerIdentity:practitionerRequired?"Fabien, praticien masculin adulte":"aucun praticien visible requis", practitionerGenderRequired:practitionerRequired,
+    compatibleArtWorlds:ART_WORLDS.slice(), discouragedRecentArtWorlds:[], visualNarrativeVariants:["geste signature en profondeur","interaction rapprochée et matière","perspective cinématographique asymétrique"], requiredRealityAnchors:[requiredAction,recognition,allowedEquipment], allowedSymbolicAmplifiers:["architecture en retrait","sculpture organique","lumière dorée narrative","symbole SDZ discret"], forbiddenSubstitutions:["décor sans soin","paysage sans geste","silhouette inactive","spa générique","ambiance médicale ou occulte"], minimumRecognitionEvidence:2, antiRepetitionWindow:10,
     visualPlanes: composite ? "plans narratifs continus explicitement ordonnés" : "premier plan gestuel, sujet principal net, arrière-plan sobre",
     story: composite ? requiredAction : `une scène authentique où ${requiredAction}`,
     emotion:"confiance, apaisement premium", detailLevel:"élevé et anatomiquement cohérent",

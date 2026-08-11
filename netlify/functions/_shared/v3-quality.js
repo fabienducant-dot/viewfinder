@@ -1,6 +1,6 @@
 "use strict";
 function includesAny(values,terms){const hay=(values||[]).join(" ").toLowerCase();return terms.split(/,|;/).map(x=>x.trim().toLowerCase()).filter(Boolean).some(x=>hay.includes(x));}
-function assessQuality({contract,analysis={},composition={}}){
+function assessQuality({contract,analysis={},composition={},nonRedundancy={},cost={}}){
  const technical=[],business=[],artistic=[],warnings=[];
  if(!composition.imageExists)technical.push("image_absente");
  if(analysis.parasites?.some(x=>/texte|logo|signature|url|cta/i.test(x)))technical.push("texte_parasite");
@@ -21,6 +21,7 @@ function assessQuality({contract,analysis={},composition={}}){
  const paletteDrift=Number(composition.paletteDrift??analysis.paletteDrift??0);
  if(paletteDrift>0.45)artistic.push("derive_palette_importante");else if(paletteDrift>0.15)warnings.push("derive_ambre_moderee_corrigeable");
  if(composition.contrastValid===false)artistic.push("contraste");if(composition.gazeHierarchyValid===false)artistic.push("hierarchie_regard");if(composition.thumbnailImpact===false)artistic.push("impact_miniature");
- return {ok:technical.length===0&&business.length===0&&artistic.length===0,technical:{ok:!technical.length,errors:technical},business:{ok:!business.length,errors:business},artistic:{ok:!artistic.length,errors:artistic},warnings,preserveRawImage:true,preservePostText:true};
+ const nonRedundancyErrors=nonRedundancy.tooSimilar?["combinaison_artistique_trop_proche"]:[];
+ return {ok:technical.length===0&&business.length===0&&artistic.length===0&&nonRedundancyErrors.length===0,technical:{ok:!technical.length,errors:technical},business:{ok:!business.length,errors:business},artistic:{ok:!artistic.length,errors:artistic},nonRedundancy:{ok:!nonRedundancyErrors.length,errors:nonRedundancyErrors,reason:nonRedundancy.reason||null},cost:{ok:cost.withinApprovedCeiling!==false,report:cost.report||null},warnings,preserveRawImage:true,preservePostText:true};
 }
 module.exports={assessQuality};

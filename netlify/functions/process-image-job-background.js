@@ -18,6 +18,8 @@ const { applyImageEditOptions } = require("./_shared/openai-image-edit-options")
 const { composeBrandPoster } = require("./_shared/brand-compositor");
 const { analyzeImageWithOpenAI } = require("./_shared/v3-image-analyzer");
 const { executeV3Pipeline } = require("./_shared/v3-executor");
+const {buildCostAudit}=require("./_shared/v3-cost-control");
+const {artisticFingerprint}=require("./_shared/v3-pipeline");
 
 const PROCESSING_RECENT_THRESHOLD_MS = 14 * 60 * 1000; // en dessous, on suppose qu'une autre
                                                           // invocation traite déjà ce job
@@ -182,7 +184,7 @@ exports.handler = async (event) => {
       await safeSetJobStatus(store, jobId, { status: "failed", error: { message: "Entrée du job introuvable en Blobs.", source: "storage" } });
       return { statusCode: 200, body: JSON.stringify({ ok: false, error: "Entrée introuvable" }) };
     }
-    const { prompt, size, model, quality, referenceImageUrls, referenceImageData, brandComposition, v3Plan } = input;
+    const { prompt, size, model, quality, referenceImageUrls, referenceImageData, brandComposition, v3Plan, costMode } = input;
     const referenceRequired = input.referenceRequired === true;
 
     const key = process.env.OPENAI_API_KEY;
@@ -203,7 +205,7 @@ exports.handler = async (event) => {
           usedReference = true;
         } catch (refErr) {
           referenceFallbackReason = String(refErr.message || refErr);
-          if(referenceRequired){
+          if(referenceRequired||v3Plan){
             throw new Error(`Référence obligatoire non utilisée : ${referenceFallbackReason}`);
           }
           // Dégradation propre pour les références artistiques facultatives uniquement.
@@ -283,7 +285,11 @@ exports.handler = async (event) => {
     // usage réel OpenAI Images (tokens texte/image) : persisté dans le STATUT (léger — jamais le b64)
     // pour l'archivage des coûts mesurés côté client. Additif, rétrocompatible.
     const usage = data.usage ? { input_tokens: data.usage.input_tokens ?? null, output_tokens: data.usage.output_tokens ?? null, input_tokens_details: data.usage.input_tokens_details ?? null } : null;
-    await safeSetJobStatus(store, jobId, { status: "completed", error: null, resultKey, rawResultKey, usedReference, referenceFallbackReason, brandComposited, v3Plan, v3Finalization, usage });
+    const referenceImageCount=(referenceImageUrls||[]).length+(referenceImageData||[]).length;
+    const costAudit=buildCostAudit({mode:costMode||"test",referenceImageCount,imageUsage:usage,visionUsage:v3Plan?{}:false,retries:0,imageCalls:1});
+    const referenceAudit={referenceImageCount,used:usedReference,reason:v3Plan&&/PSIO|PSiO/.test(v3Plan.contract.name)?"Étape PSiO® contractuelle":"Référence visuelle explicitement sélectionnée",stage:v3Plan?.contract.requiredCompositeStages?.find(x=>/PSiO/i.test(x))||null,estimatedInputImageCostEur:null};
+    const artFingerprint=v3Plan&&v3Finalization?artisticFingerprint(v3Plan,v3Finalization,v3Finalization.quality.ok?"validated":"refused"):null;
+    await safeSetJobStatus(store, jobId, { status: "completed", error: null, resultKey, rawResultKey, usedReference, referenceFallbackReason, brandComposited, v3Plan, v3Finalization,artFingerprint,referenceAudit,costAudit, usage });
 
     // Nettoyage de l'entrée après usage réussi — best-effort, non bloquant si ça échoue.
     try { await store.delete(`jobs/${jobId}/input`); } catch (deleteErr) { /* pas grave, l'entrée reste simplement, sans impact fonctionnel */ }
