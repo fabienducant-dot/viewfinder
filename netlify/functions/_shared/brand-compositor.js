@@ -3,6 +3,7 @@
 const fs = require("fs");
 const sharp = require("sharp");
 const opentype = require("opentype.js");
+const crypto = require("crypto");
 const { PLATFORM_TEMPLATES, normalizePlatform } = require("./v3-layout-engine");
 
 const GOLD = "#D9AD3B";
@@ -33,6 +34,7 @@ function loadFontSet(weight){
 
 const DISPLAY_FONT = loadFontSet(600);
 const TEXT_FONT = loadFontSet(400);
+const TRANSPARENT_LOGO_CACHE = new Map();
 
 function dataUrlToBuffer(dataUrl){
   const match = String(dataUrl || "").match(/^data:image\/[a-zA-Z0-9.+-]+;base64,(.+)$/);
@@ -102,13 +104,24 @@ function vectorText(fontSet, text, centerX, baselineY, fontSize, className){
   return `<path d="${paths}" class="${className}"/>`;
 }
 
+function measureVectorText(fontSet,text,fontSize,letterSpacing=0){
+  const chars=Array.from(String(text||""));
+  return chars.reduce((sum,character)=>{const latin=fontSet.latin.charToGlyph(character);const font=latin.index===0&&character!=="\0"?fontSet.extended:fontSet.latin;const glyph=font.charToGlyph(character);return sum+(glyph.advanceWidth||font.unitsPerEm*.38)*fontSize/font.unitsPerEm;},0)+Math.max(0,chars.length-1)*letterSpacing;
+}
+function fitFontSize(fontSet,lines,preferred,minimum,safeWidth){let size=preferred;while(size>minimum&&lines.some(line=>measureVectorText(fontSet,line,size)>safeWidth))size--;return size;}
+async function hasOpaqueLogoRectangle(buffer){const {data,info}=await sharp(buffer).ensureAlpha().raw().toBuffer({resolveWithObject:true});const inset=Math.max(0,Math.round(Math.min(info.width,info.height)*.02));return [[inset,inset],[info.width-1-inset,inset],[inset,info.height-1-inset],[info.width-1-inset,info.height-1-inset]].every(([x,y])=>{const o=(y*info.width+x)*info.channels;return data[o+3]>245&&Math.max(data[o],data[o+1],data[o+2])<=55;});}
+
 function layoutFor(width, height, platform, requestedZone, hasHeadline, selectedLayout){
   const normalized=normalizePlatform(platform);
   const template=(selectedLayout&&selectedLayout.template)||PLATFORM_TEMPLATES[normalized];
   if(template){
     const spec=template.lockup;
-    const margin=Math.round(width*template.margins);
-    return {x:Math.round(width*spec.x),y:Math.round(height*spec.y),width:Math.round(width*spec.width),height:Math.min(Math.round(height*(hasHeadline?.28:.22)),height-Math.round(height*spec.y)-margin),margin,portrait:height>width*1.35,landscape:width>height*1.35,template,align:spec.align};
+    const margin=Math.max(Math.round(width*.06),Math.round(width*template.margins));
+    const story=normalized==="Story";
+    const x=Math.max(margin,Math.round(width*spec.x));
+    const y=story?Math.round(height*.72):Math.round(height*spec.y);
+    const boxWidth=Math.min(Math.round(width*spec.width),width-x-margin);
+    return {x,y,width:boxWidth,height:Math.min(Math.round(height*(story&&hasHeadline?.22:(hasHeadline?.28:.22))),height-y-margin),margin,portrait:height>width*1.35,landscape:width>height*1.35,template,align:spec.align};
   }
   /* L'identité et l'accroche forment un cartouche éditorial unique en bas de l'image. L'ancien
      empilement en haut traversait régulièrement le visage et serrait la signature contre le logo. */
@@ -131,12 +144,16 @@ function layoutFor(width, height, platform, requestedZone, hasHeadline, selected
 function buildOverlaySvg(width, height, layout, platform, headline){
   const { title, subtitle } = headlineParts(headline);
   const scale = Math.max(0.78, Math.min(1.55, width / 1088));
-  const titleSize = Math.round((layout.portrait ? 67 : 62) * scale);
-  const subtitleSize = Math.round((layout.portrait ? 42 : 38) * scale);
+  const story=normalizePlatform(platform)==="Story";
+  const safeWidth=Math.min(layout.width,width-Math.max(layout.margin,Math.round(width*.06))*2);
+  const preferredTitle=Math.round((story?48:(layout.portrait ? 67 : 62))*scale);
+  const preferredSubtitle=Math.round((story?32:(layout.portrait ? 42 : 38))*scale);
   const brandSize = Math.round((layout.portrait ? 29 : 27) * scale);
   const citySize = Math.round(15 * scale);
   const titleLines = wrapWords(title.toUpperCase(), layout.portrait ? 24 : 31, 2);
   const subtitleLines = wrapWords(subtitle.toUpperCase(), layout.portrait ? 34 : 44, 2);
+  const titleSize=fitFontSize(DISPLAY_FONT,titleLines,preferredTitle,Math.round(26*scale),safeWidth);
+  const subtitleSize=fitFontSize(TEXT_FONT,subtitleLines,preferredSubtitle,Math.round(20*scale),safeWidth);
   const centerX = layout.x + layout.width / 2;
   const plannedLogoWidth = Math.round(layout.width * (layout.portrait ? 0.115 : 0.10));
   const textTop = layout.y + Math.round(layout.height * 0.12);
@@ -188,37 +205,22 @@ function buildOverlaySvg(width, height, layout, platform, headline){
 }
 
 async function prepareLogoOverlay(logoBuffer){
+  const cacheKey=crypto.createHash("sha256").update(logoBuffer).digest("hex");
+  if(TRANSPARENT_LOGO_CACHE.has(cacheKey))return Buffer.from(TRANSPARENT_LOGO_CACHE.get(cacheKey));
   const source = sharp(logoBuffer, { failOn: "none" }).rotate().ensureAlpha();
   const { data, info } = await source.raw().toBuffer({ resolveWithObject: true });
   const px = Buffer.from(data);
-  const borderDepth = Math.max(2, Math.round(Math.min(info.width, info.height) * .025));
-  let borderSamples = 0;
-  let opaqueDarkBorder = 0;
-  for(let y=0; y<info.height; y++){
-    for(let x=0; x<info.width; x++){
-      if(x>=borderDepth && x<info.width-borderDepth && y>=borderDepth && y<info.height-borderDepth) continue;
-      const offset=(y*info.width+x)*info.channels;
-      borderSamples++;
-      if(Math.max(px[offset],px[offset+1],px[offset+2])<50 && px[offset+3]>245) opaqueDarkBorder++;
-    }
-  }
-  const opaqueDarkBorderRatio = borderSamples ? opaqueDarkBorder / borderSamples : 0;
-
-  /* Certains logos enregistrés sont des JPEG/PNG opaques sur rectangle noir. On ne détoure que
-     si au moins trois coins prouvent ce fond. Les pixels dorés restent intacts ; le noir de fond
-     devient transparent et ne forme plus de vignette rectangulaire sur l'affiche. */
-  if(opaqueDarkBorderRatio >= .60){
-    for(let i=0; i<px.length; i+=info.channels){
-      const luminance = Math.max(px[i], px[i+1], px[i+2]);
-      const backgroundAlpha = luminance <= 16 ? 0 : luminance >= 62 ? 1 : (luminance - 16) / 46;
-      px[i+3] = Math.round(px[i+3] * backgroundAlpha);
-    }
-  }
-
-  return sharp(px, { raw: info })
+  /* Détourage conservateur par composante connexe : seuls les pixels quasi noirs accessibles
+     depuis un bord deviennent transparents. Les noirs internes fermés du zèbre restent intacts. */
+  const seen=new Uint8Array(info.width*info.height);const queue=[];const dark=(x,y)=>{const o=(y*info.width+x)*info.channels;return px[o+3]>0&&Math.max(px[o],px[o+1],px[o+2])<=55;};
+  const seed=(x,y)=>{const i=y*info.width+x;if(!seen[i]&&dark(x,y)){seen[i]=1;queue.push([x,y]);}};
+  for(let x=0;x<info.width;x++){seed(x,0);seed(x,info.height-1);}for(let y=0;y<info.height;y++){seed(0,y);seed(info.width-1,y);}
+  for(let q=0;q<queue.length;q++){const [x,y]=queue[q];const o=(y*info.width+x)*info.channels;px[o+3]=0;for(const [nx,ny] of [[x-1,y],[x+1,y],[x,y-1],[x,y+1]])if(nx>=0&&ny>=0&&nx<info.width&&ny<info.height)seed(nx,ny);}
+  const output=await sharp(px, { raw: info })
     .trim({ background: { r:0, g:0, b:0, alpha:0 } })
     .png()
     .toBuffer();
+  TRANSPARENT_LOGO_CACHE.set(cacheKey,Buffer.from(output));return output;
 }
 
 async function composeBrandPoster({ imageBuffer, logoDataUrl, platform, headline, zoneText, selectedLayout }){
@@ -233,10 +235,12 @@ async function composeBrandPoster({ imageBuffer, logoDataUrl, platform, headline
   const layout = layoutFor(width, height, platform, zoneText, hasHeadline, selectedLayout);
   const { title, subtitle } = headlineParts(headline);
   const scale = Math.max(0.78, Math.min(1.55, width / 1088));
-  const titleSize = Math.round((layout.portrait ? 67 : 62) * scale);
-  const subtitleSize = Math.round((layout.portrait ? 42 : 38) * scale);
   const titleLines = wrapWords(title.toUpperCase(), layout.portrait ? 24 : 31, 2);
   const subtitleLines = wrapWords(subtitle.toUpperCase(), layout.portrait ? 34 : 44, 2);
+  const story=normalizePlatform(platform)==="Story";
+  const safeWidth=Math.min(layout.width,width-Math.max(layout.margin,Math.round(width*.06))*2);
+  const titleSize=fitFontSize(DISPLAY_FONT,titleLines,Math.round((story?48:(layout.portrait?67:62))*scale),Math.round(26*scale),safeWidth);
+  const subtitleSize=fitFontSize(TEXT_FONT,subtitleLines,Math.round((story?32:(layout.portrait?42:38))*scale),Math.round(20*scale),safeWidth);
   const textTop = layout.y + Math.round(layout.height * 0.12);
   const textY = textTop + titleSize + titleLines.length * titleSize * 1.05 + subtitleSize * 0.45;
   const headlineEnd = textY + Math.max(1, subtitleLines.length) * subtitleSize * 1.10;
@@ -250,9 +254,14 @@ async function composeBrandPoster({ imageBuffer, logoDataUrl, platform, headline
   const logoWidth = Math.max(24, Math.min(desiredLogoWidth, Math.floor(availableHeight*sourceRatio)));
   const logoTop = Math.min(height-minimumBottomMargin-Math.ceil(logoWidth/sourceRatio), Math.round(dividerY + layout.height * 0.055));
   const logoLeft = Math.round(layout.x + (layout.width - logoWidth) / 2);
+  const estimatedLogoHeight=Math.ceil(logoWidth/sourceRatio);
+  if(layout.x<Math.round(width*.06)||layout.x+layout.width>width-Math.round(width*.06))throw new Error("Marges latérales du lock-up insuffisantes.");
+  if(logoLeft<0||logoTop<0||logoLeft+logoWidth>width||logoTop+estimatedLogoHeight>height-minimumBottomMargin)throw new Error("Logo hors cadre.");
+  if(titleLines.some(line=>measureVectorText(DISPLAY_FONT,line,titleSize)>safeWidth)||subtitleLines.some(line=>measureVectorText(TEXT_FONT,line,subtitleSize)>safeWidth))throw new Error("Texte hors cadre après mesure typographique.");
   const resizedLogo = await sharp(cleanLogo, { failOn: "none" })
     .resize({ width: logoWidth, withoutEnlargement: false, fit: "inside" })
     .png().toBuffer();
+  if(await hasOpaqueLogoRectangle(resizedLogo))throw new Error("Rectangle opaque détecté autour du logo officiel.");
   const overlaySvg = buildOverlaySvg(width, height, layout, platform, headline);
   return image
     .composite([
@@ -263,4 +272,4 @@ async function composeBrandPoster({ imageBuffer, logoDataUrl, platform, headline
     .toBuffer();
 }
 
-module.exports = { composeBrandPoster, dataUrlToBuffer, escapeXml, wrapWords, normalizedZone, prepareLogoOverlay, vectorText, layoutFor, BRAND_CONTACTS };
+module.exports = { composeBrandPoster, dataUrlToBuffer, escapeXml, wrapWords, normalizedZone, prepareLogoOverlay, hasOpaqueLogoRectangle,vectorText, measureVectorText,fitFontSize,layoutFor, BRAND_CONTACTS };
