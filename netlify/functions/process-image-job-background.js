@@ -184,7 +184,7 @@ exports.handler = async (event) => {
       await safeSetJobStatus(store, jobId, { status: "failed", error: { message: "Entrée du job introuvable en Blobs.", source: "storage" } });
       return { statusCode: 200, body: JSON.stringify({ ok: false, error: "Entrée introuvable" }) };
     }
-    const { prompt, size, model, quality, requestedQuality, effectiveQuality, requestedSize, effectiveSize, referenceImageUrls, referenceImageData, brandComposition, v3Plan, costMode } = input;
+    const { prompt, size, model, quality, requestedQuality, effectiveQuality, requestedSize, effectiveSize, referenceImageUrls, referenceImageData, referenceRoles, brandComposition, v3Plan, costMode } = input;
     const referenceRequired = input.referenceRequired === true;
 
     if(costMode==="test"&&(quality==="high"||effectiveQuality==="high")){
@@ -291,8 +291,8 @@ exports.handler = async (event) => {
     // pour l'archivage des coûts mesurés côté client. Additif, rétrocompatible.
     const usage = data.usage ? { input_tokens: data.usage.input_tokens ?? null, output_tokens: data.usage.output_tokens ?? null, input_tokens_details: data.usage.input_tokens_details ?? null } : null;
     const referenceImageCount=(referenceImageUrls||[]).length+(referenceImageData||[]).length;
-    const costAudit=buildCostAudit({mode:costMode||"test",referenceImageCount,imageUsage:usage,visionUsage:v3Plan?{}:false,retries:0,imageCalls:1,requestedQuality,requestedSize,effectiveSize});
-    const referenceAudit={referenceImageCount,used:usedReference,reason:v3Plan?.psioRequired?"Étape PSiO® contractuelle":"Référence visuelle explicitement sélectionnée",stage:v3Plan?.contract.requiredCompositeStages?.find(x=>/PSiO/i.test(x))||null,roles:v3Plan?.psioRequired?["profile_worn","front_worn","product"]:[],estimatedInputImageCostEur:0,costIncludedInImageEstimate:true};
+    const costAudit=buildCostAudit({mode:costMode||"test",referenceImageCount,referenceRoles,imageUsage:usage,visionUsage:v3Plan?{}:false,retries:0,imageCalls:1,requestedQuality,requestedSize,effectiveSize});
+    const referenceAudit={referenceImageCount,used:usedReference,reason:v3Plan?.psioRequired?"Étape PSiO® contractuelle":"Référence visuelle explicitement sélectionnée",stage:v3Plan?.contract.requiredCompositeStages?.find(x=>/PSiO/i.test(x))||null,roles:referenceRoles||[],estimatedInputImageCostEur:null,costDetermination:"unknown_until_billing",costIncludedInOutputEstimate:false,usage:data.usage?.input_tokens_details||null};
     const artFingerprint=v3Plan&&v3Finalization?artisticFingerprint(v3Plan,v3Finalization,v3Finalization.quality.ok?"validated":"refused"):null;
     await safeSetJobStatus(store, jobId, { status: "completed", error: null, resultKey, rawResultKey, usedReference, referenceFallbackReason, brandComposited, v3Plan, v3Finalization,artFingerprint,referenceAudit,costAudit,requestedQuality,effectiveQuality:quality,requestedSize,effectiveSize:size,imageGenerationCallCount:1,usage });
 

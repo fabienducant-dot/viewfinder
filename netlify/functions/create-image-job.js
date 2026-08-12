@@ -12,8 +12,8 @@ const { getStore } = require("@netlify/blobs");
 const crypto = require("crypto");
 const { resolveInvocationBaseUrl } = require("./_shared/netlify-invocation-url");
 const { planV3, validatePreparedPlan } = require("./_shared/v3-pipeline");
-const {costMode,buildCostAudit}=require("./_shared/v3-cost-control");
-const {getPsioDataUrls}=require("./_shared/v3-psio-references");
+const {costMode,selectedReferenceRoles,buildCostAudit}=require("./_shared/v3-cost-control");
+const {getPsioStatus,getPsioReferencesForRoles}=require("./_shared/v3-psio-references");
 
 function openJobStore(){
   const opts = { consistency: "strong" }; // écriture puis relecture quasi immédiate du statut : la
@@ -37,7 +37,10 @@ function buildJobInput(payload){
   if(typeof prompt!=="string"||!prompt.trim())throw new Error("Le prompt est requis");
   const referenceImageCount=(referenceImageUrls||[]).length+(referenceImageData||[]).length;
   const effectiveSize=size||"1024x1024";
-  return {prompt,size:effectiveSize,model:model||"gpt-image-2",quality:mode.quality,requestedQuality:quality||mode.quality,effectiveQuality:mode.quality,requestedSize:size||"1024x1024",effectiveSize,costMode:mode.id,referenceImageUrls,referenceImageData,referenceRequired:payload.referenceRequired===true,brandComposition,v3Plan,clientRequestId:String(payload.clientRequestId||""),costAudit:buildCostAudit({mode:mode.id,referenceImageCount,requestedQuality:quality||mode.quality,requestedSize:size||"1024x1024",effectiveSize})};
+  const referenceRoles=selectedReferenceRoles(mode.id,referenceImageCount?["profile_worn","front_worn","product"].slice(0,referenceImageCount):[]);
+  const costAudit=buildCostAudit({mode:mode.id,referenceImageCount,referenceRoles,requestedQuality:quality||mode.quality,requestedSize:size||"1024x1024",effectiveSize});
+  if(costAudit.requiresAdditionalConfirmation&&payload.costCeilingConfirmed!==true)throw new Error(`Confirmation supplémentaire requise : total prudent maximal ${costAudit.estimatedTotalMax.toFixed(3)} €.`);
+  return {prompt,size:effectiveSize,model:model||"gpt-image-2",quality:mode.quality,requestedQuality:quality||mode.quality,effectiveQuality:mode.quality,requestedSize:size||"1024x1024",effectiveSize,costMode:mode.id,referenceImageUrls,referenceImageData,referenceRoles,referenceRequired:payload.referenceRequired===true,brandComposition,v3Plan,clientRequestId:String(payload.clientRequestId||""),costAudit};
 }
 
 exports.handler = async (event) => {
@@ -53,7 +56,7 @@ exports.handler = async (event) => {
   }
   let input;
   try{input=buildJobInput(payload);}catch(error){return {statusCode:400,headers:{"Content-Type":"application/json"},body:JSON.stringify({error:String(error.message||error)})};}
-  if(input.v3Plan?.psioRequired){let persistent;try{persistent=await getPsioDataUrls();}catch(error){return {statusCode:503,headers:{"Content-Type":"application/json"},body:JSON.stringify({error:`Stockage PSiO® inaccessible : ${String(error.message||error)}`,imageGenerationCallCount:0})};}if(persistent.length!==3)return {statusCode:409,headers:{"Content-Type":"application/json"},body:JSON.stringify({error:"Références officielles PSiO® incomplètes — aucun job créé.",psioReferenceReady:false,psioReferenceCount:persistent.length,imageGenerationCallCount:0})};input.referenceImageUrls=[];input.referenceImageData=persistent;input.referenceRequired=true;input.costAudit=buildCostAudit({mode:input.costMode,referenceImageCount:3,requestedQuality:input.requestedQuality,requestedSize:input.requestedSize,effectiveSize:input.effectiveSize});}
+  if(input.v3Plan?.psioRequired){let status,persistent;try{status=await getPsioStatus(true);const roles=selectedReferenceRoles(input.costMode,status.psioReferenceRoles.filter(x=>x.available).map(x=>x.role));persistent=await getPsioReferencesForRoles(roles);input.referenceRoles=roles;}catch(error){return {statusCode:503,headers:{"Content-Type":"application/json"},body:JSON.stringify({error:`Stockage PSiO® inaccessible : ${String(error.message||error)}`,imageGenerationCallCount:0})};}if(!status.psioReferenceReady||!persistent.length)return {statusCode:409,headers:{"Content-Type":"application/json"},body:JSON.stringify({error:"Références officielles PSiO® incomplètes — aucun job créé.",psioReferenceReady:false,psioReferenceCount:status.psioReferenceCount,imageGenerationCallCount:0})};input.referenceImageUrls=[];input.referenceImageData=persistent.map(x=>x.dataUrl);input.referenceRequired=true;input.costAudit=buildCostAudit({mode:input.costMode,referenceImageCount:persistent.length,referenceRoles:input.referenceRoles,requestedQuality:input.requestedQuality,requestedSize:input.requestedSize,effectiveSize:input.effectiveSize});if(input.costAudit.requiresAdditionalConfirmation&&payload.costCeilingConfirmed!==true)return {statusCode:428,headers:{"Content-Type":"application/json"},body:JSON.stringify({error:`Confirmation supplémentaire requise : total prudent maximal ${input.costAudit.estimatedTotalMax.toFixed(3)} €.`,costAudit:input.costAudit,imageGenerationCallCount:0})};}
   const {prompt,size,model,quality,referenceImageUrls,referenceImageData,referenceRequired,brandComposition,v3Plan}=input;
 
   try {

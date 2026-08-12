@@ -11,4 +11,5 @@ function statusFromRecords(records={},required=true){const references=PSIO_REFER
 async function readPsioReferences(store=openStore()){const entries=await Promise.all(PSIO_REFERENCES.map(async ref=>{const raw=await store.get(ref.id);return [ref.id,raw?JSON.parse(raw):null];}));return Object.fromEntries(entries);}
 async function getPsioStatus(required=true,store=openStore()){return statusFromRecords(await readPsioReferences(store),required);}
 async function getPsioDataUrls(store=openStore()){const records=await readPsioReferences(store);return PSIO_REFERENCES.map(ref=>records[ref.id]?.dataUrl).filter(Boolean);}
-module.exports={PSIO_REFERENCES,openStore,psioRequiredForContract,statusFromRecords,readPsioReferences,getPsioStatus,getPsioDataUrls};
+async function getPsioReferencesForRoles(roles,store=openStore()){const records=await readPsioReferences(store);return PSIO_REFERENCES.filter(ref=>roles.includes(ref.role)).map(ref=>({id:ref.id,role:ref.role,dataUrl:records[ref.id]?.dataUrl||null})).filter(x=>x.dataUrl);}
+module.exports={PSIO_REFERENCES,openStore,psioRequiredForContract,statusFromRecords,readPsioReferences,getPsioStatus,getPsioDataUrls,getPsioReferencesForRoles};

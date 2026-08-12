@@ -5244,6 +5244,7 @@ async function confirmAndGenerateImage(prepared, onStatus, cancelToken){
         quality: (state.costMode||"test")==="production" ? "high" : "low",
         costMode: state.costMode||"test",
         costConfirmed: true,
+        costCeilingConfirmed: prepared.costCeilingConfirmed===true,
         clientRequestId: prepared.clientRequestId||uid(),
         onJobCreated: prepared.onImageJobCreated,
         resumeJobId: safetyRetryCount===0 ? prepared.resumeJobId : undefined,
@@ -5552,6 +5553,7 @@ async function callProviderImage(prompt, size, extraReferenceDataUrls, onStatus,
       brandComposition: options.brandComposition || undefined,
       costMode: options.costMode || state.costMode || "test",
       costConfirmed: options.costConfirmed === true,
+      costCeilingConfirmed: options.costCeilingConfirmed === true,
       clientRequestId: options.clientRequestId || undefined,
       v3Plan: options.v3Plan || undefined,
       // V3 : le serveur réutilise sans reconstruction le plan préparé et son identifiant stable.
@@ -7220,7 +7222,7 @@ function buildPostTab(){
             ? "2 vues chargées et obligatoires ✓" : "Jeu incomplet — génération bloquée"));
       }
       if(flow.phase!=="prepared") body.appendChild(row("Référence réellement utilisée", flow.usedReference ? "Oui ✓" : (flow.referenceFallbackReason ? "Non — repli : "+flow.referenceFallbackReason : "Non demandée")));
-      const audit=flow.costAudit||null,plannedMode=flow.v3Plan?.costMode||state.costMode||"test",plannedQuality=plannedMode==="production"?"high":"low";
+      const audit=flow.costAudit||flow.v3Plan?.preflightCostAudit||null,plannedMode=flow.v3Plan?.costMode||state.costMode||"test",plannedQuality=plannedMode==="production"?"high":"low";
       body.appendChild(row("Mode demandé", audit?.requestedMode||plannedMode));
       body.appendChild(row("Mode réellement utilisé", audit?.effectiveMode||(flow.phase==="prepared"?"en attente":plannedMode)));
       body.appendChild(row("Qualité demandée", audit?.requestedQuality||plannedQuality));
@@ -7229,8 +7231,11 @@ function buildPostTab(){
       body.appendChild(row("Dimensions réellement utilisées", audit?.effectiveSize||(flow.phase==="prepared"?"en attente":flow.inputs?.size)));
       body.appendChild(row("Appels Images", String(audit?.imageGenerationCallCount??0)));
       body.appendChild(row("Nombre d’images n", String(audit?.image?.n??1)));
-      body.appendChild(row("Estimation", `${Number(audit?.totalEstimatedEur??(plannedMode==="production"?.73:.19)).toFixed(2)} € — estimation, pas facture exacte`));
-      if(flow.v3Plan?.psioRequired){body.appendChild(row("Références PSiO® V3", `${flow.v3Plan.psioReferenceCount}/3 — ${flow.v3Plan.psioReferenceReady?"prêtes ✓":"incomplètes"}`));body.appendChild(row("Rôles des références", (flow.v3Plan.psioReferenceRoles||[]).map(x=>x.label).join(", ")));body.appendChild(row("Estimation entrée références", "0,00 € additionnel configuré — inclus dans l’estimation photo"));body.appendChild(row("Estimation Vision", `${Number(audit?.vision?.estimatedEur??.01).toFixed(2)} €`));}
+      body.appendChild(row("Sortie photo estimée", `${Number(audit?.outputImageEstimate??0).toFixed(2)} €`));
+      body.appendChild(row("Texte du prompt estimé", `${Number(audit?.promptTextEstimate?.min??0).toFixed(3)} à ${Number(audit?.promptTextEstimate?.max??0).toFixed(3)} €`));
+      body.appendChild(row("Vision estimée", `${Number(audit?.visionEstimate??0).toFixed(2)} €`));
+      body.appendChild(row("Total prudent", `${Number(audit?.estimatedTotalMin??0).toFixed(3)} à ${Number(audit?.estimatedTotalMax??0).toFixed(3)} € — confiance ${audit?.estimateConfidence||"inconnue"}, pas facture exacte`));
+      if(flow.v3Plan?.psioRequired){body.appendChild(row("Références PSiO® disponibles", `${flow.v3Plan.psioReferenceCount}/3 — ${flow.v3Plan.psioReferenceReady?"prêtes ✓":"incomplètes"}`));body.appendChild(row("Références effectivement envoyées", `${audit?.image?.referenceImageCount??0} — ${(audit?.image?.referenceRoles||[]).join(", ")}`));body.appendChild(row("Entrées références estimées", audit?.referenceImageInputEstimate?.message||"Coût inconnu — non inclus dans l’estimation de sortie"));}
       body.appendChild(row("Rédacteur DA", flow.daWriterUsed ? "Utilisé ✓ (prompt narratif)" : (flow.daWriterFallbackReason ? "Repli sur l'assemblage classique — "+flow.daWriterFallbackReason : "Désactivé")));
       if(flow.validatorReport){
         const vr = flow.validatorReport;
@@ -7296,7 +7301,7 @@ function buildPostTab(){
       try{
         const prepared = await prepareCreativeBrief({ mission: state.mission, platform, prestation: state.prestationName, topic: state.topic, aspectKey: PLATFORM_ASPECT[platform], size: API_IMAGE_SIZE_BY_PLATFORM[platform]||"1024x1024", isCampaign:false, registres: Array.isArray(state.registres) ? [...state.registres] : [], userReferenceDataUrl: state.userReferenceUpload && state.userReferenceUpload.dataUrl, userReferenceImageId: state.userReferenceUpload && state.userReferenceUpload.id, aiLogoIntegration: !!state.aiLogoIntegration });
         if(state.prestationName&&state.prestationName!=="Tous sujets"){
-          const planResponse=await fetch("/.netlify/functions/plan-v3",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({service:state.prestationName,platform:platform==="Article Blog Wix"?"Blog":platform,marketingObjective:state.mission||"Faire réserver",audience:"clientèle La Santé des Zèbres",artHistory:(state.imageHistory||[]).map(x=>x.artFingerprint).filter(Boolean).slice(-10),creativeSeed:`${state.prestationName}-${state.topic}-${Date.now()}`,costMode:state.costMode||"test",artDirectionKey:prepared.brief?.sceneFamily||prepared.sceneFamily||null})});
+          const planResponse=await fetch("/.netlify/functions/plan-v3",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({service:state.prestationName,platform:platform==="Article Blog Wix"?"Blog":platform,marketingObjective:state.mission||"Faire réserver",audience:"clientèle La Santé des Zèbres",artHistory:(state.imageHistory||[]).map(x=>x.artFingerprint).filter(Boolean).slice(-10),creativeSeed:`${state.prestationName}-${state.topic}-${Date.now()}`,costMode:state.costMode||"test",requestedSize:API_IMAGE_SIZE_BY_PLATFORM[platform]||"1024x1024",artDirectionKey:prepared.brief?.sceneFamily||prepared.sceneFamily||null})});
           const planData=await fetchJsonOrThrowRaw(planResponse,"Direction Artistique V3");
           if(!planResponse.ok||planData.error)throw new Error(planData.error||"Plan V3 indisponible");
           prepared.v3Plan=planData;
@@ -7321,9 +7326,13 @@ function buildPostTab(){
       if(!state.lastCreativeFlow || state.lastCreativeFlow.phase!=="prepared"){ imgApiStatus.textContent = "Aucune préparation en attente — relance \"Préparer la création\" d'abord."; vfTrace("1-STOP-garde-phase",{}); return; }
       if(state.lastCreativeFlow.v3Plan?.psioRequired&&!state.lastCreativeFlow.v3Plan?.psioReferenceReady){imgApiStatus.textContent="Ajoutez les références officielles PSiO® avant de confirmer. Aucun crédit consommé.";return;}
       if(state.lastCreativeFlow.blockingError){ imgApiStatus.textContent = "Génération bloquée : "+state.lastCreativeFlow.blockingError; vfTrace("1-STOP-blockingError",{}); return; }
-      const estimatedPhoto=state.costMode==="production"?.72:.18;
-      const warning=estimatedPhoto>.60?"\n⚠ AVERTISSEMENT FORT : estimation supérieure à 0,60 €.":"";
-      if(!confirm(`Lancer exactement une photographie (${state.costMode==="production"?"MODE PRODUCTION":"MODE TEST"}) ? Estimation indicative photo : ${estimatedPhoto.toFixed(2)} €.${warning}\nAucun format supplémentaire ne sera généré automatiquement.`)){ vfTrace("1-STOP-annule-par-utilisateur",{}); return; }
+      const estimate=state.lastCreativeFlow.v3Plan?.preflightCostAudit;
+      if(!estimate){imgApiStatus.textContent="Audit de coût V3 absent : préparez de nouveau la création. Aucun crédit consommé.";return;}
+      const refCost=estimate.referenceImageInputEstimate?.status==="unknown"?"inconnues et non incluses dans les 0,18 €":`${Number(estimate.referenceImageInputEstimate?.max||0).toFixed(3)} €`;
+      const summary=`Mode : ${estimate.effectiveMode==="test"?"Test":"Production"}\nQualité effective : ${estimate.effectiveQuality}\nn = ${estimate.image?.n}\nNombre d’appels Images : ${estimate.imageGenerationCallCount}\nRéférences effectivement envoyées : ${estimate.image?.referenceImageCount}\nSortie photo estimée : ${estimate.outputImageEstimate.toFixed(2)} €\nEntrées références estimées : ${refCost}\nTexte du prompt : 0 à ${estimate.promptTextEstimate.max.toFixed(3)} €\nVision estimée : ${estimate.visionEstimate.toFixed(2)} €\nTotal estimé : ${estimate.estimatedTotalMin.toFixed(3)} € à ${estimate.estimatedTotalMax.toFixed(3)} € — estimation, pas facture exacte.`;
+      if(!confirm(`${summary}\n\nConfirmer cette génération unique ?`)){vfTrace("1-STOP-annule-par-utilisateur",{});return;}
+      if(estimate.estimatedTotalMax>.30&&!confirm(`CONFIRMATION SUPPLÉMENTAIRE — la borne haute prudente (${estimate.estimatedTotalMax.toFixed(3)} €) dépasse 0,30 €. Les entrées image PSiO® ne sont pas déterminables avant facturation. Continuer ?`)){vfTrace("1-STOP-plafond-cout",{});return;}
+      state.lastCreativeFlow.costCeilingConfirmed=estimate.estimatedTotalMax>.30;
       confirmBtn.disabled = true; imgCancelBtn.style.display = "inline-block";
       const t0 = Date.now();
       const cancelToken = { cancelled:false }; activeCancelToken = cancelToken;
@@ -8293,7 +8302,7 @@ function buildCalendarTab(){
       if(!it.artFingerprint)issues.push("non-redondance : empreinte artistique absente");
       anomalies += issues.length;
       lines.push(`${it.platform} : ${issues.length ? "⚠ "+issues.join(" | ") : "OK ✓"}`);
-      if(it.v3Quality)lines.push(`  Technique=${it.v3Quality.technical?.ok?"OK":"REFUS"} · Métier=${it.v3Quality.business?.ok?"OK":"REFUS"} · Artistique=${it.v3Quality.artistic?.ok?"OK":"REFUS"} · Non-redondance=${it.artFingerprint?"OK":"À CONTRÔLER"} · Coût=${Number(it.costAudit?.totalEstimatedEur||0).toFixed(2)} € estimés`);
+      if(it.v3Quality)lines.push(`  Technique=${it.v3Quality.technical?.ok?"OK":"REFUS"} · Métier=${it.v3Quality.business?.ok?"OK":"REFUS"} · Artistique=${it.v3Quality.artistic?.ok?"OK":"REFUS"} · Non-redondance=${it.artFingerprint?"OK":"À CONTRÔLER"} · Coût=${Number(it.costAudit?.estimatedTotalMin||0).toFixed(3)}–${Number(it.costAudit?.estimatedTotalMax||0).toFixed(3)} € estimés`);
     });
     lines.push("", anomalies ? `${anomalies} anomalie(s) détectée(s) — vérifie les points ci-dessus avant publication.` : "Aucune anomalie détectée sur les formats de la campagne ✓");
     return lines.join("\n");
