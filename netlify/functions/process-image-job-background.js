@@ -184,9 +184,14 @@ exports.handler = async (event) => {
       await safeSetJobStatus(store, jobId, { status: "failed", error: { message: "Entrée du job introuvable en Blobs.", source: "storage" } });
       return { statusCode: 200, body: JSON.stringify({ ok: false, error: "Entrée introuvable" }) };
     }
-    const { prompt, size, model, quality, referenceImageUrls, referenceImageData, brandComposition, v3Plan, costMode } = input;
+    const { prompt, size, model, quality, requestedQuality, effectiveQuality, requestedSize, effectiveSize, referenceImageUrls, referenceImageData, brandComposition, v3Plan, costMode } = input;
     const referenceRequired = input.referenceRequired === true;
 
+    if(costMode==="test"&&(quality==="high"||effectiveQuality==="high")){
+      const costAudit=buildCostAudit({mode:"test",referenceImageCount:0,visionUsage:false,imageCalls:0,requestedQuality,requestedSize,effectiveSize});
+      await safeSetJobStatus(store,jobId,{status:"failed",error:{message:"Incohérence de coût : Mode Test demandé, qualité haute détectée",source:"cost-control"},costAudit,imageGenerationCallCount:0});
+      return {statusCode:200,body:JSON.stringify({ok:false,error:"Incohérence de coût : Mode Test demandé, qualité haute détectée",imageGenerationCallCount:0})};
+    }
     const key = process.env.OPENAI_API_KEY;
     if (!key) {
       await safeSetJobStatus(store, jobId, { status: "failed", error: { message: "Variable d'environnement OPENAI_API_KEY manquante sur Netlify", source: "config" } });
@@ -286,10 +291,10 @@ exports.handler = async (event) => {
     // pour l'archivage des coûts mesurés côté client. Additif, rétrocompatible.
     const usage = data.usage ? { input_tokens: data.usage.input_tokens ?? null, output_tokens: data.usage.output_tokens ?? null, input_tokens_details: data.usage.input_tokens_details ?? null } : null;
     const referenceImageCount=(referenceImageUrls||[]).length+(referenceImageData||[]).length;
-    const costAudit=buildCostAudit({mode:costMode||"test",referenceImageCount,imageUsage:usage,visionUsage:v3Plan?{}:false,retries:0,imageCalls:1});
-    const referenceAudit={referenceImageCount,used:usedReference,reason:v3Plan&&/PSIO|PSiO/.test(v3Plan.contract.name)?"Étape PSiO® contractuelle":"Référence visuelle explicitement sélectionnée",stage:v3Plan?.contract.requiredCompositeStages?.find(x=>/PSiO/i.test(x))||null,estimatedInputImageCostEur:null};
+    const costAudit=buildCostAudit({mode:costMode||"test",referenceImageCount,imageUsage:usage,visionUsage:v3Plan?{}:false,retries:0,imageCalls:1,requestedQuality,requestedSize,effectiveSize});
+    const referenceAudit={referenceImageCount,used:usedReference,reason:v3Plan?.psioRequired?"Étape PSiO® contractuelle":"Référence visuelle explicitement sélectionnée",stage:v3Plan?.contract.requiredCompositeStages?.find(x=>/PSiO/i.test(x))||null,roles:v3Plan?.psioRequired?["profile_worn","front_worn","product"]:[],estimatedInputImageCostEur:0,costIncludedInImageEstimate:true};
     const artFingerprint=v3Plan&&v3Finalization?artisticFingerprint(v3Plan,v3Finalization,v3Finalization.quality.ok?"validated":"refused"):null;
-    await safeSetJobStatus(store, jobId, { status: "completed", error: null, resultKey, rawResultKey, usedReference, referenceFallbackReason, brandComposited, v3Plan, v3Finalization,artFingerprint,referenceAudit,costAudit, usage });
+    await safeSetJobStatus(store, jobId, { status: "completed", error: null, resultKey, rawResultKey, usedReference, referenceFallbackReason, brandComposited, v3Plan, v3Finalization,artFingerprint,referenceAudit,costAudit,requestedQuality,effectiveQuality:quality,requestedSize,effectiveSize:size,imageGenerationCallCount:1,usage });
 
     // Nettoyage de l'entrée après usage réussi — best-effort, non bloquant si ça échoue.
     try { await store.delete(`jobs/${jobId}/input`); } catch (deleteErr) { /* pas grave, l'entrée reste simplement, sans impact fonctionnel */ }

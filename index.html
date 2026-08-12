@@ -3044,7 +3044,7 @@ function ensureStoryHeadline(texteImage, prestation){
   return `${label} | ${subtitle}`;
 }
 function getServiceVisualMoment(prestation){
-  if(["Luminothérapie PSIO®","Offre Gold","Offre Sylver"].includes(prestation)){
+  if(prestation==="Luminothérapie PSIO®"){
     return "l'instant calme où les lunettes PSiO® portées sur le visage deviennent le centre visuel";
   }
   if(prestation==="Biorésonance quantique"){
@@ -4283,25 +4283,23 @@ function selectReferencesForBrief(brief, platform, maxCount){
    Les trois vues complémentaires verrouillent la géométrie : produit isolé, face portée et profil
    porté. Visages, poses, fonds et couleurs des photos ne sont jamais des références créatives. */
 const OFFICIAL_PSIO_REFERENCES = [
-  /* L'ordre est contractuel pour /images/edits : l'image portée de profil est la photographie
-     de base, les deux suivantes ne servent qu'à confirmer la géométrie du produit. */
-  { id:"official-psio-profile-v2", path:"/assets/psio-official-reference.jpg", role:"base_profil_portee_a_preserver" },
-  { id:"official-psio-front-v2", path:"/assets/psio-official-front.jpg", role:"controle_face_visiere_pont" },
-  { id:"official-psio-product-v2", path:"/assets/psio-official-product.jpg", role:"controle_commandes_ecran_cables" },
+  { id:"vf-psio-reference-profile-worn", role:"profile_worn", label:"Profil porté" },
+  { id:"vf-psio-reference-front-worn", role:"front_worn", label:"Face portée" },
+  { id:"vf-psio-reference-product", role:"product", label:"Produit isolé" },
 ];
 const OFFICIAL_PSIO_REFERENCE_IDS = new Set(OFFICIAL_PSIO_REFERENCES.map(r=>r.id));
 let _officialPsioReferencesCache = null;
-async function getOfficialPsioReferenceSelections(){
-  if(_officialPsioReferencesCache) return _officialPsioReferencesCache;
-  _officialPsioReferencesCache = await Promise.all(OFFICIAL_PSIO_REFERENCES.map(async ref=>({
-    id: ref.id,
-    dataUrl: await fetchImageAsDataUrl(ref.path),
-    metadata: {
-      productReference: true,
-      prestation: "Luminothérapie PSIO®",
-      referenceRole: ref.role,
-    },
-  })));
+async function getPsioReferenceStatus(){
+  const response=await fetch("/.netlify/functions/psio-references",{cache:"no-store"});
+  const data=await fetchJsonOrThrowRaw(response,"références PSiO®");
+  if(!response.ok||data.error)throw new Error(data.error||`Erreur ${response.status}`);
+  return data;
+}
+async function getOfficialPsioReferenceSelections({refresh=false}={}){
+  if(_officialPsioReferencesCache&&!refresh)return _officialPsioReferencesCache;
+  const status=await getPsioReferenceStatus();
+  if(!status.psioReferenceReady)throw new Error(`Références manquantes : ${status.references.filter(x=>!x.available).map(x=>x.label).join(", ")}`);
+  _officialPsioReferencesCache=await Promise.all(status.references.map(async ref=>({id:ref.id,dataUrl:await fetchImageAsDataUrl(ref.previewUrl),metadata:{productReference:true,prestation:"Luminothérapie PSIO®",referenceRole:ref.role,updatedAt:ref.updatedAt}})));
   return _officialPsioReferencesCache;
 }
 /* Jeu de références produit Healy — même principe que PSiO® : deux vues complémentaires
@@ -4940,7 +4938,7 @@ async function prepareCreativeBrief(inputs){
   }
 
   let referenceSelections = [], referenceError = null;
-  if(prestation==="Luminothérapie PSIO®"){
+  if(["Luminothérapie PSIO®","Offre Gold","Offre Sylver"].includes(prestation)){
     try{
       // Seules les trois vues produit PSiO® sont autorisées : aucune référence artistique ou
       // ancienne génération ne doit influencer la forme du dispositif officiel.
@@ -5243,7 +5241,7 @@ async function confirmAndGenerateImage(prepared, onStatus, cancelToken){
           zoneText: String(brief.zoneTexte || brief.zoneLogo || ""),
         },
         model: "gpt-image-2",
-        quality: "high",
+        quality: (state.costMode||"test")==="production" ? "high" : "low",
         costMode: state.costMode||"test",
         costConfirmed: true,
         clientRequestId: prepared.clientRequestId||uid(),
@@ -7111,7 +7109,7 @@ function buildPostTab(){
       confirmBtn.style.display = "none"; regenTextBtn.style.display = "none";
       relaunchAnalysisBtn.style.display = "none"; recoverRawBtn.style.display = "none";
       if(!flow) return;
-      if(flow.phase==="prepared" && !flow.blockingError){
+      if(flow.phase==="prepared" && !flow.blockingError && (!flow.v3Plan?.psioRequired || flow.v3Plan?.psioReferenceReady===true)){
         confirmBtn.style.display = "inline-block";
         recoverRawBtn.style.display = "inline-block";
       }
@@ -7211,7 +7209,7 @@ function buildPostTab(){
       body.appendChild(row("Archétypes interdits (récents)", (flow.exclusions||[]).join(", ") || "aucun"));
       body.appendChild(row("Raison de différenciation", flow.brief && flow.brief.raisonDifferenceAvecHistorique));
       body.appendChild(row("Références sélectionnées", String((flow.referenceSelections||[]).length)));
-      if(flow.inputs && flow.inputs.prestation==="Luminothérapie PSIO®"){
+      if(flow.inputs && ["Luminothérapie PSIO®","Offre Gold","Offre Sylver"].includes(flow.inputs.prestation)){
         body.appendChild(row("Référence produit PSiO® officielle",
           (flow.referenceSelections||[]).filter(r=>OFFICIAL_PSIO_REFERENCE_IDS.has(r.id)).length===OFFICIAL_PSIO_REFERENCES.length
             ? "3 vues chargées et obligatoires ✓" : "Jeu incomplet — génération bloquée"));
@@ -7222,7 +7220,17 @@ function buildPostTab(){
             ? "2 vues chargées et obligatoires ✓" : "Jeu incomplet — génération bloquée"));
       }
       if(flow.phase!=="prepared") body.appendChild(row("Référence réellement utilisée", flow.usedReference ? "Oui ✓" : (flow.referenceFallbackReason ? "Non — repli : "+flow.referenceFallbackReason : "Non demandée")));
-      body.appendChild(row("Modèle", "gpt-image-2 · références obligatoires · qualité haute"));
+      const audit=flow.costAudit||null,plannedMode=flow.v3Plan?.costMode||state.costMode||"test",plannedQuality=plannedMode==="production"?"high":"low";
+      body.appendChild(row("Mode demandé", audit?.requestedMode||plannedMode));
+      body.appendChild(row("Mode réellement utilisé", audit?.effectiveMode||(flow.phase==="prepared"?"en attente":plannedMode)));
+      body.appendChild(row("Qualité demandée", audit?.requestedQuality||plannedQuality));
+      body.appendChild(row("Qualité réellement utilisée", audit?.effectiveQuality||(flow.phase==="prepared"?`prévue : ${plannedQuality}`:plannedQuality)));
+      body.appendChild(row("Dimensions demandées", audit?.requestedSize||flow.inputs?.size));
+      body.appendChild(row("Dimensions réellement utilisées", audit?.effectiveSize||(flow.phase==="prepared"?"en attente":flow.inputs?.size)));
+      body.appendChild(row("Appels Images", String(audit?.imageGenerationCallCount??0)));
+      body.appendChild(row("Nombre d’images n", String(audit?.image?.n??1)));
+      body.appendChild(row("Estimation", `${Number(audit?.totalEstimatedEur??(plannedMode==="production"?.73:.19)).toFixed(2)} € — estimation, pas facture exacte`));
+      if(flow.v3Plan?.psioRequired){body.appendChild(row("Références PSiO® V3", `${flow.v3Plan.psioReferenceCount}/3 — ${flow.v3Plan.psioReferenceReady?"prêtes ✓":"incomplètes"}`));body.appendChild(row("Rôles des références", (flow.v3Plan.psioReferenceRoles||[]).map(x=>x.label).join(", ")));body.appendChild(row("Estimation entrée références", "0,00 € additionnel configuré — inclus dans l’estimation photo"));body.appendChild(row("Estimation Vision", `${Number(audit?.vision?.estimatedEur??.01).toFixed(2)} €`));}
       body.appendChild(row("Rédacteur DA", flow.daWriterUsed ? "Utilisé ✓ (prompt narratif)" : (flow.daWriterFallbackReason ? "Repli sur l'assemblage classique — "+flow.daWriterFallbackReason : "Désactivé")));
       if(flow.validatorReport){
         const vr = flow.validatorReport;
@@ -7288,10 +7296,14 @@ function buildPostTab(){
       try{
         const prepared = await prepareCreativeBrief({ mission: state.mission, platform, prestation: state.prestationName, topic: state.topic, aspectKey: PLATFORM_ASPECT[platform], size: API_IMAGE_SIZE_BY_PLATFORM[platform]||"1024x1024", isCampaign:false, registres: Array.isArray(state.registres) ? [...state.registres] : [], userReferenceDataUrl: state.userReferenceUpload && state.userReferenceUpload.dataUrl, userReferenceImageId: state.userReferenceUpload && state.userReferenceUpload.id, aiLogoIntegration: !!state.aiLogoIntegration });
         if(state.prestationName&&state.prestationName!=="Tous sujets"){
-          const planResponse=await fetch("/.netlify/functions/plan-v3",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({service:state.prestationName,platform:platform==="Article Blog Wix"?"Blog":platform,marketingObjective:state.mission||"Faire réserver",audience:"clientèle La Santé des Zèbres",artHistory:(state.imageHistory||[]).map(x=>x.artFingerprint).filter(Boolean).slice(-10),creativeSeed:`${state.prestationName}-${state.topic}-${Date.now()}`,artDirectionKey:prepared.brief?.sceneFamily||prepared.sceneFamily||null})});
+          const planResponse=await fetch("/.netlify/functions/plan-v3",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({service:state.prestationName,platform:platform==="Article Blog Wix"?"Blog":platform,marketingObjective:state.mission||"Faire réserver",audience:"clientèle La Santé des Zèbres",artHistory:(state.imageHistory||[]).map(x=>x.artFingerprint).filter(Boolean).slice(-10),creativeSeed:`${state.prestationName}-${state.topic}-${Date.now()}`,costMode:state.costMode||"test",artDirectionKey:prepared.brief?.sceneFamily||prepared.sceneFamily||null})});
           const planData=await fetchJsonOrThrowRaw(planResponse,"Direction Artistique V3");
           if(!planResponse.ok||planData.error)throw new Error(planData.error||"Plan V3 indisponible");
           prepared.v3Plan=planData;
+          if(planData.psioRequired&&!planData.psioReferenceReady){
+            const missing=(planData.psioReferenceRoles||[]).filter(x=>!x.available).map(x=>x.label).join(", ");
+            prepared.blockingError=`Références officielles PSiO® manquantes : ${missing}. Ajoutez-les avant toute confirmation payante.`;
+          }
         }
         state.lastCreativeFlow = prepared;
         prepared.clientRequestId=prepared.clientRequestId||uid();
@@ -7307,6 +7319,7 @@ function buildPostTab(){
     confirmBtn.addEventListener("click", async ()=>{
       vfTrace("1-clic-confirmer", { hasFlow: !!state.lastCreativeFlow, phase: state.lastCreativeFlow && state.lastCreativeFlow.phase, blockingError: state.lastCreativeFlow && state.lastCreativeFlow.blockingError || null });
       if(!state.lastCreativeFlow || state.lastCreativeFlow.phase!=="prepared"){ imgApiStatus.textContent = "Aucune préparation en attente — relance \"Préparer la création\" d'abord."; vfTrace("1-STOP-garde-phase",{}); return; }
+      if(state.lastCreativeFlow.v3Plan?.psioRequired&&!state.lastCreativeFlow.v3Plan?.psioReferenceReady){imgApiStatus.textContent="Ajoutez les références officielles PSiO® avant de confirmer. Aucun crédit consommé.";return;}
       if(state.lastCreativeFlow.blockingError){ imgApiStatus.textContent = "Génération bloquée : "+state.lastCreativeFlow.blockingError; vfTrace("1-STOP-blockingError",{}); return; }
       const estimatedPhoto=state.costMode==="production"?.72:.18;
       const warning=estimatedPhoto>.60?"\n⚠ AVERTISSEMENT FORT : estimation supérieure à 0,60 €.":"";
@@ -7459,11 +7472,17 @@ function buildPostTab(){
     });
 
     const costModeSelect=el("select",{style:"margin:0 0 10px;"},[
-      el("option",{value:"test",selected:state.costMode!=="production"},"MODE TEST — une photographie économique pour valider la scène et le layout (~0,18 € estimés)"),
+      el("option",{value:"test",selected:state.costMode!=="production"},"MODE TEST — qualité low effective, n = 1 (~0,18 € photo estimés)"),
       el("option",{value:"production",selected:state.costMode==="production"},"MODE PRODUCTION — photographie finale haute qualité (~0,72 € estimés)"),
     ]);
     costModeSelect.addEventListener("change",e=>{state.costMode=e.target.value;LS.set("vf-cost-mode",state.costMode);});
     frag.appendChild(el("div",{class:"card",style:"margin-bottom:10px;"},[el("strong",{},"Maîtrise du coût"),costModeSelect,el("p",{class:"hint"},"Estimations indicatives, pas une facture. n = 1, aucun retry automatique, confirmation obligatoire au-delà de 0,30 €.")]));
+    const psioPanel=el("div",{class:"card",style:"margin-bottom:10px;"});
+    const psioStatusHost=el("div",{class:"hint"},"Vérification du stockage persistant…");
+    const psioUpload=el("input",{type:"file",accept:"image/*",style:"display:none;"});let pendingPsioId=null;
+    async function refreshPsioPanel(){try{const status=await getPsioReferenceStatus();state.psioReferenceStatus=status;psioStatusHost.innerHTML="";(status.references||[]).forEach(ref=>{const line=el("div",{style:"display:flex;gap:8px;align-items:center;margin:6px 0;"});if(ref.previewUrl)line.appendChild(el("img",{src:ref.previewUrl,style:"width:42px;height:42px;object-fit:cover;border-radius:6px;"}));line.appendChild(el("span",{style:"flex:1;"},`${ref.label} : ${ref.available?"disponible ✓":"absente"}${ref.updatedAt?` — ${new Date(ref.updatedAt).toLocaleString("fr-FR")}`:""}`));line.appendChild(el("button",{class:"btn-small",onclick:()=>{pendingPsioId=ref.id;psioUpload.click();}},"Ajouter ou remplacer"));psioStatusHost.appendChild(line);});}catch(error){psioStatusHost.textContent=`Vérification impossible : ${error.message||error}`;}}
+    psioUpload.addEventListener("change",async()=>{const file=psioUpload.files?.[0];if(!file||!pendingPsioId)return;try{const dataUrl=await new Promise((resolve,reject)=>{const reader=new FileReader();reader.onload=()=>resolve(reader.result);reader.onerror=()=>reject(new Error("Lecture Android impossible"));reader.readAsDataURL(file);});const response=await fetch("/.netlify/functions/psio-references",{method:"POST",headers:{...syncHeaders(),"Content-Type":"application/json"},body:JSON.stringify({id:pendingPsioId,dataUrl})});const data=await fetchJsonOrThrowRaw(response,"enregistrement PSiO®");if(!response.ok||data.error)throw new Error(data.error||`Erreur ${response.status}`);_officialPsioReferencesCache=null;await refreshPsioPanel();}catch(error){psioStatusHost.textContent=`Ajout impossible : ${error.message||error}`;}finally{psioUpload.value="";pendingPsioId=null;}});
+    const verifyPsio=el("button",{class:"btn-small",onclick:refreshPsioPanel},"Vérifier les références");psioPanel.appendChild(el("strong",{},"Références officielles PSiO®"));psioPanel.appendChild(psioStatusHost);psioPanel.appendChild(verifyPsio);psioPanel.appendChild(psioUpload);frag.appendChild(psioPanel);refreshPsioPanel();
     frag.appendChild(prepareBtn);
     frag.appendChild(confirmBtn);
     frag.appendChild(imgCancelBtn);

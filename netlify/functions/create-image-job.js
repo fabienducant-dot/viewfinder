@@ -13,6 +13,7 @@ const crypto = require("crypto");
 const { resolveInvocationBaseUrl } = require("./_shared/netlify-invocation-url");
 const { planV3, validatePreparedPlan } = require("./_shared/v3-pipeline");
 const {costMode,buildCostAudit}=require("./_shared/v3-cost-control");
+const {getPsioDataUrls}=require("./_shared/v3-psio-references");
 
 function openJobStore(){
   const opts = { consistency: "strong" }; // écriture puis relecture quasi immédiate du statut : la
@@ -31,9 +32,12 @@ function buildJobInput(payload){
   if(mode.id==="recompose")throw new Error("La recomposition doit utiliser l’endpoint gratuit dédié.");
   if(mode.requiresConfirmation&&payload.costConfirmed!==true)throw new Error(`Confirmation explicite requise pour le coût estimé (${mode.estimatedPhotoEur.toFixed(2)} €).`);
   if(payload.v3Plan){v3Plan=validatePreparedPlan(payload.v3Plan);prompt=v3Plan.photoBrief.prompt;}else if(payload.v3){v3Plan=planV3(payload.v3);prompt=v3Plan.photoBrief.prompt;}
+  if(v3Plan&&v3Plan.costMode!==mode.id)throw new Error(`Incohérence de coût : plan ${v3Plan.costMode}, confirmation ${mode.id}.`);
+  if(mode.id==="test"&&quality&&quality!==mode.quality)throw new Error("Incohérence de coût : Mode Test demandé, qualité haute détectée");
   if(typeof prompt!=="string"||!prompt.trim())throw new Error("Le prompt est requis");
   const referenceImageCount=(referenceImageUrls||[]).length+(referenceImageData||[]).length;
-  return {prompt,size,model:model||"gpt-image-2",quality:mode.quality,referenceImageUrls,referenceImageData,referenceRequired:payload.referenceRequired===true,brandComposition,v3Plan,costMode:mode.id,clientRequestId:String(payload.clientRequestId||""),costAudit:buildCostAudit({mode:mode.id,referenceImageCount})};
+  const effectiveSize=size||"1024x1024";
+  return {prompt,size:effectiveSize,model:model||"gpt-image-2",quality:mode.quality,requestedQuality:quality||mode.quality,effectiveQuality:mode.quality,requestedSize:size||"1024x1024",effectiveSize,costMode:mode.id,referenceImageUrls,referenceImageData,referenceRequired:payload.referenceRequired===true,brandComposition,v3Plan,clientRequestId:String(payload.clientRequestId||""),costAudit:buildCostAudit({mode:mode.id,referenceImageCount,requestedQuality:quality||mode.quality,requestedSize:size||"1024x1024",effectiveSize})};
 }
 
 exports.handler = async (event) => {
@@ -49,6 +53,7 @@ exports.handler = async (event) => {
   }
   let input;
   try{input=buildJobInput(payload);}catch(error){return {statusCode:400,headers:{"Content-Type":"application/json"},body:JSON.stringify({error:String(error.message||error)})};}
+  if(input.v3Plan?.psioRequired){let persistent;try{persistent=await getPsioDataUrls();}catch(error){return {statusCode:503,headers:{"Content-Type":"application/json"},body:JSON.stringify({error:`Stockage PSiO® inaccessible : ${String(error.message||error)}`,imageGenerationCallCount:0})};}if(persistent.length!==3)return {statusCode:409,headers:{"Content-Type":"application/json"},body:JSON.stringify({error:"Références officielles PSiO® incomplètes — aucun job créé.",psioReferenceReady:false,psioReferenceCount:persistent.length,imageGenerationCallCount:0})};input.referenceImageUrls=[];input.referenceImageData=persistent;input.referenceRequired=true;input.costAudit=buildCostAudit({mode:input.costMode,referenceImageCount:3,requestedQuality:input.requestedQuality,requestedSize:input.requestedSize,effectiveSize:input.effectiveSize});}
   const {prompt,size,model,quality,referenceImageUrls,referenceImageData,referenceRequired,brandComposition,v3Plan}=input;
 
   try {
@@ -74,6 +79,12 @@ exports.handler = async (event) => {
       usedReference: null,
       referenceFallbackReason: null,
       costAudit:input.costAudit,
+      costMode:input.costMode,
+      requestedQuality:input.requestedQuality,
+      effectiveQuality:input.effectiveQuality,
+      requestedSize:input.requestedSize,
+      effectiveSize:input.effectiveSize,
+      imageGenerationCallCount:0,
       idempotencyKey,
     }));
 

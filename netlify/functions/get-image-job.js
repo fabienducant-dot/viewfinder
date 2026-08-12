@@ -50,7 +50,7 @@ exports.handler = async (event) => {
     }
 
     if (job.status === "failed") {
-      return { statusCode: 200, headers: { "Content-Type": "application/json" }, body: JSON.stringify({ ok: false, jobId, status: "failed", error: job.error }) };
+      return { statusCode: 200, headers: { "Content-Type": "application/json" }, body: JSON.stringify({ ok: false, jobId, status: "failed", error: job.error, costAudit:job.costAudit||null, imageGenerationCallCount:job.imageGenerationCallCount||0 }) };
     }
 
     if (job.status === "completed" && job.resultKey) {

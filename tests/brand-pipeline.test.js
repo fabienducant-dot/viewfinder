@@ -41,7 +41,7 @@ test("l'identité serveur exacte est obligatoire et contrôlée", () => {
   assert.match(index, /officialLogoConformity/);
   assert.match(index, /expectedTextExact/);
   assert.match(index, /model: "gpt-image-2"/);
-  assert.match(index, /quality: "high"/);
+  assert.match(index, /quality: \(state\.costMode\|\|"test"\)==="production" \? "high" : "low"/);
   assert.match(index, /SORTIE BRUTE OBLIGATOIRE/);
   assert.match(worker, /composeBrandPoster/);
   assert.match(worker, /brandComposition/);
