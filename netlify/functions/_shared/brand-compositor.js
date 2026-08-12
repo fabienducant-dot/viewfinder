@@ -5,13 +5,13 @@ const sharp = require("sharp");
 const opentype = require("opentype.js");
 const crypto = require("crypto");
 const { PLATFORM_TEMPLATES, normalizePlatform } = require("./v3-layout-engine");
+const BRAND_TOKENS=require("./v3-brand-tokens");
+const {semanticLines}=require("./v3-creative-strategy");
 
-const GOLD = "#D9AD3B";
-const PALE_GOLD = "#F0D889";
-const IVORY = "#F7F2E8";
+const GOLD=BRAND_TOKENS.brandGold, PALE_GOLD=BRAND_TOKENS.brandPaleGold, IVORY=BRAND_TOKENS.brandIvory;
 const BRAND_CONTACTS = Object.freeze({
   domain:"la-sante-des-zebres.com", phone:"06.84.40.69.54",
-  address:"11 cour Dupas, Raismes", email:"fabien.ducant@gmail.com",
+  address:"11 cour Dupas, 59590 Raismes", email:"fabien.ducant@gmail.com",
 });
 
 /* Netlify n'embarque pas les polices système utilisées par librsvg. Avec un simple <text>
@@ -141,17 +141,18 @@ function layoutFor(width, height, platform, requestedZone, hasHeadline, selected
   return { x, y, width: boxW, height: boxH, margin, portrait, landscape };
 }
 
-function buildOverlaySvg(width, height, layout, platform, headline){
+function buildOverlaySvg(width, height, layout, platform, headline, posterStrategy){
   const { title, subtitle } = headlineParts(headline);
-  const scale = Math.max(0.78, Math.min(1.55, width / 1088));
   const story=normalizePlatform(platform)==="Story";
+  const scale = Math.max(0.78, Math.min(1.55, width / 1088));
   const safeWidth=Math.min(layout.width,width-Math.max(layout.margin,Math.round(width*.06))*2);
   const preferredTitle=Math.round((story?48:(layout.portrait ? 67 : 62))*scale);
   const preferredSubtitle=Math.round((story?32:(layout.portrait ? 42 : 38))*scale);
   const brandSize = Math.round((layout.portrait ? 29 : 27) * scale);
   const citySize = Math.round(15 * scale);
-  const titleLines = wrapWords(title.toUpperCase(), layout.portrait ? 24 : 31, 2);
-  const subtitleLines = wrapWords(subtitle.toUpperCase(), layout.portrait ? 34 : 44, 2);
+  const textMode=posterStrategy?.textMode||"TEXT_MODE_EDITORIAL";
+  const titleLines=posterStrategy?.titleLines||semanticLines(title,story?4:3,story?18:22);
+  const subtitleLines=textMode==="TEXT_MODE_MINIMAL"?[]:(posterStrategy?.subtitleLines||semanticLines(subtitle,2,28));
   const titleSize=fitFontSize(DISPLAY_FONT,titleLines,preferredTitle,Math.round(26*scale),safeWidth);
   const subtitleSize=fitFontSize(TEXT_FONT,subtitleLines,preferredSubtitle,Math.round(20*scale),safeWidth);
   const centerX = layout.x + layout.width / 2;
@@ -223,7 +224,7 @@ async function prepareLogoOverlay(logoBuffer){
   TRANSPARENT_LOGO_CACHE.set(cacheKey,Buffer.from(output));return output;
 }
 
-async function composeBrandPoster({ imageBuffer, logoDataUrl, platform, headline, zoneText, selectedLayout }){
+async function composeBrandPoster({ imageBuffer, logoDataUrl, platform, headline, zoneText, selectedLayout, posterStrategy }){
   if(!imageBuffer || !Buffer.isBuffer(imageBuffer)) throw new Error("Image générée absente du compositeur.");
   const logoBuffer = dataUrlToBuffer(logoDataUrl);
   const template=(selectedLayout&&selectedLayout.template)||PLATFORM_TEMPLATES[normalizePlatform(platform)];
@@ -233,13 +234,15 @@ async function composeBrandPoster({ imageBuffer, logoDataUrl, platform, headline
   const width = template?.width || meta.width;
   const height = template?.height || meta.height;
   if(!width || !height) throw new Error("Dimensions de l'image générée introuvables.");
+  const textMode=posterStrategy?.textMode||"TEXT_MODE_EDITORIAL";
+  if(textMode==="TEXT_MODE_NONE")headline="";else if(posterStrategy){const subtitle=textMode==="TEXT_MODE_MINIMAL"?"":posterStrategy.subtitle;headline=[posterStrategy.title,subtitle].filter(Boolean).join(" | ");}
   const hasHeadline = Boolean(String(headline || "").trim());
   const layout = layoutFor(width, height, platform, zoneText, hasHeadline, selectedLayout);
   const { title, subtitle } = headlineParts(headline);
-  const scale = Math.max(0.78, Math.min(1.55, width / 1088));
-  const titleLines = wrapWords(title.toUpperCase(), layout.portrait ? 24 : 31, 2);
-  const subtitleLines = wrapWords(subtitle.toUpperCase(), layout.portrait ? 34 : 44, 2);
   const story=normalizePlatform(platform)==="Story";
+  const scale = Math.max(0.78, Math.min(1.55, width / 1088));
+  const titleLines = posterStrategy?.titleLines||semanticLines(title,story?4:3,story?18:22);
+  const subtitleLines = textMode==="TEXT_MODE_MINIMAL"?[]:(posterStrategy?.subtitleLines||semanticLines(subtitle,2,28));
   const safeWidth=Math.min(layout.width,width-Math.max(layout.margin,Math.round(width*.06))*2);
   const titleSize=fitFontSize(DISPLAY_FONT,titleLines,Math.round((story?48:(layout.portrait?67:62))*scale),Math.round(26*scale),safeWidth);
   const subtitleSize=fitFontSize(TEXT_FONT,subtitleLines,Math.round((story?32:(layout.portrait?42:38))*scale),Math.round(20*scale),safeWidth);
@@ -249,7 +252,8 @@ async function composeBrandPoster({ imageBuffer, logoDataUrl, platform, headline
   const dividerY = headlineEnd + Math.round(layout.height * 0.055);
   const cleanLogo = await prepareLogoOverlay(logoBuffer);
   const logoMeta = await sharp(cleanLogo).metadata();
-  const desiredLogoWidth = Math.round(layout.width * (layout.portrait ? 0.115 : 0.10));
+  const logoFraction=posterStrategy?.logoScale==="discreet"?.12:posterStrategy?.logoScale==="standard"?.16:.21;
+  const desiredLogoWidth = Math.round(layout.width * logoFraction);
   const minimumBottomMargin = Math.max(Math.round(height*.035), 24);
   const availableHeight = Math.max(24, height - minimumBottomMargin - Math.round(dividerY + layout.height*.055));
   const sourceRatio = (logoMeta.width||1)/(logoMeta.height||1);
@@ -264,7 +268,7 @@ async function composeBrandPoster({ imageBuffer, logoDataUrl, platform, headline
     .resize({ width: logoWidth, withoutEnlargement: false, fit: "inside" })
     .png().toBuffer();
   if(await hasOpaqueLogoRectangle(resizedLogo))throw new Error("Rectangle opaque détecté autour du logo officiel.");
-  const overlaySvg = buildOverlaySvg(width, height, layout, platform, headline);
+  const overlaySvg = buildOverlaySvg(width, height, layout, platform, headline, posterStrategy);
   return image
     .composite([
       { input: overlaySvg, left: 0, top: 0 },
@@ -274,4 +278,4 @@ async function composeBrandPoster({ imageBuffer, logoDataUrl, platform, headline
     .toBuffer();
 }
 
-module.exports = { composeBrandPoster, dataUrlToBuffer, escapeXml, wrapWords, normalizedZone, prepareLogoOverlay, hasOpaqueLogoRectangle,vectorText, measureVectorText,fitFontSize,layoutFor, BRAND_CONTACTS };
+module.exports = { BRAND_TOKENS, composeBrandPoster, dataUrlToBuffer, escapeXml, wrapWords, normalizedZone, prepareLogoOverlay, hasOpaqueLogoRectangle,vectorText, measureVectorText,fitFontSize,layoutFor, BRAND_CONTACTS };

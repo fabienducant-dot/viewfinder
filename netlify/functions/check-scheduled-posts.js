@@ -124,6 +124,8 @@ exports.handler = async () => {
             image: post.imageDataUrl || null,
             image_url: imageUrl,
             type_contenu: post.platform,
+            post_copy_strategy: post.postCopyStrategy || post.creativeBrief?.v3PostCopyStrategy || null,
+            campaign_creative_direction: post.campaignCreativeDirection || post.creativeBrief?.v3CampaignCreativeDirection || null,
           }),
         });
         console.log(`[check-scheduled-posts] Post ${post.id} → Make a répondu HTTP ${res.status}`);

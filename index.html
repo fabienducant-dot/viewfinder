@@ -174,7 +174,7 @@ const ASPECTS = {
 };
 
 const PLATFORMS = ["Instagram","Facebook","Google Business","Article Blog Wix","Story"];
-const LOCKED_BRAND_CONTACTS = Object.freeze({domain:"la-sante-des-zebres.com",phone:"06.84.40.69.54",address:"11 cour Dupas, Raismes",email:"fabien.ducant@gmail.com"});
+const LOCKED_BRAND_CONTACTS = Object.freeze({domain:"la-sante-des-zebres.com",phone:"06.84.40.69.54",address:"11 cour Dupas, 59590 Raismes",email:"fabien.ducant@gmail.com"});
 
 /* V3 — Instagram et Facebook gardent le ratio 4:5 mais utilisent des compositions distinctes. */
 const PLATFORM_ASPECT = { "Instagram":"4:5", "Facebook":"4:5", "Google Business":"4:3", "Article Blog Wix":"16:9", "Story":"9:16" };
@@ -538,6 +538,7 @@ const state = {
   prestationName: "",
   styleId: "",
   topic: "",
+  textOnImageChoice: LS.get("vf-text-on-image","automatic"),
   registres: [], // registres visuels MASTER_IMAGE V2 actifs (voir KNOWN_REGISTRES) — Noir & Or/Constitution sont implicites
   imagePrompt: "", textPrompt: "",
   textPromptOptimized: null, imagePromptOptimized: null,
@@ -689,7 +690,7 @@ function normalizeScheduledPost(p){
     v3Plan: (p.v3Plan&&typeof p.v3Plan==="object") ? p.v3Plan : null,
     v3Finalization: (p.v3Finalization&&typeof p.v3Finalization==="object") ? p.v3Finalization : null,
     v3Quality: (p.v3Quality&&typeof p.v3Quality==="object") ? p.v3Quality : null,
-    sourceImageJobId:p.sourceImageJobId||null,masterRawImageJobId:p.masterRawImageJobId||null,costAudit:p.costAudit||null,artFingerprint:p.artFingerprint||null,platformCrop:p.platformCrop||null,platformLayout:p.platformLayout||null,platformComposition:p.platformComposition||null,platformQualityReport:p.platformQualityReport||null,
+    sourceImageJobId:p.sourceImageJobId||null,masterRawImageJobId:p.masterRawImageJobId||null,costAudit:p.costAudit||null,artFingerprint:p.artFingerprint||null,platformCrop:p.platformCrop||null,platformLayout:p.platformLayout||null,platformComposition:p.platformComposition||null,platformQualityReport:p.platformQualityReport||null,postCopyStrategy:p.postCopyStrategy||p.creativeBrief?.v3PostCopyStrategy||null,campaignCreativeDirection:p.campaignCreativeDirection||p.creativeBrief?.v3CampaignCreativeDirection||null,
     analysisError: p.analysisError || null,
     textError: p.textError || null,
     usedReference: !!p.usedReference,
@@ -4669,7 +4670,8 @@ CHAMP imageHeadline (accroche incrustée sur l'image par post-traitement, Instag
 async function generateContentFromBrief(brief, analysis, platform, mission){
   const provider = state.apiProviders.find(p=>p.id===state.selectedProviderId) || DEFAULT_OPENAI_PROVIDER;
   const systemPrompt = "Tu es le rédacteur officiel de cette marque. Réponds uniquement selon le schéma structuré demandé.";
-  const userPrompt = buildContentFromBriefUserPrompt(brief, analysis, platform, mission);
+  const strategyNote=brief.v3PostCopyStrategy ? `\n\nPOST COPY STRATEGY V3 OBLIGATOIRE : ${JSON.stringify(brief.v3PostCopyStrategy)}\nRespecte exactement le nom de prestation, maximum 5 hashtags Instagram, aucun hashtag Google Business, aucun diagnostic, tarif ou durée inventés, jamais https://la-sante-des-zebres.my-shoop.store/. Le SEO local naturel prioritaire est « cabinet à Raismes, proche Valenciennes ».` : "";
+  const userPrompt = buildContentFromBriefUserPrompt(brief, analysis, platform, mission)+strategyNote;
   const res = await fetch("/.netlify/functions/generate-text", {
     method:"POST", headers:{"Content-Type":"application/json"},
     body: JSON.stringify({ kind: provider.kind, model: provider.model, baseUrl: provider.baseUrl, systemPrompt, userPrompt, responseSchema: CONTENT_FROM_BRIEF_SCHEMA }),
@@ -5784,11 +5786,12 @@ async function generateCampaignPosts(topic, missionKey, onProgress){
     const isStory = item.platform === "Story";
     if(onProgress) onProgress(`${i+1}/${CAMPAIGN_ITEMS.length} — ${item.label}`);
     const prepared = await prepareCreativeBrief({ mission: missionKey, platform: item.platform, prestation: state.prestationName, topic, aspectKey: aspect, size: API_IMAGE_SIZE_BY_PLATFORM[item.platform]||"1024x1024", isCampaign:true, registres: Array.isArray(state.registres) ? [...state.registres] : [], userReferenceDataUrl: state.userReferenceUpload && state.userReferenceUpload.dataUrl, userReferenceImageId: state.userReferenceUpload && state.userReferenceUpload.id, aiLogoIntegration: !!state.aiLogoIntegration });
+    const v3Response=await fetch("/.netlify/functions/plan-v3",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({service:state.prestationName,platform:item.platform==="Article Blog Wix"?"Blog":item.platform,subject:topic,selectedRegisters:[...(state.registres||[])],textChoice:state.textOnImageChoice||"automatic",marketingObjective:missionKey||"Faire réserver",creativeSeed:`campaign-${campaignId}`,costMode:state.costMode||"test",requestedSize:API_IMAGE_SIZE_BY_PLATFORM[item.platform]||"1024x1024"})});const v3Plan=await fetchJsonOrThrowRaw(v3Response,"plan de campagne V3");if(!v3Response.ok||v3Plan.error)throw new Error(v3Plan.error||"Plan V3 campagne indisponible");prepared.v3Plan=v3Plan;prepared.brief.v3SubjectBrief=v3Plan.subjectBrief;prepared.brief.v3PosterStrategy=v3Plan.posterStrategy;prepared.brief.v3PostCopyStrategy=v3Plan.postCopyStrategy;prepared.brief.v3CampaignCreativeDirection=v3Plan.campaignCreativeDirection;
     posts.push({
       id: uid(), campaignId, campaignTopic: topic, campaignLabel: item.label,
       platform: item.platform, mission: missionKey, topic,
       imagePrompt: prepared.imagePrompt,
-      creativeBrief: prepared.brief || null,
+      creativeBrief: prepared.brief || null,v3Plan:prepared.v3Plan||null,postCopyStrategy:prepared.v3Plan?.postCopyStrategy||null,campaignCreativeDirection:prepared.v3Plan?.campaignCreativeDirection||null,
       aiLogoIntegrationUsed: !!prepared.aiLogoIntegrationUsed,
       serverBrandCompositionUsed: !!prepared.serverBrandCompositionUsed,
       plannerVersion: prepared.plannerVersion,
@@ -6986,6 +6989,11 @@ function buildPostTab(){
   const topicArea = el("textarea",{rows:"3", placeholder:"Ex : lancement du Massage Zébré, offre vacances, nouveauté..."}, state.topic);
   topicArea.addEventListener("input", e=>{ state.topic = e.target.value; });
   frag.appendChild(el("div",{style:"margin-bottom:6px;"}, topicArea));
+  frag.appendChild(el("p",{class:"hint",style:"margin:-2px 0 10px;"},"Décrivez simplement le thème, la sensation ou l’idée. Les styles cochés seront appliqués automatiquement. Exemple : “Dos lourd et bloqué” ou “Retrouver de l’élan après une période difficile”."));
+  frag.appendChild(el("p",{class:"label"},"Texte sur l’image"));
+  const textChoice=el("select",{},[
+    el("option",{value:"automatic",selected:state.textOnImageChoice==="automatic"},"Automatique recommandé"),el("option",{value:"title",selected:state.textOnImageChoice==="title"},"Titre seulement"),el("option",{value:"editorial",selected:state.textOnImageChoice==="editorial"},"Titre + sous-titre"),el("option",{value:"complete",selected:state.textOnImageChoice==="complete"},"Informations complètes"),el("option",{value:"none",selected:state.textOnImageChoice==="none"},"Aucun texte")]);
+  textChoice.addEventListener("change",e=>{state.textOnImageChoice=e.target.value;LS.set("vf-text-on-image",state.textOnImageChoice);});frag.appendChild(el("div",{style:"margin-bottom:12px;"},textChoice));
   const topicWarn = el("p",{style:"font-size:12px;color:var(--coral);margin:0 0 12px;min-height:14px;"}, "");
   frag.appendChild(topicWarn);
 
@@ -7138,6 +7146,7 @@ function buildPostTab(){
       const conceptV3 = flow.v3Plan?.preflight?.concept || "Plan V3 non chargé";
       const layoutV3 = flow.v3Plan?.preflight?.layout || "—";
       const rationaleV3 = flow.v3Plan?.preflight?.justification || "—";
+      if(flow.v3Plan?.posterStrategy){const ps=flow.v3Plan.posterStrategy,cs=flow.v3Plan.postCopyStrategy;details.appendChild(el("div",{class:"card",style:"margin:10px 0;"},[el("strong",{},"Prévisualisation gratuite V3"),el("pre",{style:"white-space:pre-wrap;font-size:11px;"},JSON.stringify({subjectBrief:flow.v3Plan.subjectBrief,posterStrategy:ps,postCopyStrategy:cs,campaignCreativeDirection:flow.v3Plan.campaignCreativeDirection,scores:flow.v3Plan.freeScores},null,2))]));}
       details.appendChild(el("div",{class:"card",style:"margin:10px 0;"},[
         el("strong",{},"Direction Artistique V3 — avant génération payante"),
         el("p",{},`Concept : ${conceptV3}`), el("p",{},`Layout : ${layoutV3}`), el("p",{},`Justification : ${rationaleV3}`)
@@ -7301,10 +7310,10 @@ function buildPostTab(){
       try{
         const prepared = await prepareCreativeBrief({ mission: state.mission, platform, prestation: state.prestationName, topic: state.topic, aspectKey: PLATFORM_ASPECT[platform], size: API_IMAGE_SIZE_BY_PLATFORM[platform]||"1024x1024", isCampaign:false, registres: Array.isArray(state.registres) ? [...state.registres] : [], userReferenceDataUrl: state.userReferenceUpload && state.userReferenceUpload.dataUrl, userReferenceImageId: state.userReferenceUpload && state.userReferenceUpload.id, aiLogoIntegration: !!state.aiLogoIntegration });
         if(state.prestationName&&state.prestationName!=="Tous sujets"){
-          const planResponse=await fetch("/.netlify/functions/plan-v3",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({service:state.prestationName,platform:platform==="Article Blog Wix"?"Blog":platform,marketingObjective:state.mission||"Faire réserver",audience:"clientèle La Santé des Zèbres",artHistory:(state.imageHistory||[]).map(x=>x.artFingerprint).filter(Boolean).slice(-10),creativeSeed:`${state.prestationName}-${state.topic}-${Date.now()}`,costMode:state.costMode||"test",requestedSize:API_IMAGE_SIZE_BY_PLATFORM[platform]||"1024x1024",artDirectionKey:prepared.brief?.sceneFamily||prepared.sceneFamily||null})});
+          const planResponse=await fetch("/.netlify/functions/plan-v3",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({service:state.prestationName,platform:platform==="Article Blog Wix"?"Blog":platform,marketingObjective:state.mission||"Faire réserver",audience:"clientèle La Santé des Zèbres",artHistory:(state.imageHistory||[]).map(x=>x.artFingerprint).filter(Boolean).slice(-10),creativeSeed:`${state.prestationName}-${state.topic}-${Date.now()}`,subject:state.topic,selectedRegisters:[...(state.registres||[])],textChoice:state.textOnImageChoice||"automatic",costMode:state.costMode||"test",requestedSize:API_IMAGE_SIZE_BY_PLATFORM[platform]||"1024x1024",artDirectionKey:prepared.brief?.sceneFamily||prepared.sceneFamily||null})});
           const planData=await fetchJsonOrThrowRaw(planResponse,"Direction Artistique V3");
           if(!planResponse.ok||planData.error)throw new Error(planData.error||"Plan V3 indisponible");
-          prepared.v3Plan=planData;
+          prepared.v3Plan=planData;prepared.brief.v3SubjectBrief=planData.subjectBrief;prepared.brief.v3PosterStrategy=planData.posterStrategy;prepared.brief.v3PostCopyStrategy=planData.postCopyStrategy;prepared.brief.v3CampaignCreativeDirection=planData.campaignCreativeDirection;
           if(planData.psioRequired&&!planData.psioReferenceReady){
             const missing=(planData.psioReferenceRoles||[]).filter(x=>!x.available).map(x=>x.label).join(", ");
             prepared.blockingError=`Références officielles PSiO® manquantes : ${missing}. Ajoutez-les avant toute confirmation payante.`;
@@ -7918,7 +7927,7 @@ async function generateImageForCampaignItem(item, onStatus, cancelToken){
       phase:"prepared",
       inputs:{ mission:item.mission, platform:item.platform, prestation:state.prestationName,
         topic:item.topic, size, aspectKey:PLATFORM_ASPECT[item.platform], isCampaign:true },
-      brief:item.creativeBrief, imagePrompt:item.imagePrompt, referenceSelections,
+      brief:item.creativeBrief, imagePrompt:item.imagePrompt, referenceSelections,v3Plan:item.v3Plan||null,
       resumeJobId: item.pendingImageJobId || undefined,
       // Persisté en localStorage DÈS la création du job, avant même le premier sondage : si Android
       // tue l'app en arrière-plan pendant la génération, resumePendingCampaignJobs() (appelée au
