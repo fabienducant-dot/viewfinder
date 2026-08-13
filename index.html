@@ -4646,7 +4646,28 @@ function buildBrandVoiceSocle(mission, platform){
 function buildContentFromBriefUserPrompt(brief, analysis, platform, mission){
   if(!brief) throw new Error("Brief créatif manquant pour ce post (aucune donnée de scène disponible) — recrée ce post ou cette campagne plutôt que de régénérer le texte seul.");
   analysis = analysis || { visibleSubjects:[], visibleAction:"", visibleSetting:"", visibleObjects:[], lighting:"", briefMismatch:[] };
-  const brandVoice = buildBrandVoiceSocle(mission, platform);
+  const generic=brief.v3SubjectBrief?.relatedService===null;
+  const brandVoice = buildBrandVoiceSocle(generic?brief.v3PostCopyStrategy?.communicationGoal:mission, platform);
+  if(generic){
+    const subject=brief.v3SubjectBrief,strategy=brief.v3PostCopyStrategy;
+    return cleanPrompt(`Rédige le contenu public final pour ${platform}, communication « ${subject.communicationType} ».
+
+${brandVoice}
+
+INTENTION INTERPRÉTÉE : ${subject.subjectIntent}
+IDÉE ÉMOTIONNELLE REFORMULÉE : ${subject.emotionalIdea}
+SUJET VISUEL CONCRET : ${subject.concreteVisualSubject}
+ACTION VISUELLE : ${subject.visualAction}
+ENVIRONNEMENT : ${subject.environment}
+FAITS FOURNIS PAR L’UTILISATEUR À CONSERVER, SANS LES INVENTER : ${JSON.stringify(subject.factualElements.userProvided)}
+DONNÉES OFFICIELLES : ${JSON.stringify(subject.factualElements.official)}
+CONTRADICTIONS À SIGNALER POUR VALIDATION, SANS CORRECTION SILENCIEUSE : ${JSON.stringify(subject.factualElements.contradictions)}
+STRATÉGIE PLATEFORME : ${JSON.stringify(strategy)}
+
+Analyse de l’image réellement obtenue pour l’alt text : sujets ${(analysis.visibleSubjects||[]).join(", ")}; action ${analysis.visibleAction||"non déterminée"}; décor ${analysis.visibleSetting||"non déterminé"}; objets ${(analysis.visibleObjects||[]).join(", ")}; lumière ${analysis.lighting||"non déterminée"}.
+
+N’injecte aucune prestation, technique, zone corporelle, geste de soin, matériel de soin, tarif ou durée. Ne recopie pas le sujet brut en accroche. Reformule naturellement les clichés. Utilise uniquement les hashtags autorisés par la stratégie. L’adresse reste dans la légende ou les informations pratiques, jamais dans imageHeadline. L’alt text décrit uniquement l’image réellement observée.`);
+  }
   return cleanPrompt(`Rédige le contenu texte final pour ${platform}, mission "${mission||"non précisée"}".
 
 ${brandVoice}
@@ -4693,7 +4714,10 @@ async function generateContentFromBrief(brief, analysis, platform, mission){
   if(!res.ok || data.error) throw new Error(data.error || `Erreur ${res.status}`);
   let content;
   try{ content = JSON.parse(data.text); } catch(e){ throw new Error("Sortie non exploitable."); }
-  if(Array.isArray(content.hashtags)) content.hashtags = content.hashtags.slice(0,5);
+  if(Array.isArray(content.hashtags)){
+    const allowed=brief.v3PostCopyStrategy?.hashtagStrategy?.items;
+    content.hashtags=(brief.v3SubjectBrief?.relatedService===null&&Array.isArray(allowed))?content.hashtags.filter(tag=>allowed.includes(tag)).slice(0,5):content.hashtags.slice(0,5);
+  }
   const contactLine=[LOCKED_BRAND_CONTACTS.domain,LOCKED_BRAND_CONTACTS.phone,LOCKED_BRAND_CONTACTS.address,LOCKED_BRAND_CONTACTS.email].join(" · ");
   if(typeof content.caption==="string"){
     content.caption=content.caption.replace(/(?:https?:\/\/|www\.)\S+|\b[\w.+-]+@[\w.-]+\.[A-Za-z]{2,}\b|\b(?:\+33|0)[\d .-]{8,}\d\b/gi,"").trim();
