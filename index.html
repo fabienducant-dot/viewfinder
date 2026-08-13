@@ -117,6 +117,7 @@
 <nav id="nav"></nav>
 <main id="main"></main>
 
+<script src="./v3-service-menu.js"></script>
 <script>
 /* ============================================================
    STOCKAGE LOCAL
@@ -535,7 +536,7 @@ const state = {
   da: LS.get("vf-da", DEFAULT_DA),
   network: "Instagram",
   mission: "",
-  prestationName: "",
+  prestationName: "Tous sujets",
   styleId: "",
   topic: "",
   textOnImageChoice: LS.get("vf-text-on-image","automatic"),
@@ -777,7 +778,7 @@ function normalizeState(){
   // Registres visuels MASTER_IMAGE V2 actifs (Noir & Or et Constitution générale sont implicites,
   // jamais dans ce tableau). Toute valeur inconnue (ancien état, migration) est silencieusement retirée.
   state.registres = Array.isArray(state.registres) ? state.registres.filter(r=>KNOWN_REGISTRES.includes(r)) : [];
-  state.prestationName = typeof state.prestationName==="string" ? state.prestationName : "";
+  state.prestationName = SERVICE_MENU.options.some(option=>option.value===state.prestationName) ? state.prestationName : SERVICE_MENU.ALL_SUBJECTS;
   state.textPasted = typeof state.textPasted==="string" ? state.textPasted : "";
   state.pendingAltText = typeof state.pendingAltText==="string" ? state.pendingAltText : "";
   // l'id sélectionné doit toujours pointer vers un élément qui existe réellement, sinon on le réinitialise
@@ -1666,15 +1667,9 @@ function modulesToText(mods){
 function cleanPrompt(text){
   return String(text||"").replace(/[ \t]+\n/g, "\n").replace(/\n{3,}/g, "\n\n").trim();
 }
-/* Liste fixe des prestations reconnues individuellement par le sélecteur.
-   Modifiable ici sans toucher au reste du moteur si de nouvelles prestations apparaissent. */
-const KNOWN_PRESTATIONS = [
-  "Massage Zébré","Massage Ayurvédique Abhyanga","Massage Balinais","Massage Thaï traditionnel",
-  "Massage Femme enceinte","Massage Enfant","Réflexologie plantaire thaïlandaise",
-  "Massage japonais du visage","Massage lymphatique expert","Soin énergétique","Reiki",
-  "Luminothérapie PSIO®","Biorésonance quantique","Soin minceur","Offre Sylver","Offre Gold","Massage dos/zone",
-  "Prestations en entreprise",
-];
+/* Source canonique partagée avec le planner et ses tests : le menu ne maintient aucune seconde liste. */
+const SERVICE_MENU = window.VF_SERVICE_MENU;
+const KNOWN_PRESTATIONS = SERVICE_MENU.businessNames;
 
 /* Table d'alias : chaque nom canonique (celui déjà stocké dans les sélections, historiques,
    campagnes et modes existants — JAMAIS modifié) peut être reconnu sous plusieurs formulations
@@ -6963,11 +6958,7 @@ function buildPostTab(){
 
   frag.appendChild(el("p",{class:"label"},"Prestation concernée"));
   const prestationBlocksAvail = extractPrestationBlocks(getMergedPrestationsText());
-  const presSelect = el("select",{}, [
-    el("option",{value:""}, "Non spécifiée"),
-    el("option",{value:"Tous sujets"}, "Tous sujets (pas de prestation en particulier)"),
-    ...KNOWN_PRESTATIONS.map(name=> el("option",{value:name}, prestationBlocksAvail[name] ? name : `${name} (non documentée)`)),
-  ]);
+  const presSelect = el("select",{}, SERVICE_MENU.options.map(option=>el("option",{value:option.value},option.kind==="generic"?option.label:(prestationBlocksAvail[option.value]?option.label:`${option.label} (non documentée)`))));
   presSelect.value = state.prestationName;
   presSelect.addEventListener("change", e=>{ state.prestationName = e.target.value; renderMain(); });
   frag.appendChild(el("div",{style:"margin-bottom:6px;"}, presSelect));
@@ -7333,7 +7324,7 @@ function buildPostTab(){
       imgApiStatus.textContent = "Préparation de la création (Creative Planner)...";
       try{
         const prepared = await prepareCreativeBrief({ mission: state.mission, platform, prestation: state.prestationName, topic: state.topic, aspectKey: PLATFORM_ASPECT[platform], size: API_IMAGE_SIZE_BY_PLATFORM[platform]||"1024x1024", isCampaign:false, registres: Array.isArray(state.registres) ? [...state.registres] : [], userReferenceDataUrl: state.userReferenceUpload && state.userReferenceUpload.dataUrl, userReferenceImageId: state.userReferenceUpload && state.userReferenceUpload.id, aiLogoIntegration: !!state.aiLogoIntegration });
-        if(state.prestationName&&state.prestationName!=="Tous sujets"){
+        if(state.prestationName){
           const planResponse=await fetch("/.netlify/functions/plan-v3",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({service:state.prestationName,platform:platform==="Article Blog Wix"?"Blog":platform,marketingObjective:state.mission||"Faire réserver",audience:"clientèle La Santé des Zèbres",artHistory:(state.imageHistory||[]).map(x=>x.artFingerprint).filter(Boolean).slice(-10),creativeSeed:`${state.prestationName}-${state.topic}-${Date.now()}`,subject:state.topic,selectedRegisters:[...(state.registres||[])],textChoice:state.textOnImageChoice||"automatic",costMode:state.costMode||"test",requestedSize:API_IMAGE_SIZE_BY_PLATFORM[platform]||"1024x1024",artDirectionKey:prepared.brief?.sceneFamily||prepared.sceneFamily||null})});
           const planData=await fetchJsonOrThrowRaw(planResponse,"Direction Artistique V3");
           if(!planResponse.ok||planData.error)throw new Error(planData.error||"Plan V3 indisponible");

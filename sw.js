@@ -11,6 +11,7 @@ const CACHE_NAME = "viewfinder-cache-v30-art-direction-poster-engine";
 const APP_SHELL = [
   "./",
   "./index.html",
+  "./v3-service-menu.js",
   "./manifest.json",
   "./icons/favicon-32.png",
   "./icons/icon-180.png",
