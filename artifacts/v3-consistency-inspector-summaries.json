@@ -1,0 +1,1251 @@
+{
+  "generatedWithoutImagesApi": true,
+  "exports": {
+    "golden": {
+      "scenario": {
+        "service": "Massage dos/zone",
+        "platform": "Story",
+        "subject": "Douleurs dorsales, blocage, sensations de lourdeur",
+        "selectedRegisters": [
+          "Fantastique",
+          "Cinématographie",
+          "Architecture"
+        ],
+        "textChoice": "automatic",
+        "creativeSeed": "golden-target-systemic",
+        "costMode": "test"
+      },
+      "planId": "9fe417f7efb27980b3048af95dae25360c1a84af011307e4aaf3f0ed7b37ee0f",
+      "service": "Massage dos/zone",
+      "platform": "Story",
+      "subjectBrief": {
+        "rawSubject": "Douleurs dorsales, blocage, sensations de lourdeur",
+        "coreTheme": "Douleurs dorsales, blocage, sensations de lourdeur",
+        "audienceProblem": "personne concernée par « Douleurs dorsales, blocage, sensations de lourdeur »",
+        "physicalOrEmotionalManifestation": "manifestation visible de « Douleurs dorsales, blocage, sensations de lourdeur » centrée sur dos, incarnée par une posture, un geste ou une interaction crédible",
+        "transformationPromise": "poids et tension visibles autour de dos, puis les masses s’allègent et l’espace s’ouvre, sans résultat médical ni certitude absolue",
+        "explicitSceneRequest": null,
+        "userConstraints": [],
+        "explicitTextRequest": null,
+        "selectedRegisters": [
+          "Fantastique",
+          "Cinématographie",
+          "Architecture"
+        ],
+        "relatedService": "Massage dos/zone",
+        "marketingObjective": "Faire réserver",
+        "requestedFocus": "dos",
+        "officialRecognition": "zone ciblée au centre de la narration",
+        "officialAction": "geste précis sur la zone",
+        "noMedicalDiagnosis": true
+      },
+      "artDirection": {
+        "artWorldFamily": "Cabinet cinématographique intime",
+        "locationFamily": "cabinet premium intime",
+        "architectureDescription": "cabinet contemporain intime aux volumes noirs texturés, ouvert par une perspective latérale",
+        "dominantMaterials": [
+          "velours noir",
+          "obsidienne",
+          "or satiné"
+        ],
+        "lightingNarrative": "lumière latérale douce et contre-jour doré",
+        "fantasticPhenomenon": "lueur périphérique très discrète dans les matières"
+      },
+      "posterStrategy": {
+        "communicationGoal": "Faire réserver",
+        "coreTheme": "Douleurs dorsales, blocage, sensations de lourdeur",
+        "instantVisualMeaning": "manifestation visible de « Douleurs dorsales, blocage, sensations de lourdeur » centrée sur dos, incarnée par une posture, un geste ou une interaction crédible",
+        "subjectManifestation": "manifestation visible de « Douleurs dorsales, blocage, sensations de lourdeur » centrée sur dos, incarnée par une posture, un geste ou une interaction crédible",
+        "careOrSolutionManifestation": "geste précis sur la zone; praticien et bénéficiaire clairement présents",
+        "transformationNarrative": "poids et tension visibles autour de dos, puis les masses s’allègent et l’espace s’ouvre, sans résultat médical ni certitude absolue",
+        "emotionalJourney": "état initial visible → évolution crédible → ouverture",
+        "mainSubject": "zone demandée, attention portée à dos",
+        "secondarySubject": "praticien",
+        "tertiarySubject": "Fabien, praticien masculin adulte",
+        "visualHierarchy": [
+          "manifestation principale : dos",
+          "réponse SDZ : geste précis sur la zone",
+          "Fabien, praticien masculin adulte"
+        ],
+        "environmentRole": "cabinet premium intime prolonge le sens de « Douleurs dorsales, blocage, sensations de lourdeur » sans masquer zone ciblée au centre de la narration",
+        "artWorldFamily": "Cabinet cinématographique intime",
+        "locationFamily": "cabinet premium intime",
+        "architecturalStory": "cabinet contemporain intime aux volumes noirs texturés, ouvert par une perspective latérale traduit spatialement poids et tension visibles autour de dos, puis les masses s’allègent et l’espace s’ouvre, sans résultat médical ni certitude absolue",
+        "fantasticStory": "lueur périphérique très discrète dans les matières, relié à l’évolution du sujet",
+        "lightingStory": "lumière latérale douce et contre-jour doré, concentrée sur dos puis accompagnant la transformation",
+        "compositionType": "Cinématographique",
+        "textMode": "TEXT_MODE_EDITORIAL",
+        "title": "DOULEURS DORSALES, BLOCAGE, SENSATIONS DE LOURDEUR",
+        "subtitle": "DÉCOUVRIR MASSAGE DOS/ZONE",
+        "supportingLine": "",
+        "brandLine": "LA SANTÉ DES ZÈBRES — RAISMES",
+        "titleLines": [
+          "DOULEURS DORSALES,",
+          "BLOCAGE,",
+          "SENSATIONS",
+          "DE LOURDEUR"
+        ],
+        "subtitleLines": [
+          "DÉCOUVRIR MASSAGE DOS/ZONE"
+        ],
+        "titleLineTarget": "2 à 4",
+        "subtitleLineTarget": "1 à 2",
+        "textZones": [
+          "zone éditoriale Story 60–76 %, distincte du logo"
+        ],
+        "textSafeArea": {
+          "top": 0.6,
+          "bottom": 0.76,
+          "left": 0.06,
+          "right": 0.94
+        },
+        "logoSafeArea": {
+          "top": 0.76,
+          "bottom": 0.86,
+          "left": 0.2,
+          "right": 0.8
+        },
+        "logoPlacement": "zone dédiée selon le format",
+        "logoScale": "prominent",
+        "protectedSceneAreas": [
+          "visage",
+          "mains actives",
+          "geste professionnel",
+          "dos",
+          "matériel officiel",
+          "ouverture architecturale"
+        ],
+        "platformAdaptationRules": {
+          "Story": "verticale immersive, zones texte et logo distinctes",
+          "Facebook": "4:5 distinct",
+          "Instagram": "4:5 compact",
+          "Instagram Square": "recomposition carrée dédiée",
+          "Google Business": "sans texte par défaut"
+        },
+        "differentiationReason": "cabinet premium intime, cadrage intime avec architecture en retrait ; architecture, lumière et phénomène différents des créations récentes",
+        "metrics": {
+          "titleWordCount": 6,
+          "titleLineCount": 4,
+          "subtitleWordCount": 3,
+          "subtitleLineCount": 1,
+          "textDensityRatio": 0.2111111111111111,
+          "orphanWordDetected": false,
+          "semanticBreakQuality": 9,
+          "mobileReadabilityScore": 9
+        }
+      },
+      "legacyProjection": {
+        "sceneFamily": "cabinet premium intime",
+        "familleUnivers": "Cabinet cinématographique intime",
+        "decor": "cabinet contemporain intime aux volumes noirs texturés, ouvert par une perspective latérale",
+        "architecture": "cabinet contemporain intime aux volumes noirs texturés, ouvert par une perspective latérale",
+        "environmentRole": "cabinet premium intime prolonge le sens de « Douleurs dorsales, blocage, sensations de lourdeur » sans masquer zone ciblée au centre de la narration",
+        "lumiere": "lumière latérale douce et contre-jour doré, concentrée sur dos puis accompagnant la transformation",
+        "matieres": "velours noir, obsidienne, or satiné",
+        "phenomeneFantastique": "lueur périphérique très discrète dans les matières",
+        "ideeVisuelle": "manifestation visible de « Douleurs dorsales, blocage, sensations de lourdeur » centrée sur dos, incarnée par une posture, un geste ou une interaction crédible ; cabinet premium intime prolonge le sens de « Douleurs dorsales, blocage, sensations de lourdeur » sans masquer zone ciblée au centre de la narration",
+        "sujetPrincipal": "zone demandée, attention portée à dos",
+        "sujetSecondaire": "praticien",
+        "action": "geste précis sur la zone; praticien et bénéficiaire clairement présents",
+        "pointDeTransformation": "poids et tension visibles autour de dos, puis les masses s’allègent et l’espace s’ouvre, sans résultat médical ni certitude absolue",
+        "texteImage": "DOULEURS DORSALES, BLOCAGE, SENSATIONS DE LOURDEUR | DÉCOUVRIR MASSAGE DOS/ZONE",
+        "zoneTexte": "zone éditoriale Story 60–76 %, distincte du logo",
+        "zoneLogo": "{\"top\":0.76,\"bottom\":0.86,\"left\":0.2,\"right\":0.8}",
+        "messageCentral": "Douleurs dorsales, blocage, sensations de lourdeur",
+        "raisonDifferenceAvecHistorique": "cabinet premium intime, cadrage intime avec architecture en retrait ; architecture, lumière et phénomène différents des créations récentes",
+        "caracteristiquePrestationVisible": "zone ciblée au centre de la narration",
+        "compositionInterdite": [
+          "matériel médical inventé",
+          "scanner",
+          "écran médical",
+          "boîtier ou câble inventé",
+          "faux logo",
+          "texte généré",
+          "spa oriental générique",
+          "bambou",
+          "lotus",
+          "serviettes roulées",
+          "bougies",
+          "galets empilés façon zen",
+          "ambiance horrifique ou occulte",
+          "collage Canva",
+          "cases ou bordures"
+        ],
+        "negativePrompt": "matériel médical inventé, scanner, écran médical, boîtier ou câble inventé, faux logo, texte généré, spa oriental générique, bambou, lotus, serviettes roulées, bougies, galets empilés façon zen, ambiance horrifique ou occulte, collage Canva, cases ou bordures",
+        "selectedAntiRepetitionElements": []
+      },
+      "consistencyReport": {
+        "heuristic": true,
+        "notice": "Estimations automatiques, pas des certitudes.",
+        "checks": {
+          "subjectServiceConsistency": true,
+          "serviceVisuallyRecognizable": true,
+          "requestedFocusRespected": true,
+          "rolesAndPeopleConsistent": true,
+          "artDirectionConsistency": true,
+          "uniqueArchitecture": true,
+          "transformationDistinctFromInitialState": true,
+          "uniqueV3Text": true,
+          "claimsAllowed": true,
+          "layoutCollisionRisk": false,
+          "protectedAreaOverlapRisk": false,
+          "mobileReadability": 9,
+          "formatSpecificRecomposition": true,
+          "platformPayloadConsistency": true,
+          "campaignConsistency": true,
+          "promptInspectorMatchesImages": true,
+          "imageGenerationCallCountPlanned": 1
+        },
+        "contradictions": [],
+        "claimIssues": [],
+        "blockingReasons": [],
+        "ready": true,
+        "action": "valider"
+      },
+      "psio": {
+        "required": false,
+        "referenceCount": 0,
+        "ready": true
+      },
+      "promptEquality": true,
+      "effectiveQuality": "low",
+      "n": 1,
+      "plannedImageCalls": 1,
+      "executedImageCalls": 0
+    },
+    "abhyanga": {
+      "scenario": {
+        "service": "Massage Ayurvédique Abhyanga",
+        "platform": "Instagram",
+        "subject": "Fluidité du geste et huile tiède",
+        "selectedRegisters": [
+          "Cinématographie"
+        ],
+        "textChoice": "editorial",
+        "creativeSeed": "inspector-abhyanga",
+        "costMode": "test"
+      },
+      "planId": "368e92483e90785af763e6df5cc499b4820f78cfb489d0e1b30e686852fb0824",
+      "service": "Massage Ayurvédique Abhyanga",
+      "platform": "Instagram",
+      "subjectBrief": {
+        "rawSubject": "Fluidité du geste et huile tiède",
+        "coreTheme": "Fluidité du geste et huile tiède",
+        "audienceProblem": "personne concernée par « Fluidité du geste et huile tiède »",
+        "physicalOrEmotionalManifestation": "manifestation visible de « Fluidité du geste et huile tiède », incarnée par une posture, un geste ou une interaction crédible",
+        "transformationPromise": "état initial lié à « Fluidité du geste et huile tiède », puis l’attention, la lumière et l’ambiance évoluent avec subtilité, sans résultat médical ni certitude absolue",
+        "explicitSceneRequest": null,
+        "userConstraints": [],
+        "explicitTextRequest": null,
+        "selectedRegisters": [
+          "Cinématographie"
+        ],
+        "relatedService": "Massage Ayurvédique Abhyanga",
+        "marketingObjective": "Faire réserver",
+        "requestedFocus": null,
+        "officialRecognition": "huile et mouvements continus tête-pieds",
+        "officialAction": "long mouvement huilé synchronisé",
+        "noMedicalDiagnosis": true
+      },
+      "artDirection": {
+        "artWorldFamily": "Jardin d’eau noir et or",
+        "locationFamily": "pavillon lacustre ouvert",
+        "architectureDescription": "pavillon lacustre ouvert au bord d’une eau noire, plateforme asymétrique, toiture flottante légère et écran minéral latéral. Paysage, eau et ciel visibles autour de la prestation",
+        "dominantMaterials": [
+          "pierre architecturale",
+          "roche naturelle",
+          "obsidienne",
+          "or satiné"
+        ],
+        "lightingNarrative": "la pierre architecturale et la roche naturelle se répondent sous une lumière dorée latérale",
+        "fantasticPhenomenon": "reflet impossible ou brume périphérique discrète, jamais portail central ou objet occulte"
+      },
+      "posterStrategy": {
+        "communicationGoal": "Faire réserver",
+        "coreTheme": "Fluidité du geste et huile tiède",
+        "instantVisualMeaning": "manifestation visible de « Fluidité du geste et huile tiède », incarnée par une posture, un geste ou une interaction crédible",
+        "subjectManifestation": "manifestation visible de « Fluidité du geste et huile tiède », incarnée par une posture, un geste ou une interaction crédible",
+        "careOrSolutionManifestation": "long mouvement huilé synchronisé; praticien et bénéficiaire clairement présents",
+        "transformationNarrative": "état initial lié à « Fluidité du geste et huile tiède », puis l’attention, la lumière et l’ambiance évoluent avec subtilité, sans résultat médical ni certitude absolue",
+        "emotionalJourney": "état initial visible → évolution crédible → ouverture",
+        "mainSubject": "receveur sur table",
+        "secondarySubject": "praticien",
+        "tertiarySubject": "Fabien, praticien masculin adulte",
+        "visualHierarchy": [
+          "manifestation principale : huile et mouvements continus tête-pieds",
+          "réponse SDZ : long mouvement huilé synchronisé",
+          "Fabien, praticien masculin adulte"
+        ],
+        "environmentRole": "pavillon lacustre ouvert prolonge le sens de « Fluidité du geste et huile tiède » sans masquer huile et mouvements continus tête-pieds",
+        "artWorldFamily": "Jardin d’eau noir et or",
+        "locationFamily": "pavillon lacustre ouvert",
+        "architecturalStory": "pavillon lacustre ouvert au bord d’une eau noire, plateforme asymétrique, toiture flottante légère et écran minéral latéral. Paysage, eau et ciel visibles autour de la prestation traduit spatialement état initial lié à « Fluidité du geste et huile tiède », puis l’attention, la lumière et l’ambiance évoluent avec subtilité, sans résultat médical ni certitude absolue",
+        "fantasticStory": "reflet impossible ou brume périphérique discrète, jamais portail central ou objet occulte, relié à l’évolution du sujet",
+        "lightingStory": "la pierre architecturale et la roche naturelle se répondent sous une lumière dorée latérale, concentrée sur huile et mouvements continus tête-pieds puis accompagnant la transformation",
+        "compositionType": "Éditoriale",
+        "textMode": "TEXT_MODE_EDITORIAL",
+        "title": "FLUIDITÉ DU GESTE ET HUILE TIÈDE",
+        "subtitle": "DÉCOUVRIR MASSAGE AYURVÉDIQUE ABHYANGA",
+        "supportingLine": "",
+        "brandLine": "LA SANTÉ DES ZÈBRES — RAISMES",
+        "titleLines": [
+          "FLUIDITÉ DU GESTE",
+          "ET HUILE TIÈDE"
+        ],
+        "subtitleLines": [
+          "DÉCOUVRIR MASSAGE",
+          "AYURVÉDIQUE ABHYANGA"
+        ],
+        "titleLineTarget": "1 à 3",
+        "subtitleLineTarget": "1 à 2",
+        "textZones": [
+          "zone éditoriale calculée pour le format, distincte du logo"
+        ],
+        "textSafeArea": {
+          "top": 0.6,
+          "bottom": 0.76,
+          "left": 0.06,
+          "right": 0.94
+        },
+        "logoSafeArea": {
+          "top": 0.77,
+          "bottom": 0.92,
+          "left": 0.2,
+          "right": 0.8
+        },
+        "logoPlacement": "zone dédiée selon le format",
+        "logoScale": "prominent",
+        "protectedSceneAreas": [
+          "visage",
+          "mains actives",
+          "geste professionnel",
+          "huile et mouvements continus tête-pieds",
+          "matériel officiel",
+          "ouverture architecturale"
+        ],
+        "platformAdaptationRules": {
+          "Story": "verticale immersive, zones texte et logo distinctes",
+          "Facebook": "4:5 distinct",
+          "Instagram": "4:5 compact",
+          "Instagram Square": "recomposition carrée dédiée",
+          "Google Business": "sans texte par défaut"
+        },
+        "differentiationReason": "pavillon lacustre ouvert, geste en diagonale et profondeur progressive ; architecture, lumière et phénomène différents des créations récentes",
+        "metrics": {
+          "titleWordCount": 6,
+          "titleLineCount": 2,
+          "subtitleWordCount": 4,
+          "subtitleLineCount": 2,
+          "textDensityRatio": 0.2692307692307692,
+          "orphanWordDetected": false,
+          "semanticBreakQuality": 9,
+          "mobileReadabilityScore": 9
+        }
+      },
+      "legacyProjection": {
+        "sceneFamily": "pavillon lacustre ouvert",
+        "familleUnivers": "Jardin d’eau noir et or",
+        "decor": "pavillon lacustre ouvert au bord d’une eau noire, plateforme asymétrique, toiture flottante légère et écran minéral latéral. Paysage, eau et ciel visibles autour de la prestation",
+        "architecture": "pavillon lacustre ouvert au bord d’une eau noire, plateforme asymétrique, toiture flottante légère et écran minéral latéral. Paysage, eau et ciel visibles autour de la prestation",
+        "environmentRole": "pavillon lacustre ouvert prolonge le sens de « Fluidité du geste et huile tiède » sans masquer huile et mouvements continus tête-pieds",
+        "lumiere": "la pierre architecturale et la roche naturelle se répondent sous une lumière dorée latérale, concentrée sur huile et mouvements continus tête-pieds puis accompagnant la transformation",
+        "matieres": "pierre architecturale, roche naturelle, obsidienne, or satiné",
+        "phenomeneFantastique": "reflet impossible ou brume périphérique discrète, jamais portail central ou objet occulte",
+        "ideeVisuelle": "manifestation visible de « Fluidité du geste et huile tiède », incarnée par une posture, un geste ou une interaction crédible ; pavillon lacustre ouvert prolonge le sens de « Fluidité du geste et huile tiède » sans masquer huile et mouvements continus tête-pieds",
+        "sujetPrincipal": "receveur sur table",
+        "sujetSecondaire": "praticien",
+        "action": "long mouvement huilé synchronisé; praticien et bénéficiaire clairement présents",
+        "pointDeTransformation": "état initial lié à « Fluidité du geste et huile tiède », puis l’attention, la lumière et l’ambiance évoluent avec subtilité, sans résultat médical ni certitude absolue",
+        "texteImage": "FLUIDITÉ DU GESTE ET HUILE TIÈDE | DÉCOUVRIR MASSAGE AYURVÉDIQUE ABHYANGA",
+        "zoneTexte": "zone éditoriale calculée pour le format, distincte du logo",
+        "zoneLogo": "{\"top\":0.77,\"bottom\":0.92,\"left\":0.2,\"right\":0.8}",
+        "messageCentral": "Fluidité du geste et huile tiède",
+        "raisonDifferenceAvecHistorique": "pavillon lacustre ouvert, geste en diagonale et profondeur progressive ; architecture, lumière et phénomène différents des créations récentes",
+        "caracteristiquePrestationVisible": "huile et mouvements continus tête-pieds",
+        "compositionInterdite": [
+          "matériel médical inventé",
+          "scanner",
+          "écran médical",
+          "boîtier ou câble inventé",
+          "faux logo",
+          "texte généré",
+          "spa oriental générique",
+          "bambou",
+          "lotus",
+          "serviettes roulées",
+          "bougies",
+          "galets empilés façon zen",
+          "ambiance horrifique ou occulte",
+          "collage Canva",
+          "cases ou bordures"
+        ],
+        "negativePrompt": "matériel médical inventé, scanner, écran médical, boîtier ou câble inventé, faux logo, texte généré, spa oriental générique, bambou, lotus, serviettes roulées, bougies, galets empilés façon zen, ambiance horrifique ou occulte, collage Canva, cases ou bordures",
+        "selectedAntiRepetitionElements": [
+          "pavillon"
+        ]
+      },
+      "consistencyReport": {
+        "heuristic": true,
+        "notice": "Estimations automatiques, pas des certitudes.",
+        "checks": {
+          "subjectServiceConsistency": true,
+          "serviceVisuallyRecognizable": true,
+          "requestedFocusRespected": true,
+          "rolesAndPeopleConsistent": true,
+          "artDirectionConsistency": true,
+          "uniqueArchitecture": true,
+          "transformationDistinctFromInitialState": true,
+          "uniqueV3Text": true,
+          "claimsAllowed": true,
+          "layoutCollisionRisk": false,
+          "protectedAreaOverlapRisk": false,
+          "mobileReadability": 9,
+          "formatSpecificRecomposition": true,
+          "platformPayloadConsistency": true,
+          "campaignConsistency": true,
+          "promptInspectorMatchesImages": true,
+          "imageGenerationCallCountPlanned": 1
+        },
+        "contradictions": [],
+        "claimIssues": [],
+        "blockingReasons": [],
+        "ready": true,
+        "action": "valider"
+      },
+      "psio": {
+        "required": false,
+        "referenceCount": 0,
+        "ready": true
+      },
+      "promptEquality": true,
+      "effectiveQuality": "low",
+      "n": 1,
+      "plannedImageCalls": 1,
+      "executedImageCalls": 0
+    },
+    "reiki": {
+      "scenario": {
+        "service": "Reiki",
+        "platform": "Story",
+        "subject": "Recentrage et calme",
+        "selectedRegisters": [
+          "Fantastique"
+        ],
+        "textChoice": "automatic",
+        "creativeSeed": "inspector-reiki",
+        "costMode": "test"
+      },
+      "planId": "47dc497b61dd7d57ea438a4bfaf48da2c1b6436d54d48dcaef47392d608b2243",
+      "service": "Reiki",
+      "platform": "Story",
+      "subjectBrief": {
+        "rawSubject": "Recentrage et calme",
+        "coreTheme": "Recentrage et calme",
+        "audienceProblem": "personne concernée par « Recentrage et calme »",
+        "physicalOrEmotionalManifestation": "manifestation visible de « Recentrage et calme », incarnée par une posture, un geste ou une interaction crédible",
+        "transformationPromise": "état initial lié à « Recentrage et calme », puis l’attention, la lumière et l’ambiance évoluent avec subtilité, sans résultat médical ni certitude absolue",
+        "explicitSceneRequest": null,
+        "userConstraints": [],
+        "explicitTextRequest": null,
+        "selectedRegisters": [
+          "Fantastique"
+        ],
+        "relatedService": "Reiki",
+        "marketingObjective": "Faire réserver",
+        "requestedFocus": null,
+        "officialRecognition": "mains parallèles au-dessus du torse",
+        "officialAction": "imposition des mains sans contact",
+        "noMedicalDiagnosis": true
+      },
+      "artDirection": {
+        "artWorldFamily": "Jardin d’eau noir et or",
+        "locationFamily": "pavillon lacustre ouvert",
+        "architectureDescription": "pavillon lacustre ouvert au bord d’une eau noire, plateforme asymétrique, toiture flottante légère et écran minéral latéral. Paysage, eau et ciel visibles autour de la prestation",
+        "dominantMaterials": [
+          "pierre architecturale",
+          "roche naturelle",
+          "obsidienne",
+          "or satiné"
+        ],
+        "lightingNarrative": "la pierre architecturale et la roche naturelle se répondent sous une lumière dorée latérale",
+        "fantasticPhenomenon": "reflet impossible ou brume périphérique discrète, jamais portail central ou objet occulte"
+      },
+      "posterStrategy": {
+        "communicationGoal": "Faire réserver",
+        "coreTheme": "Recentrage et calme",
+        "instantVisualMeaning": "manifestation visible de « Recentrage et calme », incarnée par une posture, un geste ou une interaction crédible",
+        "subjectManifestation": "manifestation visible de « Recentrage et calme », incarnée par une posture, un geste ou une interaction crédible",
+        "careOrSolutionManifestation": "imposition des mains sans contact; praticien et bénéficiaire clairement présents",
+        "transformationNarrative": "état initial lié à « Recentrage et calme », puis l’attention, la lumière et l’ambiance évoluent avec subtilité, sans résultat médical ni certitude absolue",
+        "emotionalJourney": "état initial visible → évolution crédible → ouverture",
+        "mainSubject": "receveur habillé",
+        "secondarySubject": "praticien",
+        "tertiarySubject": "Fabien, praticien masculin adulte",
+        "visualHierarchy": [
+          "manifestation principale : mains parallèles au-dessus du torse",
+          "réponse SDZ : imposition des mains sans contact",
+          "Fabien, praticien masculin adulte"
+        ],
+        "environmentRole": "pavillon lacustre ouvert prolonge le sens de « Recentrage et calme » sans masquer mains parallèles au-dessus du torse",
+        "artWorldFamily": "Jardin d’eau noir et or",
+        "locationFamily": "pavillon lacustre ouvert",
+        "architecturalStory": "pavillon lacustre ouvert au bord d’une eau noire, plateforme asymétrique, toiture flottante légère et écran minéral latéral. Paysage, eau et ciel visibles autour de la prestation traduit spatialement état initial lié à « Recentrage et calme », puis l’attention, la lumière et l’ambiance évoluent avec subtilité, sans résultat médical ni certitude absolue",
+        "fantasticStory": "reflet impossible ou brume périphérique discrète, jamais portail central ou objet occulte, relié à l’évolution du sujet",
+        "lightingStory": "la pierre architecturale et la roche naturelle se répondent sous une lumière dorée latérale, concentrée sur mains parallèles au-dessus du torse puis accompagnant la transformation",
+        "compositionType": "Cinématographique",
+        "textMode": "TEXT_MODE_EDITORIAL",
+        "title": "RECENTRAGE ET CALME",
+        "subtitle": "DÉCOUVRIR REIKI",
+        "supportingLine": "",
+        "brandLine": "LA SANTÉ DES ZÈBRES — RAISMES",
+        "titleLines": [
+          "RECENTRAGE",
+          "ET CALME"
+        ],
+        "subtitleLines": [
+          "DÉCOUVRIR REIKI"
+        ],
+        "titleLineTarget": "2 à 4",
+        "subtitleLineTarget": "1 à 2",
+        "textZones": [
+          "zone éditoriale Story 60–76 %, distincte du logo"
+        ],
+        "textSafeArea": {
+          "top": 0.6,
+          "bottom": 0.76,
+          "left": 0.06,
+          "right": 0.94
+        },
+        "logoSafeArea": {
+          "top": 0.76,
+          "bottom": 0.86,
+          "left": 0.2,
+          "right": 0.8
+        },
+        "logoPlacement": "zone dédiée selon le format",
+        "logoScale": "prominent",
+        "protectedSceneAreas": [
+          "visage",
+          "mains actives",
+          "geste professionnel",
+          "mains parallèles au-dessus du torse",
+          "matériel officiel",
+          "ouverture architecturale"
+        ],
+        "platformAdaptationRules": {
+          "Story": "verticale immersive, zones texte et logo distinctes",
+          "Facebook": "4:5 distinct",
+          "Instagram": "4:5 compact",
+          "Instagram Square": "recomposition carrée dédiée",
+          "Google Business": "sans texte par défaut"
+        },
+        "differentiationReason": "pavillon lacustre ouvert, vue trois-quarts latérale et horizon lumineux ; architecture, lumière et phénomène différents des créations récentes",
+        "metrics": {
+          "titleWordCount": 3,
+          "titleLineCount": 2,
+          "subtitleWordCount": 2,
+          "subtitleLineCount": 1,
+          "textDensityRatio": 0.09444444444444444,
+          "orphanWordDetected": false,
+          "semanticBreakQuality": 9,
+          "mobileReadabilityScore": 9
+        }
+      },
+      "legacyProjection": {
+        "sceneFamily": "pavillon lacustre ouvert",
+        "familleUnivers": "Jardin d’eau noir et or",
+        "decor": "pavillon lacustre ouvert au bord d’une eau noire, plateforme asymétrique, toiture flottante légère et écran minéral latéral. Paysage, eau et ciel visibles autour de la prestation",
+        "architecture": "pavillon lacustre ouvert au bord d’une eau noire, plateforme asymétrique, toiture flottante légère et écran minéral latéral. Paysage, eau et ciel visibles autour de la prestation",
+        "environmentRole": "pavillon lacustre ouvert prolonge le sens de « Recentrage et calme » sans masquer mains parallèles au-dessus du torse",
+        "lumiere": "la pierre architecturale et la roche naturelle se répondent sous une lumière dorée latérale, concentrée sur mains parallèles au-dessus du torse puis accompagnant la transformation",
+        "matieres": "pierre architecturale, roche naturelle, obsidienne, or satiné",
+        "phenomeneFantastique": "reflet impossible ou brume périphérique discrète, jamais portail central ou objet occulte",
+        "ideeVisuelle": "manifestation visible de « Recentrage et calme », incarnée par une posture, un geste ou une interaction crédible ; pavillon lacustre ouvert prolonge le sens de « Recentrage et calme » sans masquer mains parallèles au-dessus du torse",
+        "sujetPrincipal": "receveur habillé",
+        "sujetSecondaire": "praticien",
+        "action": "imposition des mains sans contact; praticien et bénéficiaire clairement présents",
+        "pointDeTransformation": "état initial lié à « Recentrage et calme », puis l’attention, la lumière et l’ambiance évoluent avec subtilité, sans résultat médical ni certitude absolue",
+        "texteImage": "RECENTRAGE ET CALME | DÉCOUVRIR REIKI",
+        "zoneTexte": "zone éditoriale Story 60–76 %, distincte du logo",
+        "zoneLogo": "{\"top\":0.76,\"bottom\":0.86,\"left\":0.2,\"right\":0.8}",
+        "messageCentral": "Recentrage et calme",
+        "raisonDifferenceAvecHistorique": "pavillon lacustre ouvert, vue trois-quarts latérale et horizon lumineux ; architecture, lumière et phénomène différents des créations récentes",
+        "caracteristiquePrestationVisible": "mains parallèles au-dessus du torse",
+        "compositionInterdite": [
+          "matériel médical inventé",
+          "scanner",
+          "écran médical",
+          "boîtier ou câble inventé",
+          "faux logo",
+          "texte généré",
+          "spa oriental générique",
+          "bambou",
+          "lotus",
+          "serviettes roulées",
+          "bougies",
+          "galets empilés façon zen",
+          "ambiance horrifique ou occulte",
+          "collage Canva",
+          "cases ou bordures"
+        ],
+        "negativePrompt": "matériel médical inventé, scanner, écran médical, boîtier ou câble inventé, faux logo, texte généré, spa oriental générique, bambou, lotus, serviettes roulées, bougies, galets empilés façon zen, ambiance horrifique ou occulte, collage Canva, cases ou bordures",
+        "selectedAntiRepetitionElements": [
+          "pavillon"
+        ]
+      },
+      "consistencyReport": {
+        "heuristic": true,
+        "notice": "Estimations automatiques, pas des certitudes.",
+        "checks": {
+          "subjectServiceConsistency": true,
+          "serviceVisuallyRecognizable": true,
+          "requestedFocusRespected": true,
+          "rolesAndPeopleConsistent": true,
+          "artDirectionConsistency": true,
+          "uniqueArchitecture": true,
+          "transformationDistinctFromInitialState": true,
+          "uniqueV3Text": true,
+          "claimsAllowed": true,
+          "layoutCollisionRisk": false,
+          "protectedAreaOverlapRisk": false,
+          "mobileReadability": 9,
+          "formatSpecificRecomposition": true,
+          "platformPayloadConsistency": true,
+          "campaignConsistency": true,
+          "promptInspectorMatchesImages": true,
+          "imageGenerationCallCountPlanned": 1
+        },
+        "contradictions": [],
+        "claimIssues": [],
+        "blockingReasons": [],
+        "ready": true,
+        "action": "valider"
+      },
+      "psio": {
+        "required": false,
+        "referenceCount": 0,
+        "ready": true
+      },
+      "promptEquality": true,
+      "effectiveQuality": "low",
+      "n": 1,
+      "plannedImageCalls": 1,
+      "executedImageCalls": 0
+    },
+    "psio": {
+      "scenario": {
+        "service": "Luminothérapie PSIO®",
+        "platform": "Instagram Square",
+        "subject": "Pause lumineuse et présence",
+        "selectedRegisters": [
+          "Architecture"
+        ],
+        "textChoice": "title",
+        "creativeSeed": "inspector-psio",
+        "costMode": "test"
+      },
+      "planId": "7c69e8b32e3b82bca5a7370974a495e898ff15b5a918d120488b53bb8ac6caca",
+      "service": "Luminothérapie PSIO®",
+      "platform": "Instagram Square",
+      "subjectBrief": {
+        "rawSubject": "Pause lumineuse et présence",
+        "coreTheme": "Pause lumineuse et présence",
+        "audienceProblem": "personne concernée par « Pause lumineuse et présence »",
+        "physicalOrEmotionalManifestation": "manifestation visible de « Pause lumineuse et présence », incarnée par une posture, un geste ou une interaction crédible",
+        "transformationPromise": "état initial lié à « Pause lumineuse et présence », puis l’attention, la lumière et l’ambiance évoluent avec subtilité, sans résultat médical ni certitude absolue",
+        "explicitSceneRequest": null,
+        "userConstraints": [],
+        "explicitTextRequest": null,
+        "selectedRegisters": [
+          "Architecture"
+        ],
+        "relatedService": "Luminothérapie PSIO®",
+        "marketingObjective": "Faire réserver",
+        "requestedFocus": null,
+        "officialRecognition": "lunettes officielles fidèles à la référence",
+        "officialAction": "séance immobile lunettes portées",
+        "noMedicalDiagnosis": true
+      },
+      "artDirection": {
+        "artWorldFamily": "Jardin d’eau noir et or",
+        "locationFamily": "pavillon lacustre ouvert",
+        "architectureDescription": "pavillon lacustre ouvert au bord d’une eau noire, plateforme asymétrique, toiture flottante légère et écran minéral latéral. Paysage, eau et ciel visibles autour de la prestation",
+        "dominantMaterials": [
+          "pierre architecturale",
+          "roche naturelle",
+          "obsidienne",
+          "or satiné"
+        ],
+        "lightingNarrative": "la pierre architecturale et la roche naturelle se répondent sous une lumière dorée latérale",
+        "fantasticPhenomenon": "reflet impossible ou brume périphérique discrète, jamais portail central ou objet occulte"
+      },
+      "posterStrategy": {
+        "communicationGoal": "Faire réserver",
+        "coreTheme": "Pause lumineuse et présence",
+        "instantVisualMeaning": "manifestation visible de « Pause lumineuse et présence », incarnée par une posture, un geste ou une interaction crédible",
+        "subjectManifestation": "manifestation visible de « Pause lumineuse et présence », incarnée par une posture, un geste ou une interaction crédible",
+        "careOrSolutionManifestation": "séance immobile lunettes portées; bénéficiaire et produit officiel clairement lisibles",
+        "transformationNarrative": "état initial lié à « Pause lumineuse et présence », puis l’attention, la lumière et l’ambiance évoluent avec subtilité, sans résultat médical ni certitude absolue",
+        "emotionalJourney": "état initial visible → évolution crédible → ouverture",
+        "mainSubject": "personne portant les lunettes PSiO® officielles",
+        "secondarySubject": "lunettes PSiO®",
+        "tertiarySubject": "transformation dans pavillon lacustre ouvert",
+        "visualHierarchy": [
+          "manifestation principale : lunettes officielles fidèles à la référence",
+          "réponse SDZ : séance immobile lunettes portées",
+          "transformation dans pavillon lacustre ouvert"
+        ],
+        "environmentRole": "pavillon lacustre ouvert prolonge le sens de « Pause lumineuse et présence » sans masquer lunettes officielles fidèles à la référence",
+        "artWorldFamily": "Jardin d’eau noir et or",
+        "locationFamily": "pavillon lacustre ouvert",
+        "architecturalStory": "pavillon lacustre ouvert au bord d’une eau noire, plateforme asymétrique, toiture flottante légère et écran minéral latéral. Paysage, eau et ciel visibles autour de la prestation traduit spatialement état initial lié à « Pause lumineuse et présence », puis l’attention, la lumière et l’ambiance évoluent avec subtilité, sans résultat médical ni certitude absolue",
+        "fantasticStory": "reflet impossible ou brume périphérique discrète, jamais portail central ou objet occulte, relié à l’évolution du sujet",
+        "lightingStory": "la pierre architecturale et la roche naturelle se répondent sous une lumière dorée latérale, concentrée sur lunettes officielles fidèles à la référence puis accompagnant la transformation",
+        "compositionType": "Éditoriale",
+        "textMode": "TEXT_MODE_MINIMAL",
+        "title": "PAUSE LUMINEUSE ET PRÉSENCE",
+        "subtitle": "",
+        "supportingLine": "",
+        "brandLine": "LA SANTÉ DES ZÈBRES — RAISMES",
+        "titleLines": [
+          "PAUSE LUMINEUSE",
+          "ET PRÉSENCE"
+        ],
+        "subtitleLines": [],
+        "titleLineTarget": "1 à 3",
+        "subtitleLineTarget": "1 à 2",
+        "textZones": [
+          "zone éditoriale calculée pour le format, distincte du logo"
+        ],
+        "textSafeArea": {
+          "top": 0.6,
+          "bottom": 0.76,
+          "left": 0.06,
+          "right": 0.94
+        },
+        "logoSafeArea": {
+          "top": 0.77,
+          "bottom": 0.92,
+          "left": 0.2,
+          "right": 0.8
+        },
+        "logoPlacement": "zone dédiée selon le format",
+        "logoScale": "prominent",
+        "protectedSceneAreas": [
+          "visage",
+          "mains actives",
+          "geste professionnel",
+          "lunettes officielles fidèles à la référence",
+          "matériel officiel",
+          "ouverture architecturale"
+        ],
+        "platformAdaptationRules": {
+          "Story": "verticale immersive, zones texte et logo distinctes",
+          "Facebook": "4:5 distinct",
+          "Instagram": "4:5 compact",
+          "Instagram Square": "recomposition carrée dédiée",
+          "Google Business": "sans texte par défaut"
+        },
+        "differentiationReason": "pavillon lacustre ouvert, geste en diagonale et profondeur progressive ; architecture, lumière et phénomène différents des créations récentes",
+        "metrics": {
+          "titleWordCount": 4,
+          "titleLineCount": 2,
+          "subtitleWordCount": 0,
+          "subtitleLineCount": 0,
+          "textDensityRatio": 0.10384615384615385,
+          "orphanWordDetected": false,
+          "semanticBreakQuality": 9,
+          "mobileReadabilityScore": 9
+        }
+      },
+      "legacyProjection": {
+        "sceneFamily": "pavillon lacustre ouvert",
+        "familleUnivers": "Jardin d’eau noir et or",
+        "decor": "pavillon lacustre ouvert au bord d’une eau noire, plateforme asymétrique, toiture flottante légère et écran minéral latéral. Paysage, eau et ciel visibles autour de la prestation",
+        "architecture": "pavillon lacustre ouvert au bord d’une eau noire, plateforme asymétrique, toiture flottante légère et écran minéral latéral. Paysage, eau et ciel visibles autour de la prestation",
+        "environmentRole": "pavillon lacustre ouvert prolonge le sens de « Pause lumineuse et présence » sans masquer lunettes officielles fidèles à la référence",
+        "lumiere": "la pierre architecturale et la roche naturelle se répondent sous une lumière dorée latérale, concentrée sur lunettes officielles fidèles à la référence puis accompagnant la transformation",
+        "matieres": "pierre architecturale, roche naturelle, obsidienne, or satiné",
+        "phenomeneFantastique": "reflet impossible ou brume périphérique discrète, jamais portail central ou objet occulte",
+        "ideeVisuelle": "manifestation visible de « Pause lumineuse et présence », incarnée par une posture, un geste ou une interaction crédible ; pavillon lacustre ouvert prolonge le sens de « Pause lumineuse et présence » sans masquer lunettes officielles fidèles à la référence",
+        "sujetPrincipal": "personne portant les lunettes PSiO® officielles",
+        "sujetSecondaire": "lunettes PSiO®",
+        "action": "séance immobile lunettes portées; bénéficiaire et produit officiel clairement lisibles",
+        "pointDeTransformation": "état initial lié à « Pause lumineuse et présence », puis l’attention, la lumière et l’ambiance évoluent avec subtilité, sans résultat médical ni certitude absolue",
+        "texteImage": "PAUSE LUMINEUSE ET PRÉSENCE",
+        "zoneTexte": "zone éditoriale calculée pour le format, distincte du logo",
+        "zoneLogo": "{\"top\":0.77,\"bottom\":0.92,\"left\":0.2,\"right\":0.8}",
+        "messageCentral": "Pause lumineuse et présence",
+        "raisonDifferenceAvecHistorique": "pavillon lacustre ouvert, geste en diagonale et profondeur progressive ; architecture, lumière et phénomène différents des créations récentes",
+        "caracteristiquePrestationVisible": "lunettes officielles fidèles à la référence",
+        "compositionInterdite": [
+          "matériel médical inventé",
+          "scanner",
+          "écran médical",
+          "boîtier ou câble inventé",
+          "faux logo",
+          "texte généré",
+          "spa oriental générique",
+          "bambou",
+          "lotus",
+          "serviettes roulées",
+          "bougies",
+          "galets empilés façon zen",
+          "ambiance horrifique ou occulte",
+          "collage Canva",
+          "cases ou bordures"
+        ],
+        "negativePrompt": "matériel médical inventé, scanner, écran médical, boîtier ou câble inventé, faux logo, texte généré, spa oriental générique, bambou, lotus, serviettes roulées, bougies, galets empilés façon zen, ambiance horrifique ou occulte, collage Canva, cases ou bordures",
+        "selectedAntiRepetitionElements": [
+          "pavillon"
+        ]
+      },
+      "consistencyReport": {
+        "heuristic": true,
+        "notice": "Estimations automatiques, pas des certitudes.",
+        "checks": {
+          "subjectServiceConsistency": true,
+          "serviceVisuallyRecognizable": true,
+          "requestedFocusRespected": true,
+          "rolesAndPeopleConsistent": true,
+          "artDirectionConsistency": true,
+          "uniqueArchitecture": true,
+          "transformationDistinctFromInitialState": true,
+          "uniqueV3Text": true,
+          "claimsAllowed": true,
+          "layoutCollisionRisk": false,
+          "protectedAreaOverlapRisk": false,
+          "mobileReadability": 9,
+          "formatSpecificRecomposition": true,
+          "platformPayloadConsistency": true,
+          "campaignConsistency": true,
+          "promptInspectorMatchesImages": true,
+          "imageGenerationCallCountPlanned": 1
+        },
+        "contradictions": [],
+        "claimIssues": [],
+        "blockingReasons": [],
+        "ready": true,
+        "action": "valider"
+      },
+      "psio": {
+        "required": true,
+        "referenceCount": 0,
+        "ready": false
+      },
+      "promptEquality": true,
+      "effectiveQuality": "low",
+      "n": 1,
+      "plannedImageCalls": 1,
+      "executedImageCalls": 0
+    },
+    "bioresonance": {
+      "scenario": {
+        "service": "Biorésonance quantique",
+        "platform": "Facebook",
+        "subject": "Découvrir une séance encadrée non diagnostique",
+        "selectedRegisters": [
+          "Cinématographie"
+        ],
+        "textChoice": "automatic",
+        "creativeSeed": "inspector-bio",
+        "costMode": "test"
+      },
+      "planId": "5a418af4e2cdbd41e9e6265f6f2a820624bf79845540a1a8dfd714b449a294b4",
+      "service": "Biorésonance quantique",
+      "platform": "Facebook",
+      "subjectBrief": {
+        "rawSubject": "Découvrir une séance encadrée non diagnostique",
+        "coreTheme": "Découvrir une séance encadrée non diagnostique",
+        "audienceProblem": "personne concernée par « Découvrir une séance encadrée non diagnostique »",
+        "physicalOrEmotionalManifestation": "manifestation visible de « Découvrir une séance encadrée non diagnostique », incarnée par une posture, un geste ou une interaction crédible",
+        "transformationPromise": "état initial lié à « Découvrir une séance encadrée non diagnostique », puis l’attention, la lumière et l’ambiance évoluent avec subtilité, sans résultat médical ni certitude absolue",
+        "explicitSceneRequest": null,
+        "userConstraints": [],
+        "explicitTextRequest": null,
+        "selectedRegisters": [
+          "Cinématographie"
+        ],
+        "relatedService": "Biorésonance quantique",
+        "marketingObjective": "Faire réserver",
+        "requestedFocus": null,
+        "officialRecognition": "séance de bilan clairement encadrée",
+        "officialAction": "lecture professionnelle du dispositif réel",
+        "noMedicalDiagnosis": true
+      },
+      "artDirection": {
+        "artWorldFamily": "Jardin d’eau noir et or",
+        "locationFamily": "pavillon lacustre ouvert",
+        "architectureDescription": "pavillon lacustre ouvert au bord d’une eau noire, plateforme asymétrique, toiture flottante légère et écran minéral latéral. Paysage, eau et ciel visibles autour de la prestation",
+        "dominantMaterials": [
+          "pierre architecturale",
+          "roche naturelle",
+          "obsidienne",
+          "or satiné"
+        ],
+        "lightingNarrative": "la pierre architecturale et la roche naturelle se répondent sous une lumière dorée latérale",
+        "fantasticPhenomenon": "reflet impossible ou brume périphérique discrète, jamais portail central ou objet occulte"
+      },
+      "posterStrategy": {
+        "communicationGoal": "Faire réserver",
+        "coreTheme": "Découvrir une séance encadrée non diagnostique",
+        "instantVisualMeaning": "manifestation visible de « Découvrir une séance encadrée non diagnostique », incarnée par une posture, un geste ou une interaction crédible",
+        "subjectManifestation": "manifestation visible de « Découvrir une séance encadrée non diagnostique », incarnée par une posture, un geste ou une interaction crédible",
+        "careOrSolutionManifestation": "lecture professionnelle du dispositif réel; praticien et bénéficiaire clairement présents",
+        "transformationNarrative": "état initial lié à « Découvrir une séance encadrée non diagnostique », puis l’attention, la lumière et l’ambiance évoluent avec subtilité, sans résultat médical ni certitude absolue",
+        "emotionalJourney": "état initial visible → évolution crédible → ouverture",
+        "mainSubject": "client en bilan",
+        "secondarySubject": "praticien",
+        "tertiarySubject": "Fabien, praticien masculin adulte",
+        "visualHierarchy": [
+          "manifestation principale : séance de bilan clairement encadrée",
+          "réponse SDZ : lecture professionnelle du dispositif réel",
+          "Fabien, praticien masculin adulte"
+        ],
+        "environmentRole": "pavillon lacustre ouvert prolonge le sens de « Découvrir une séance encadrée non diagnostique » sans masquer séance de bilan clairement encadrée",
+        "artWorldFamily": "Jardin d’eau noir et or",
+        "locationFamily": "pavillon lacustre ouvert",
+        "architecturalStory": "pavillon lacustre ouvert au bord d’une eau noire, plateforme asymétrique, toiture flottante légère et écran minéral latéral. Paysage, eau et ciel visibles autour de la prestation traduit spatialement état initial lié à « Découvrir une séance encadrée non diagnostique », puis l’attention, la lumière et l’ambiance évoluent avec subtilité, sans résultat médical ni certitude absolue",
+        "fantasticStory": "reflet impossible ou brume périphérique discrète, jamais portail central ou objet occulte, relié à l’évolution du sujet",
+        "lightingStory": "la pierre architecturale et la roche naturelle se répondent sous une lumière dorée latérale, concentrée sur séance de bilan clairement encadrée puis accompagnant la transformation",
+        "compositionType": "Éditoriale",
+        "textMode": "TEXT_MODE_EDITORIAL",
+        "title": "DÉCOUVRIR UNE SÉANCE ENCADRÉE NON DIAGNOSTIQUE",
+        "subtitle": "DÉCOUVRIR BIORÉSONANCE QUANTIQUE",
+        "supportingLine": "",
+        "brandLine": "LA SANTÉ DES ZÈBRES — RAISMES",
+        "titleLines": [
+          "DÉCOUVRIR UNE SÉANCE",
+          "ENCADRÉE NON",
+          "DIAGNOSTIQUE"
+        ],
+        "subtitleLines": [
+          "DÉCOUVRIR BIORÉSONANCE",
+          "QUANTIQUE"
+        ],
+        "titleLineTarget": "1 à 3",
+        "subtitleLineTarget": "1 à 2",
+        "textZones": [
+          "zone éditoriale calculée pour le format, distincte du logo"
+        ],
+        "textSafeArea": {
+          "top": 0.6,
+          "bottom": 0.76,
+          "left": 0.06,
+          "right": 0.94
+        },
+        "logoSafeArea": {
+          "top": 0.77,
+          "bottom": 0.92,
+          "left": 0.2,
+          "right": 0.8
+        },
+        "logoPlacement": "zone dédiée selon le format",
+        "logoScale": "prominent",
+        "protectedSceneAreas": [
+          "visage",
+          "mains actives",
+          "geste professionnel",
+          "séance de bilan clairement encadrée",
+          "matériel officiel",
+          "ouverture architecturale"
+        ],
+        "platformAdaptationRules": {
+          "Story": "verticale immersive, zones texte et logo distinctes",
+          "Facebook": "4:5 distinct",
+          "Instagram": "4:5 compact",
+          "Instagram Square": "recomposition carrée dédiée",
+          "Google Business": "sans texte par défaut"
+        },
+        "differentiationReason": "pavillon lacustre ouvert, vue trois-quarts latérale et horizon lumineux ; architecture, lumière et phénomène différents des créations récentes",
+        "metrics": {
+          "titleWordCount": 6,
+          "titleLineCount": 3,
+          "subtitleWordCount": 3,
+          "subtitleLineCount": 2,
+          "textDensityRatio": 0.3,
+          "orphanWordDetected": false,
+          "semanticBreakQuality": 9,
+          "mobileReadabilityScore": 9
+        }
+      },
+      "legacyProjection": {
+        "sceneFamily": "pavillon lacustre ouvert",
+        "familleUnivers": "Jardin d’eau noir et or",
+        "decor": "pavillon lacustre ouvert au bord d’une eau noire, plateforme asymétrique, toiture flottante légère et écran minéral latéral. Paysage, eau et ciel visibles autour de la prestation",
+        "architecture": "pavillon lacustre ouvert au bord d’une eau noire, plateforme asymétrique, toiture flottante légère et écran minéral latéral. Paysage, eau et ciel visibles autour de la prestation",
+        "environmentRole": "pavillon lacustre ouvert prolonge le sens de « Découvrir une séance encadrée non diagnostique » sans masquer séance de bilan clairement encadrée",
+        "lumiere": "la pierre architecturale et la roche naturelle se répondent sous une lumière dorée latérale, concentrée sur séance de bilan clairement encadrée puis accompagnant la transformation",
+        "matieres": "pierre architecturale, roche naturelle, obsidienne, or satiné",
+        "phenomeneFantastique": "reflet impossible ou brume périphérique discrète, jamais portail central ou objet occulte",
+        "ideeVisuelle": "manifestation visible de « Découvrir une séance encadrée non diagnostique », incarnée par une posture, un geste ou une interaction crédible ; pavillon lacustre ouvert prolonge le sens de « Découvrir une séance encadrée non diagnostique » sans masquer séance de bilan clairement encadrée",
+        "sujetPrincipal": "client en bilan",
+        "sujetSecondaire": "praticien",
+        "action": "lecture professionnelle du dispositif réel; praticien et bénéficiaire clairement présents",
+        "pointDeTransformation": "état initial lié à « Découvrir une séance encadrée non diagnostique », puis l’attention, la lumière et l’ambiance évoluent avec subtilité, sans résultat médical ni certitude absolue",
+        "texteImage": "DÉCOUVRIR UNE SÉANCE ENCADRÉE NON DIAGNOSTIQUE | DÉCOUVRIR BIORÉSONANCE QUANTIQUE",
+        "zoneTexte": "zone éditoriale calculée pour le format, distincte du logo",
+        "zoneLogo": "{\"top\":0.77,\"bottom\":0.92,\"left\":0.2,\"right\":0.8}",
+        "messageCentral": "Découvrir une séance encadrée non diagnostique",
+        "raisonDifferenceAvecHistorique": "pavillon lacustre ouvert, vue trois-quarts latérale et horizon lumineux ; architecture, lumière et phénomène différents des créations récentes",
+        "caracteristiquePrestationVisible": "séance de bilan clairement encadrée",
+        "compositionInterdite": [
+          "matériel médical inventé",
+          "scanner",
+          "écran médical",
+          "boîtier ou câble inventé",
+          "faux logo",
+          "texte généré",
+          "spa oriental générique",
+          "bambou",
+          "lotus",
+          "serviettes roulées",
+          "bougies",
+          "galets empilés façon zen",
+          "ambiance horrifique ou occulte",
+          "collage Canva",
+          "cases ou bordures"
+        ],
+        "negativePrompt": "matériel médical inventé, scanner, écran médical, boîtier ou câble inventé, faux logo, texte généré, spa oriental générique, bambou, lotus, serviettes roulées, bougies, galets empilés façon zen, ambiance horrifique ou occulte, collage Canva, cases ou bordures",
+        "selectedAntiRepetitionElements": [
+          "pavillon"
+        ]
+      },
+      "consistencyReport": {
+        "heuristic": true,
+        "notice": "Estimations automatiques, pas des certitudes.",
+        "checks": {
+          "subjectServiceConsistency": true,
+          "serviceVisuallyRecognizable": true,
+          "requestedFocusRespected": true,
+          "rolesAndPeopleConsistent": true,
+          "artDirectionConsistency": true,
+          "uniqueArchitecture": true,
+          "transformationDistinctFromInitialState": true,
+          "uniqueV3Text": true,
+          "claimsAllowed": true,
+          "layoutCollisionRisk": false,
+          "protectedAreaOverlapRisk": false,
+          "mobileReadability": 9,
+          "formatSpecificRecomposition": true,
+          "platformPayloadConsistency": true,
+          "campaignConsistency": true,
+          "promptInspectorMatchesImages": true,
+          "imageGenerationCallCountPlanned": 1
+        },
+        "contradictions": [],
+        "claimIssues": [],
+        "blockingReasons": [],
+        "ready": true,
+        "action": "valider"
+      },
+      "psio": {
+        "required": false,
+        "referenceCount": 0,
+        "ready": true
+      },
+      "promptEquality": true,
+      "effectiveQuality": "low",
+      "n": 1,
+      "plannedImageCalls": 1,
+      "executedImageCalls": 0
+    },
+    "googleBusiness": {
+      "scenario": {
+        "service": "Massage Thaï traditionnel",
+        "platform": "Google Business",
+        "subject": "Mobilité dans un rythme calme",
+        "selectedRegisters": [],
+        "textChoice": "automatic",
+        "creativeSeed": "inspector-google",
+        "costMode": "test"
+      },
+      "planId": "0517ff01ceef242d6e428bafe8ba08fa25fadf622d4304c983f4a796b5a34bad",
+      "service": "Massage Thaï traditionnel",
+      "platform": "Google Business",
+      "subjectBrief": {
+        "rawSubject": "Mobilité dans un rythme calme",
+        "coreTheme": "Mobilité dans un rythme calme",
+        "audienceProblem": "personne concernée par « Mobilité dans un rythme calme »",
+        "physicalOrEmotionalManifestation": "manifestation visible de « Mobilité dans un rythme calme », incarnée par une posture, un geste ou une interaction crédible",
+        "transformationPromise": "état initial lié à « Mobilité dans un rythme calme », puis l’attention, la lumière et l’ambiance évoluent avec subtilité, sans résultat médical ni certitude absolue",
+        "explicitSceneRequest": null,
+        "userConstraints": [],
+        "explicitTextRequest": null,
+        "selectedRegisters": [],
+        "relatedService": "Massage Thaï traditionnel",
+        "marketingObjective": "Faire réserver",
+        "requestedFocus": null,
+        "officialRecognition": "futon au sol, posture thaï habillée",
+        "officialAction": "pression et étirement assisté",
+        "noMedicalDiagnosis": true
+      },
+      "artDirection": {
+        "artWorldFamily": "Cabinet cinématographique intime",
+        "locationFamily": "cabinet premium intime",
+        "architectureDescription": "cabinet contemporain intime aux volumes noirs texturés, ouvert par une perspective latérale",
+        "dominantMaterials": [
+          "velours noir",
+          "obsidienne",
+          "or satiné"
+        ],
+        "lightingNarrative": "lumière latérale douce et contre-jour doré",
+        "fantasticPhenomenon": "lueur périphérique très discrète dans les matières"
+      },
+      "posterStrategy": {
+        "communicationGoal": "Faire réserver",
+        "coreTheme": "Mobilité dans un rythme calme",
+        "instantVisualMeaning": "manifestation visible de « Mobilité dans un rythme calme », incarnée par une posture, un geste ou une interaction crédible",
+        "subjectManifestation": "manifestation visible de « Mobilité dans un rythme calme », incarnée par une posture, un geste ou une interaction crédible",
+        "careOrSolutionManifestation": "pression et étirement assisté; praticien et bénéficiaire clairement présents",
+        "transformationNarrative": "état initial lié à « Mobilité dans un rythme calme », puis l’attention, la lumière et l’ambiance évoluent avec subtilité, sans résultat médical ni certitude absolue",
+        "emotionalJourney": "état initial visible → évolution crédible → ouverture",
+        "mainSubject": "receveur sur futon",
+        "secondarySubject": "praticien",
+        "tertiarySubject": "Fabien, praticien masculin adulte",
+        "visualHierarchy": [
+          "manifestation principale : futon au sol, posture thaï habillée",
+          "réponse SDZ : pression et étirement assisté",
+          "Fabien, praticien masculin adulte"
+        ],
+        "environmentRole": "cabinet premium intime prolonge le sens de « Mobilité dans un rythme calme » sans masquer futon au sol, posture thaï habillée",
+        "artWorldFamily": "Cabinet cinématographique intime",
+        "locationFamily": "cabinet premium intime",
+        "architecturalStory": "cabinet contemporain intime aux volumes noirs texturés, ouvert par une perspective latérale traduit spatialement état initial lié à « Mobilité dans un rythme calme », puis l’attention, la lumière et l’ambiance évoluent avec subtilité, sans résultat médical ni certitude absolue",
+        "fantasticStory": "lueur périphérique très discrète dans les matières, relié à l’évolution du sujet",
+        "lightingStory": "lumière latérale douce et contre-jour doré, concentrée sur futon au sol, posture thaï habillée puis accompagnant la transformation",
+        "compositionType": "Éditoriale",
+        "textMode": "TEXT_MODE_NONE",
+        "title": "",
+        "subtitle": "",
+        "supportingLine": "",
+        "brandLine": "LA SANTÉ DES ZÈBRES — RAISMES",
+        "titleLines": [],
+        "subtitleLines": [],
+        "titleLineTarget": "1 à 3",
+        "subtitleLineTarget": "1 à 2",
+        "textZones": [
+          "zone éditoriale calculée pour le format, distincte du logo"
+        ],
+        "textSafeArea": {
+          "top": 0.6,
+          "bottom": 0.76,
+          "left": 0.06,
+          "right": 0.94
+        },
+        "logoSafeArea": {
+          "top": 0.77,
+          "bottom": 0.92,
+          "left": 0.2,
+          "right": 0.8
+        },
+        "logoPlacement": "zone dédiée selon le format",
+        "logoScale": "prominent",
+        "protectedSceneAreas": [
+          "visage",
+          "mains actives",
+          "geste professionnel",
+          "futon au sol, posture thaï habillée",
+          "matériel officiel",
+          "ouverture architecturale"
+        ],
+        "platformAdaptationRules": {
+          "Story": "verticale immersive, zones texte et logo distinctes",
+          "Facebook": "4:5 distinct",
+          "Instagram": "4:5 compact",
+          "Instagram Square": "recomposition carrée dédiée",
+          "Google Business": "sans texte par défaut"
+        },
+        "differentiationReason": "cabinet premium intime, cadrage intime avec architecture en retrait ; architecture, lumière et phénomène différents des créations récentes",
+        "metrics": {
+          "titleWordCount": 0,
+          "titleLineCount": 0,
+          "subtitleWordCount": 0,
+          "subtitleLineCount": 0,
+          "textDensityRatio": 0,
+          "orphanWordDetected": false,
+          "semanticBreakQuality": 9,
+          "mobileReadabilityScore": 9
+        }
+      },
+      "legacyProjection": {
+        "sceneFamily": "cabinet premium intime",
+        "familleUnivers": "Cabinet cinématographique intime",
+        "decor": "cabinet contemporain intime aux volumes noirs texturés, ouvert par une perspective latérale",
+        "architecture": "cabinet contemporain intime aux volumes noirs texturés, ouvert par une perspective latérale",
+        "environmentRole": "cabinet premium intime prolonge le sens de « Mobilité dans un rythme calme » sans masquer futon au sol, posture thaï habillée",
+        "lumiere": "lumière latérale douce et contre-jour doré, concentrée sur futon au sol, posture thaï habillée puis accompagnant la transformation",
+        "matieres": "velours noir, obsidienne, or satiné",
+        "phenomeneFantastique": "lueur périphérique très discrète dans les matières",
+        "ideeVisuelle": "manifestation visible de « Mobilité dans un rythme calme », incarnée par une posture, un geste ou une interaction crédible ; cabinet premium intime prolonge le sens de « Mobilité dans un rythme calme » sans masquer futon au sol, posture thaï habillée",
+        "sujetPrincipal": "receveur sur futon",
+        "sujetSecondaire": "praticien",
+        "action": "pression et étirement assisté; praticien et bénéficiaire clairement présents",
+        "pointDeTransformation": "état initial lié à « Mobilité dans un rythme calme », puis l’attention, la lumière et l’ambiance évoluent avec subtilité, sans résultat médical ni certitude absolue",
+        "texteImage": "",
+        "zoneTexte": "zone éditoriale calculée pour le format, distincte du logo",
+        "zoneLogo": "{\"top\":0.77,\"bottom\":0.92,\"left\":0.2,\"right\":0.8}",
+        "messageCentral": "Mobilité dans un rythme calme",
+        "raisonDifferenceAvecHistorique": "cabinet premium intime, cadrage intime avec architecture en retrait ; architecture, lumière et phénomène différents des créations récentes",
+        "caracteristiquePrestationVisible": "futon au sol, posture thaï habillée",
+        "compositionInterdite": [
+          "matériel médical inventé",
+          "scanner",
+          "écran médical",
+          "boîtier ou câble inventé",
+          "faux logo",
+          "texte généré",
+          "spa oriental générique",
+          "bambou",
+          "lotus",
+          "serviettes roulées",
+          "bougies",
+          "galets empilés façon zen",
+          "ambiance horrifique ou occulte",
+          "collage Canva",
+          "cases ou bordures"
+        ],
+        "negativePrompt": "matériel médical inventé, scanner, écran médical, boîtier ou câble inventé, faux logo, texte généré, spa oriental générique, bambou, lotus, serviettes roulées, bougies, galets empilés façon zen, ambiance horrifique ou occulte, collage Canva, cases ou bordures",
+        "selectedAntiRepetitionElements": []
+      },
+      "consistencyReport": {
+        "heuristic": true,
+        "notice": "Estimations automatiques, pas des certitudes.",
+        "checks": {
+          "subjectServiceConsistency": true,
+          "serviceVisuallyRecognizable": true,
+          "requestedFocusRespected": true,
+          "rolesAndPeopleConsistent": true,
+          "artDirectionConsistency": true,
+          "uniqueArchitecture": true,
+          "transformationDistinctFromInitialState": true,
+          "uniqueV3Text": true,
+          "claimsAllowed": true,
+          "layoutCollisionRisk": false,
+          "protectedAreaOverlapRisk": false,
+          "mobileReadability": 9,
+          "formatSpecificRecomposition": true,
+          "platformPayloadConsistency": true,
+          "campaignConsistency": true,
+          "promptInspectorMatchesImages": true,
+          "imageGenerationCallCountPlanned": 1
+        },
+        "contradictions": [],
+        "claimIssues": [],
+        "blockingReasons": [],
+        "ready": true,
+        "action": "valider"
+      },
+      "psio": {
+        "required": false,
+        "referenceCount": 0,
+        "ready": true
+      },
+      "promptEquality": true,
+      "effectiveQuality": "low",
+      "n": 1,
+      "plannedImageCalls": 1,
+      "executedImageCalls": 0
+    }
+  }
+}
