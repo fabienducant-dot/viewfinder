@@ -5791,10 +5791,10 @@ function applyAuthoritativeV3Plan(prepared, plan){
   }
   const selected=(projection.selectedAntiRepetitionElements||[]).map(x=>String(x).toLowerCase());
   brief.compositionInterdite=(brief.compositionInterdite||[]).filter(item=>!selected.some(term=>String(item).toLowerCase().includes(term)));
-  const sanitize=value=>typeof value==="string"?value.replace(/douleurs localisées/gi,"tensions localisées"):value;
-  for(const key of ["messageCentral","ideeVisuelle","sujetPrincipal","sujetSecondaire","action","pointDeTransformation","texteImage"]){brief[key]=sanitize(brief[key]);}
   prepared.v3Plan=plan;
   prepared.imagePrompt=plan.photoBrief?.prompt||prepared.imagePrompt;
+  prepared.consistencyReport=plan.consistencyReport||null;
+  if(plan.consistencyReport&&!plan.consistencyReport.ready)prepared.blockingError=`Plan V3 incohérent : ${plan.consistencyReport.blockingReasons.join(", ")}. Recomposez gratuitement avant toute génération.`;
   return prepared;
 }
 
@@ -7170,7 +7170,7 @@ function buildPostTab(){
       const conceptV3 = flow.v3Plan?.preflight?.concept || "Plan V3 non chargé";
       const layoutV3 = flow.v3Plan?.preflight?.layout || "—";
       const rationaleV3 = flow.v3Plan?.preflight?.justification || "—";
-      if(flow.v3Plan?.posterStrategy){const ps=flow.v3Plan.posterStrategy,cs=flow.v3Plan.postCopyStrategy;details.appendChild(el("div",{class:"card",style:"margin:10px 0;"},[el("strong",{},"Prévisualisation gratuite V3"),el("pre",{style:"white-space:pre-wrap;font-size:11px;"},JSON.stringify({subjectBrief:flow.v3Plan.subjectBrief,posterStrategy:ps,postCopyStrategy:cs,campaignCreativeDirection:flow.v3Plan.campaignCreativeDirection,scores:flow.v3Plan.freeScores},null,2))]));}
+      if(flow.v3Plan?.posterStrategy){const ps=flow.v3Plan.posterStrategy,cs=flow.v3Plan.postCopyStrategy;details.appendChild(el("div",{class:"card",style:"margin:10px 0;"},[el("strong",{},"Prévisualisation gratuite V3"),el("pre",{style:"white-space:pre-wrap;font-size:11px;"},JSON.stringify({subjectBrief:flow.v3Plan.subjectBrief,posterStrategy:ps,postCopyStrategy:cs,campaignCreativeDirection:flow.v3Plan.campaignCreativeDirection,consistencyReport:flow.v3Plan.consistencyReport,scores:flow.v3Plan.freeScores},null,2))]));}
       details.appendChild(el("div",{class:"card",style:"margin:10px 0;"},[
         el("strong",{},"Direction Artistique V3 — avant génération payante"),
         el("p",{},`Concept : ${conceptV3}`), el("p",{},`Layout : ${layoutV3}`), el("p",{},`Justification : ${rationaleV3}`)
@@ -7855,7 +7855,7 @@ function buildPostTab(){
         if(isNaN(scheduledAt)){ schedMsg.style.color="var(--coral)"; schedMsg.textContent="Date invalide, réessaie."; return; }
         const newPost = {
           id: uid(), platform, mission: state.mission, topic: state.topic,
-          textFinal: state.textPasted, altText: state.pendingAltText || null, imageDataUrl: previewImgForPost.dataUrl, schedulable: true,
+          textFinal: state.textPasted, validatedText:state.textPasted, altText: state.pendingAltText || null, validatedAltText:state.pendingAltText||"", imageDataUrl: previewImgForPost.dataUrl, schedulable: true,
           scheduledAt, status: "programmé", createdAt: Date.now(), sentAt: null, error: null,
         };
         state.scheduled.push(newPost);
@@ -7886,7 +7886,7 @@ function buildPostTab(){
       frag.appendChild(el("button",{class:"btn-ghost", style:"margin-bottom:10px;", onclick:()=>{
         state.scheduled.push({
           id: uid(), platform, mission: state.mission, topic: state.topic,
-          textFinal: state.textPasted, altText: state.pendingAltText || null, imageDataUrl: previewImgForPost.dataUrl, schedulable: true,
+          textFinal: state.textPasted, validatedText:state.textPasted, altText: state.pendingAltText || null, validatedAltText:state.pendingAltText||"", imageDataUrl: previewImgForPost.dataUrl, schedulable: true,
           scheduledAt: null, status: "brouillon", createdAt: Date.now(), sentAt: null, error: null,
         });
         LS.set("vf-scheduled", state.scheduled);
@@ -7911,7 +7911,7 @@ function buildPostTab(){
       frag.appendChild(el("button",{class:"btn-ghost", style:"margin:6px 0;display:block;", onclick:()=>{
         state.scheduled.push({
           id: uid(), platform, mission: state.mission, topic: state.topic,
-          textFinal: state.textPasted, altText: state.pendingAltText || null, imageDataUrl: previewImgForPost.dataUrl, schedulable: false,
+          textFinal: state.textPasted, validatedText:state.textPasted, altText: state.pendingAltText || null, validatedAltText:state.pendingAltText||"", imageDataUrl: previewImgForPost.dataUrl, schedulable: false,
           scheduledAt: null, status: "validé", createdAt: Date.now(), sentAt: null, error: null,
         });
         LS.set("vf-scheduled", state.scheduled);

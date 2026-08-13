@@ -121,8 +121,10 @@ function layoutFor(width, height, platform, requestedZone, hasHeadline, selected
     const x=Math.max(margin,Math.round(width*spec.x));
     const y=story?Math.round(height*.60):Math.round(height*spec.y);
     const boxWidth=Math.min(Math.round(width*spec.width),width-x-margin);
-    const result={x,y,width:boxWidth,height:Math.min(Math.round(height*(story&&hasHeadline?.16:(hasHeadline?.28:.22))),height-y-margin),margin,portrait:height>width*1.35,landscape:width>height*1.35,template,align:spec.align};
-    if(story){result.textArea={top:Math.round(height*.60),bottom:Math.round(height*.76)};result.logoArea={top:Math.round(height*.76),bottom:Math.round(height*.86)};}
+    const textHeight=Math.round(height*(story?.16:(hasHeadline?.18:.04)));
+    const logoHeight=Math.round(height*(story?.10:(height>width?.12:.18)));
+    const textTop=y,textBottom=Math.min(height-margin,textTop+textHeight),logoTop=textBottom;
+    const result={x,y,width:boxWidth,height:textHeight,margin,portrait:height>width*1.35,landscape:width>height*1.35,template,align:spec.align,textArea:{top:textTop,bottom:textBottom},logoArea:{top:logoTop,bottom:Math.min(height-margin,logoTop+logoHeight)}};
     return result;
   }
   /* L'identité et l'accroche forment un cartouche éditorial unique en bas de l'image. L'ancien
@@ -171,7 +173,7 @@ function buildOverlaySvg(width, height, layout, platform, headline, posterStrate
   const headlineEnd = textY + Math.max(1, subtitleLines.length) * subtitleSize * 1.10;
   const dividerY = headlineEnd + Math.round(layout.height * 0.055);
   const plannedLogoTop = dividerY + Math.round(layout.height * 0.055);
-  const brandY = layout.logoArea ? Math.round(height*.885) : plannedLogoTop + plannedLogoWidth + Math.round(brandSize * 1.18);
+  const brandY = layout.logoArea ? Math.min(height-Math.round(height*.055),layout.logoArea.bottom+Math.round(brandSize*1.15)) : plannedLogoTop + plannedLogoWidth + Math.round(brandSize * 1.18);
   const scrimTop = Math.max(0, layout.y - Math.round(height * 0.025));
   const scrimBottom = Math.min(height, layout.y + layout.height + Math.round(height * 0.025));
   const border = Math.max(2, Math.round(width * 0.0017));
