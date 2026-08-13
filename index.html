@@ -119,6 +119,23 @@
 
 <script src="./v3-service-menu.js"></script>
 <script>
+/* Dépendance de démarrage : déclarée avant state/normalizeState afin d'éviter la zone morte
+   temporelle JavaScript. Une panne d'asset devient visible au lieu de laisser un écran noir. */
+function showViewfinderInitializationError(error){
+  console.error("[Viewfinder initialization]",error);
+  const host=document.getElementById("main");
+  if(!host)return;
+  const message=error&&error.message?String(error.message):"Erreur JavaScript inconnue";
+  host.innerHTML=`<section class="card" role="alert"><h2>Erreur d’initialisation de Viewfinder</h2><p>Rechargez l’application. Si le problème persiste, transmettez le détail affiché dans la console.</p><code>${message.replace(/[<>&]/g,char=>({"<":"&lt;",">":"&gt;","&":"&amp;"}[char]))}</code></section>`;
+}
+window.addEventListener("error",event=>showViewfinderInitializationError(event.error||new Error(event.message||"Erreur de démarrage")));
+window.addEventListener("unhandledrejection",event=>showViewfinderInitializationError(event.reason instanceof Error?event.reason:new Error(String(event.reason||"Promesse rejetée"))));
+const SERVICE_MENU = window.VF_SERVICE_MENU;
+if(!SERVICE_MENU||!Array.isArray(SERVICE_MENU.options)||SERVICE_MENU.options.length!==19){
+  const dependencyError=new Error("Source canonique du menu indisponible ou invalide (v3-service-menu.js).");
+  showViewfinderInitializationError(dependencyError);
+  throw dependencyError;
+}
 /* ============================================================
    STOCKAGE LOCAL
 ============================================================ */
@@ -1668,7 +1685,6 @@ function cleanPrompt(text){
   return String(text||"").replace(/[ \t]+\n/g, "\n").replace(/\n{3,}/g, "\n\n").trim();
 }
 /* Source canonique partagée avec le planner et ses tests : le menu ne maintient aucune seconde liste. */
-const SERVICE_MENU = window.VF_SERVICE_MENU;
 const KNOWN_PRESTATIONS = SERVICE_MENU.businessNames;
 
 /* Table d'alias : chaque nom canonique (celui déjà stocké dans les sélections, historiques,
