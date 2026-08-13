@@ -119,9 +119,11 @@ function layoutFor(width, height, platform, requestedZone, hasHeadline, selected
     const margin=Math.max(Math.round(width*.06),Math.round(width*template.margins));
     const story=normalized==="Story";
     const x=Math.max(margin,Math.round(width*spec.x));
-    const y=story?Math.round(height*.72):Math.round(height*spec.y);
+    const y=story?Math.round(height*.60):Math.round(height*spec.y);
     const boxWidth=Math.min(Math.round(width*spec.width),width-x-margin);
-    return {x,y,width:boxWidth,height:Math.min(Math.round(height*(story&&hasHeadline?.22:(hasHeadline?.28:.22))),height-y-margin),margin,portrait:height>width*1.35,landscape:width>height*1.35,template,align:spec.align};
+    const result={x,y,width:boxWidth,height:Math.min(Math.round(height*(story&&hasHeadline?.16:(hasHeadline?.28:.22))),height-y-margin),margin,portrait:height>width*1.35,landscape:width>height*1.35,template,align:spec.align};
+    if(story){result.textArea={top:Math.round(height*.60),bottom:Math.round(height*.76)};result.logoArea={top:Math.round(height*.76),bottom:Math.round(height*.86)};}
+    return result;
   }
   /* L'identité et l'accroche forment un cartouche éditorial unique en bas de l'image. L'ancien
      empilement en haut traversait régulièrement le visage et serrait la signature contre le logo. */
@@ -169,7 +171,7 @@ function buildOverlaySvg(width, height, layout, platform, headline, posterStrate
   const headlineEnd = textY + Math.max(1, subtitleLines.length) * subtitleSize * 1.10;
   const dividerY = headlineEnd + Math.round(layout.height * 0.055);
   const plannedLogoTop = dividerY + Math.round(layout.height * 0.055);
-  const brandY = plannedLogoTop + plannedLogoWidth + Math.round(brandSize * 1.18);
+  const brandY = layout.logoArea ? Math.round(height*.885) : plannedLogoTop + plannedLogoWidth + Math.round(brandSize * 1.18);
   const scrimTop = Math.max(0, layout.y - Math.round(height * 0.025));
   const scrimBottom = Math.min(height, layout.y + layout.height + Math.round(height * 0.025));
   const border = Math.max(2, Math.round(width * 0.0017));
@@ -255,10 +257,12 @@ async function composeBrandPoster({ imageBuffer, logoDataUrl, platform, headline
   const logoFraction=posterStrategy?.logoScale==="discreet"?.12:posterStrategy?.logoScale==="standard"?.16:.21;
   const desiredLogoWidth = Math.round(layout.width * logoFraction);
   const minimumBottomMargin = Math.max(Math.round(height*.035), 24);
-  const availableHeight = Math.max(24, height - minimumBottomMargin - Math.round(dividerY + layout.height*.055));
+  const logoZoneTop=layout.logoArea?.top??Math.round(dividerY + layout.height*.055);
+  const logoZoneBottom=layout.logoArea?.bottom??(height-minimumBottomMargin);
+  const availableHeight = Math.max(24, logoZoneBottom-logoZoneTop);
   const sourceRatio = (logoMeta.width||1)/(logoMeta.height||1);
   const logoWidth = Math.max(24, Math.min(desiredLogoWidth, Math.floor(availableHeight*sourceRatio)));
-  const logoTop = Math.min(height-minimumBottomMargin-Math.ceil(logoWidth/sourceRatio), Math.round(dividerY + layout.height * 0.055));
+  const logoTop = Math.max(logoZoneTop,Math.min(logoZoneBottom-Math.ceil(logoWidth/sourceRatio),logoZoneTop));
   const logoLeft = Math.round(layout.x + (layout.width - logoWidth) / 2);
   const estimatedLogoHeight=Math.ceil(logoWidth/sourceRatio);
   if(layout.x<Math.round(width*.06)||layout.x+layout.width>width-Math.round(width*.06))throw new Error("Marges latérales du lock-up insuffisantes.");

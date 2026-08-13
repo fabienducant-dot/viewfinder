@@ -5082,8 +5082,9 @@ async function finalizeGeneratedImage(flow){
         sur le même modèle structuré "NOM COURT | sous-ligne" que PSiO/Story — plus de contentHeadline
         générique pour Instagram/Facebook. Le texte vient du brief créatif (texteImage), jamais de
         GPT-image. Repli identique si texteImage est vide. */
-  const structuredHeadline = flow.brief && typeof flow.brief.texteImage==="string"
-    ? (flow.brief.texteImage.trim() || `${String(flow.brief.messageCentral||"RÉVÉLEZ-VOUS").split(/\s+/).slice(0,4).join(" ")} | LÂCHER-PRISE TOTAL`) : "";
+  const structuredHeadline = flow.v3Plan?.posterStrategy
+    ? [flow.v3Plan.posterStrategy.title,flow.v3Plan.posterStrategy.subtitle].filter(Boolean).join(" | ")
+    : (flow.brief && typeof flow.brief.texteImage==="string" ? flow.brief.texteImage.trim() : "");
   const headline = (!logoInScene && (PLATFORM_OVERLAY[platform]==="accroche" || PLATFORM_OVERLAY[platform]==="fort"))
     ? structuredHeadline : "";
   /* 3) logo : appliqué sauf s'il est déjà dans la scène (texte et signature compris, dans ce cas —
@@ -5774,6 +5775,29 @@ function computeQualityScore({ platform, textPrompt, textMods, imageMods, totalT
   return { global, dims, weakPoints };
 }
 
+function applyAuthoritativeV3Plan(prepared, plan){
+  if(!prepared||!plan)return prepared;
+  const brief=prepared.brief||(prepared.brief={});
+  const projection=plan.legacyProjection||{};
+  Object.assign(brief,projection,{
+    v3SubjectBrief:plan.subjectBrief,
+    v3PosterStrategy:plan.posterStrategy,
+    v3PostCopyStrategy:plan.postCopyStrategy,
+    v3CampaignCreativeDirection:plan.campaignCreativeDirection
+  });
+  if(brief.miseEnScene){
+    brief.miseEnScene.sujetPrincipal=projection.sujetPrincipal||plan.posterStrategy?.mainSubject;
+    brief.miseEnScene.action=projection.action||plan.posterStrategy?.careOrSolutionManifestation;
+  }
+  const selected=(projection.selectedAntiRepetitionElements||[]).map(x=>String(x).toLowerCase());
+  brief.compositionInterdite=(brief.compositionInterdite||[]).filter(item=>!selected.some(term=>String(item).toLowerCase().includes(term)));
+  const sanitize=value=>typeof value==="string"?value.replace(/douleurs localisées/gi,"tensions localisées"):value;
+  for(const key of ["messageCentral","ideeVisuelle","sujetPrincipal","sujetSecondaire","action","pointDeTransformation","texteImage"]){brief[key]=sanitize(brief[key]);}
+  prepared.v3Plan=plan;
+  prepared.imagePrompt=plan.photoBrief?.prompt||prepared.imagePrompt;
+  return prepared;
+}
+
 async function generateCampaignPosts(topic, missionKey, onProgress){
   /* T2 — pipeline UNIQUE : chaque item de campagne est préparé par prepareCreativeBrief
      (Planner + validation + constructeur unique), séquentiellement. Plus aucun prompt
@@ -5786,7 +5810,7 @@ async function generateCampaignPosts(topic, missionKey, onProgress){
     const isStory = item.platform === "Story";
     if(onProgress) onProgress(`${i+1}/${CAMPAIGN_ITEMS.length} — ${item.label}`);
     const prepared = await prepareCreativeBrief({ mission: missionKey, platform: item.platform, prestation: state.prestationName, topic, aspectKey: aspect, size: API_IMAGE_SIZE_BY_PLATFORM[item.platform]||"1024x1024", isCampaign:true, registres: Array.isArray(state.registres) ? [...state.registres] : [], userReferenceDataUrl: state.userReferenceUpload && state.userReferenceUpload.dataUrl, userReferenceImageId: state.userReferenceUpload && state.userReferenceUpload.id, aiLogoIntegration: !!state.aiLogoIntegration });
-    const v3Response=await fetch("/.netlify/functions/plan-v3",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({service:state.prestationName,platform:item.platform==="Article Blog Wix"?"Blog":item.platform,subject:topic,selectedRegisters:[...(state.registres||[])],textChoice:state.textOnImageChoice||"automatic",marketingObjective:missionKey||"Faire réserver",creativeSeed:`campaign-${campaignId}`,costMode:state.costMode||"test",requestedSize:API_IMAGE_SIZE_BY_PLATFORM[item.platform]||"1024x1024"})});const v3Plan=await fetchJsonOrThrowRaw(v3Response,"plan de campagne V3");if(!v3Response.ok||v3Plan.error)throw new Error(v3Plan.error||"Plan V3 campagne indisponible");prepared.v3Plan=v3Plan;prepared.brief.v3SubjectBrief=v3Plan.subjectBrief;prepared.brief.v3PosterStrategy=v3Plan.posterStrategy;prepared.brief.v3PostCopyStrategy=v3Plan.postCopyStrategy;prepared.brief.v3CampaignCreativeDirection=v3Plan.campaignCreativeDirection;
+    const v3Response=await fetch("/.netlify/functions/plan-v3",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({service:state.prestationName,platform:item.platform==="Article Blog Wix"?"Blog":item.platform,subject:topic,selectedRegisters:[...(state.registres||[])],textChoice:state.textOnImageChoice||"automatic",marketingObjective:missionKey||"Faire réserver",creativeSeed:`campaign-${campaignId}`,costMode:state.costMode||"test",requestedSize:API_IMAGE_SIZE_BY_PLATFORM[item.platform]||"1024x1024"})});const v3Plan=await fetchJsonOrThrowRaw(v3Response,"plan de campagne V3");if(!v3Response.ok||v3Plan.error)throw new Error(v3Plan.error||"Plan V3 campagne indisponible");applyAuthoritativeV3Plan(prepared,v3Plan);
     posts.push({
       id: uid(), campaignId, campaignTopic: topic, campaignLabel: item.label,
       platform: item.platform, mission: missionKey, topic,
@@ -7313,7 +7337,7 @@ function buildPostTab(){
           const planResponse=await fetch("/.netlify/functions/plan-v3",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({service:state.prestationName,platform:platform==="Article Blog Wix"?"Blog":platform,marketingObjective:state.mission||"Faire réserver",audience:"clientèle La Santé des Zèbres",artHistory:(state.imageHistory||[]).map(x=>x.artFingerprint).filter(Boolean).slice(-10),creativeSeed:`${state.prestationName}-${state.topic}-${Date.now()}`,subject:state.topic,selectedRegisters:[...(state.registres||[])],textChoice:state.textOnImageChoice||"automatic",costMode:state.costMode||"test",requestedSize:API_IMAGE_SIZE_BY_PLATFORM[platform]||"1024x1024",artDirectionKey:prepared.brief?.sceneFamily||prepared.sceneFamily||null})});
           const planData=await fetchJsonOrThrowRaw(planResponse,"Direction Artistique V3");
           if(!planResponse.ok||planData.error)throw new Error(planData.error||"Plan V3 indisponible");
-          prepared.v3Plan=planData;prepared.brief.v3SubjectBrief=planData.subjectBrief;prepared.brief.v3PosterStrategy=planData.posterStrategy;prepared.brief.v3PostCopyStrategy=planData.postCopyStrategy;prepared.brief.v3CampaignCreativeDirection=planData.campaignCreativeDirection;
+          applyAuthoritativeV3Plan(prepared,planData);
           if(planData.psioRequired&&!planData.psioReferenceReady){
             const missing=(planData.psioReferenceRoles||[]).filter(x=>!x.available).map(x=>x.label).join(", ");
             prepared.blockingError=`Références officielles PSiO® manquantes : ${missing}. Ajoutez-les avant toute confirmation payante.`;
@@ -7425,7 +7449,7 @@ function buildPostTab(){
           brandIntegrated: flow.serverBrandCompositionUsed===true && flow.brandComposited===true,
           brandReferenceDataUrl: flow.brandReferenceDataUrl || null,
           expectedHeadline: (PLATFORM_OVERLAY[flow.inputs?.platform]==="accroche" || PLATFORM_OVERLAY[flow.inputs?.platform]==="fort")
-            ? String(flow.brief?.texteImage||"").trim() : "",
+            ? [flow.v3Plan?.posterStrategy?.title,flow.v3Plan?.posterStrategy?.subtitle].filter(Boolean).join(" | ") : "",
         });
         flow.analysis = analysis; flow.analysisError = null;
         if(wasQuarantined){
@@ -7909,7 +7933,7 @@ const SCHEDULE_STATUS_LABEL = { "brouillon":"📝 Brouillon", "validé":"☑️ 
 async function recomposeCampaignItemFromMaster(item,master,onStatus){
   if(!master?.masterRawImageJobId)throw new Error("Photographie brute maîtresse indisponible.");
   onStatus&&onStatus("Recomposition Sharp gratuite — 0 appel Images...");
-  const headline=(PLATFORM_OVERLAY[item.platform]==="accroche"||PLATFORM_OVERLAY[item.platform]==="fort")?String(item.creativeBrief?.texteImage||""):"";
+  const headline=(PLATFORM_OVERLAY[item.platform]==="accroche"||PLATFORM_OVERLAY[item.platform]==="fort")?[item.v3Plan?.posterStrategy?.title,item.v3Plan?.posterStrategy?.subtitle].filter(Boolean).join(" | "):"";
   const res=await fetch("/.netlify/functions/recompose-image-job",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({sourceJobId:master.masterRawImageJobId,platform:item.platform,headline,zoneText:item.creativeBrief?.zoneTexte||""})});
   const data=await fetchJsonOrThrowRaw(res,"recomposition gratuite");if(!res.ok||data.error)throw new Error(data.error||`Erreur ${res.status}`);
   item.imageDataUrl=await fetchImageAsDataUrl(data.resultUrl);item.masterRawImageJobId=master.masterRawImageJobId;item.sourceImageJobId=data.jobId;item.v3Plan=master.v3Plan;item.artFingerprint=master.artFingerprint||null;item.v3Finalization={analysis:master.v3Finalization?.analysis,layout:data.layout,quality:data.quality};item.v3Quality=data.quality;item.platformCrop=data.layout?.cropPosition||null;item.platformLayout=data.layout;item.platformComposition={recomposedFrom:master.masterRawImageJobId,imageGenerationCalls:0};item.platformQualityReport=data.quality;item.costAudit=data.costAudit;item.logoApplied=true;item.headlineApplied=!!headline;LS.set("vf-scheduled",state.scheduled);return "Recomposition terminée ✓ — 0 appel de génération d’image";

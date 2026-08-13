@@ -1,0 +1,315 @@
+{
+  "generatedWithoutImagesApi": true,
+  "scenario": {
+    "service": "Massage Zébré",
+    "platform": "Story",
+    "subject": "Douleurs dorsales, blocage, sensations de lourdeur",
+    "selectedRegisters": [
+      "Fantastique",
+      "Cinématographie",
+      "Architecture"
+    ],
+    "textChoice": "automatic",
+    "creativeSeed": "golden-target",
+    "costMode": "test"
+  },
+  "singleSourceOfTruth": {
+    "planId": "d95be2243652248508e1f36ba6c3395ef67e5b3a1046ca965c34c2d857b7ce2c",
+    "artSelection": {
+      "artWorldFamily": "Jardin d’eau noir et or",
+      "locationFamily": "pavillon lacustre ouvert",
+      "architectureDescription": "pavillon lacustre ouvert au bord d’une eau noire, plateforme asymétrique, toiture flottante légère et écran minéral latéral. Paysage, eau et ciel visibles autour de la prestation",
+      "cinematicTreatment": "cadrage cinématographique asymétrique, soin prioritaire, paysage respirant autour des personnes",
+      "fantasticPhenomenon": "reflet impossible ou brume périphérique discrète, jamais portail central ou objet occulte",
+      "dominantMaterials": [
+        "pierre architecturale",
+        "roche naturelle",
+        "obsidienne",
+        "or satiné"
+      ],
+      "lightingNarrative": "la pierre architecturale et la roche naturelle se répondent sous une lumière dorée latérale",
+      "spatialDepth": "profondeur cinématographique en trois plans",
+      "artWorld": "Jardin d’eau noir et or",
+      "narrativeVariant": "geste en diagonale et profondeur progressive",
+      "architectureType": "pavillon lacustre ouvert au bord d’une eau noire, plateforme asymétrique, toiture flottante légère et écran minéral latéral. Paysage, eau et ciel visibles autour de la prestation",
+      "primarySymbol": "reflet impossible ou brume périphérique discrète, jamais portail central ou objet occulte",
+      "secondarySymbol": "empreinte SDZ périphérique discrète",
+      "lightType": "la pierre architecturale et la roche naturelle se répondent sous une lumière dorée latérale",
+      "composition": "cadrage cinématographique asymétrique, soin prioritaire, paysage respirant autour des personnes",
+      "realityAnchors": [
+        "geste métier clairement visible",
+        "personnes et rôles lisibles",
+        "matériel réel fidèle"
+      ],
+      "symbolicAmplifiers": [
+        "reflet impossible ou brume périphérique discrète, jamais portail central ou objet occulte",
+        "empreinte SDZ périphérique discrète"
+      ],
+      "recentHistoryExclusions": [],
+      "differentiationReason": "pavillon lacustre ouvert, geste en diagonale et profondeur progressive ; architecture, lumière et phénomène différents des créations récentes",
+      "reasonForDifference": "pavillon lacustre ouvert, geste en diagonale et profondeur progressive ; architecture, lumière et phénomène différents des créations récentes",
+      "absoluteExclusions": [
+        "matériel médical inventé",
+        "scanner",
+        "écran médical",
+        "boîtier ou câble inventé",
+        "faux logo",
+        "texte généré",
+        "spa oriental générique",
+        "bambou",
+        "lotus",
+        "serviettes roulées",
+        "bougies",
+        "galets empilés façon zen",
+        "ambiance horrifique ou occulte",
+        "collage Canva",
+        "cases ou bordures"
+      ],
+      "antiRepetitionElements": [
+        "arcade",
+        "arche",
+        "portail",
+        "statue",
+        "architecture monumentale",
+        "cercle lumineux",
+        "faisceau",
+        "structure minérale",
+        "pavillon",
+        "jardin d’eau",
+        "constellation",
+        "sculpture"
+      ]
+    },
+    "subjectBrief": {
+      "rawSubject": "Douleurs dorsales, blocage, sensations de lourdeur",
+      "coreTheme": "tension et lourdeur dorsale",
+      "audienceProblem": "sensation de dos lourd et mouvement limité",
+      "physicalOrEmotionalManifestation": "posture fermée, main placée dans le dos et mouvement visiblement limité",
+      "transformationPromise": "le poids se relâche et l’espace s’ouvre, sans promesse médicale",
+      "explicitSceneRequest": null,
+      "userConstraints": [],
+      "explicitTextRequest": null,
+      "selectedRegisters": [
+        "Fantastique",
+        "Cinématographie",
+        "Architecture"
+      ],
+      "relatedService": "Massage Zébré",
+      "marketingObjective": "Faire réserver",
+      "noMedicalDiagnosis": true
+    },
+    "posterStrategy": {
+      "communicationGoal": "Faire réserver",
+      "coreTheme": "tension et lourdeur dorsale",
+      "instantVisualMeaning": "posture fermée, main placée dans le dos et mouvement visiblement limité",
+      "subjectManifestation": "posture fermée, main placée dans le dos et mouvement visiblement limité",
+      "careOrSolutionManifestation": "enchaînement personnalisé fluide, praticien et bénéficiaire clairement présents",
+      "transformationNarrative": "poids architectural concentré près du dos, lumière dorée localisée sur la zone dorsale, puis espace et paysage fantastique qui s’ouvrent",
+      "emotionalJourney": "tension visible → ouverture → apaisement crédible",
+      "mainSubject": "tension et sensation de lourdeur du dos du bénéficiaire",
+      "secondarySubject": "geste professionnel sur la zone dorsale",
+      "tertiarySubject": "Fabien, praticien masculin adulte",
+      "visualHierarchy": [
+        "tension et lourdeur du dos",
+        "geste professionnel sur la zone dorsale",
+        "Fabien, praticien masculin adulte"
+      ],
+      "environmentRole": "architecture pesante près du dos puis ouverture lumineuse au loin",
+      "artWorldFamily": "Jardin d’eau noir et or",
+      "locationFamily": "pavillon lacustre ouvert",
+      "architecturalStory": "masses architecturales exprimant le poids près du dos puis l’ouverture du paysage",
+      "fantasticStory": "gravité visuellement allégée et paysage qui s’ouvre",
+      "lightingStory": "lumière dorée localisée dans le dos puis élargie vers l’ouverture",
+      "compositionType": "Cinématographique",
+      "textMode": "TEXT_MODE_EDITORIAL",
+      "title": "QUAND LE DOS PORTE TROP LONGTEMPS",
+      "subtitle": "RETROUVER DE LA LÉGÈRETÉ",
+      "supportingLine": "",
+      "brandLine": "LA SANTÉ DES ZÈBRES — RAISMES",
+      "titleLines": [
+        "QUAND LE DOS PORTE",
+        "TROP LONGTEMPS"
+      ],
+      "subtitleLines": [
+        "RETROUVER DE LA LÉGÈRETÉ"
+      ],
+      "titleLineTarget": "2 à 4",
+      "subtitleLineTarget": "1 à 2",
+      "textZones": [
+        "zone éditoriale Story 60–76 %, distincte du logo"
+      ],
+      "textSafeArea": {
+        "top": 0.6,
+        "bottom": 0.76,
+        "left": 0.06,
+        "right": 0.94
+      },
+      "logoPlacement": "bas centré",
+      "logoScale": "prominent",
+      "logoSafeArea": {
+        "top": 0.76,
+        "bottom": 0.86,
+        "left": 0.2,
+        "right": 0.8
+      },
+      "protectedSceneAreas": [
+        "visage",
+        "mains actives",
+        "geste professionnel",
+        "zone dorsale importante",
+        "lunettes PSiO®",
+        "ouverture architecturale"
+      ],
+      "platformAdaptationRules": {
+        "Story": "verticale immersive, zone texte 60–76 %, zone logo séparée 76–86 %, signature sous le logo",
+        "Facebook": "4:5 distinct",
+        "Instagram": "4:5 compact",
+        "Instagram Square": "recomposition carrée dédiée",
+        "Google Business": "sans texte par défaut"
+      },
+      "differentiationReason": "pavillon lacustre ouvert, geste en diagonale et profondeur progressive ; architecture, lumière et phénomène différents des créations récentes",
+      "metrics": {
+        "titleWordCount": 6,
+        "titleLineCount": 2,
+        "subtitleWordCount": 4,
+        "subtitleLineCount": 1,
+        "textDensityRatio": 0.15833333333333333,
+        "orphanWordDetected": false,
+        "semanticBreakQuality": 9,
+        "mobileReadabilityScore": 9
+      }
+    },
+    "structuredOutputProjection": {
+      "sceneFamily": "pavillon lacustre ouvert",
+      "ideeVisuelle": "posture fermée, main placée dans le dos et mouvement visiblement limité ; masses architecturales exprimant le poids près du dos puis l’ouverture du paysage dans pavillon lacustre ouvert",
+      "sujetPrincipal": "tension et sensation de lourdeur du dos du bénéficiaire",
+      "sujetSecondaire": "geste professionnel sur la zone dorsale",
+      "action": "geste professionnel centré sur la zone dorsale ; enchaînement personnalisé fluide, praticien et bénéficiaire clairement présents",
+      "pointDeTransformation": "poids architectural concentré près du dos, lumière dorée localisée sur la zone dorsale, puis espace et paysage fantastique qui s’ouvrent",
+      "texteImage": "QUAND LE DOS PORTE TROP LONGTEMPS | RETROUVER DE LA LÉGÈRETÉ",
+      "zoneTexte": "zone éditoriale Story 60–76 %, distincte du logo",
+      "zoneLogo": "{\"top\":0.76,\"bottom\":0.86,\"left\":0.2,\"right\":0.8}",
+      "selectedAntiRepetitionElements": [
+        "pavillon"
+      ]
+    },
+    "photoBrief": {
+      "kind": "PhotoBrief",
+      "service": "Massage Zébré",
+      "platform": "Story",
+      "people": 2,
+      "uniqueIdentityCount": 2,
+      "visibleRepresentationPolicy": "chaque identité n'apparaît qu'une fois",
+      "requiredCompositeStages": [],
+      "artDirection": {
+        "artWorldFamily": "Jardin d’eau noir et or",
+        "locationFamily": "pavillon lacustre ouvert",
+        "architectureDescription": "pavillon lacustre ouvert au bord d’une eau noire, plateforme asymétrique, toiture flottante légère et écran minéral latéral. Paysage, eau et ciel visibles autour de la prestation",
+        "cinematicTreatment": "cadrage cinématographique asymétrique, soin prioritaire, paysage respirant autour des personnes",
+        "fantasticPhenomenon": "reflet impossible ou brume périphérique discrète, jamais portail central ou objet occulte",
+        "dominantMaterials": [
+          "pierre architecturale",
+          "roche naturelle",
+          "obsidienne",
+          "or satiné"
+        ],
+        "lightingNarrative": "la pierre architecturale et la roche naturelle se répondent sous une lumière dorée latérale",
+        "spatialDepth": "profondeur cinématographique en trois plans",
+        "artWorld": "Jardin d’eau noir et or",
+        "narrativeVariant": "geste en diagonale et profondeur progressive",
+        "architectureType": "pavillon lacustre ouvert au bord d’une eau noire, plateforme asymétrique, toiture flottante légère et écran minéral latéral. Paysage, eau et ciel visibles autour de la prestation",
+        "primarySymbol": "reflet impossible ou brume périphérique discrète, jamais portail central ou objet occulte",
+        "secondarySymbol": "empreinte SDZ périphérique discrète",
+        "lightType": "la pierre architecturale et la roche naturelle se répondent sous une lumière dorée latérale",
+        "composition": "cadrage cinématographique asymétrique, soin prioritaire, paysage respirant autour des personnes",
+        "realityAnchors": [
+          "geste métier clairement visible",
+          "personnes et rôles lisibles",
+          "matériel réel fidèle"
+        ],
+        "symbolicAmplifiers": [
+          "reflet impossible ou brume périphérique discrète, jamais portail central ou objet occulte",
+          "empreinte SDZ périphérique discrète"
+        ],
+        "recentHistoryExclusions": [],
+        "differentiationReason": "pavillon lacustre ouvert, geste en diagonale et profondeur progressive ; architecture, lumière et phénomène différents des créations récentes",
+        "reasonForDifference": "pavillon lacustre ouvert, geste en diagonale et profondeur progressive ; architecture, lumière et phénomène différents des créations récentes",
+        "absoluteExclusions": [
+          "matériel médical inventé",
+          "scanner",
+          "écran médical",
+          "boîtier ou câble inventé",
+          "faux logo",
+          "texte généré",
+          "spa oriental générique",
+          "bambou",
+          "lotus",
+          "serviettes roulées",
+          "bougies",
+          "galets empilés façon zen",
+          "ambiance horrifique ou occulte",
+          "collage Canva",
+          "cases ou bordures"
+        ],
+        "antiRepetitionElements": [
+          "arcade",
+          "arche",
+          "portail",
+          "statue",
+          "architecture monumentale",
+          "cercle lumineux",
+          "faisceau",
+          "structure minérale",
+          "pavillon",
+          "jardin d’eau",
+          "constellation",
+          "sculpture"
+        ]
+      },
+      "marketingObjective": "Faire réserver",
+      "centralIdea": "tension et lourdeur dorsale",
+      "dominantEmotion": "confiance, apaisement premium",
+      "primarySubject": "tension et sensation de lourdeur du dos du bénéficiaire",
+      "secondarySubject": "geste professionnel sur la zone dorsale",
+      "primaryAction": "enchaînement personnalisé fluide, praticien et bénéficiaire clairement présents",
+      "foreground": "guide visuel sans obstacle",
+      "mainPlane": "tension et sensation de lourdeur du dos du bénéficiaire",
+      "secondaryPlane": "geste professionnel sur la zone dorsale",
+      "background": "pavillon lacustre ouvert au bord d’une eau noire, plateforme asymétrique, toiture flottante légère et écran minéral latéral. Paysage, eau et ciel visibles autour de la prestation",
+      "depth": "profondeur cinématographique en trois plans",
+      "leadingLines": "diagonales douces reliant naturellement les étapes et guidant le regard",
+      "massBalance": "soin, personnes, geste et matériel 70 % de la narration ; décor artistique 30 % maximum, toujours secondaire",
+      "movementDirection": "du geste métier vers la résolution en profondeur",
+      "keyLight": "la pierre architecturale et la roche naturelle se répondent sous une lumière dorée latérale",
+      "fillLight": "léger contre-jour doré secondaire",
+      "focalLength": "35 mm",
+      "cameraDistance": "plan moyen éditorial permettant de lire tous les plans",
+      "cameraHeight": "naturelle du geste",
+      "cameraAngle": "trois-quarts naturel",
+      "depthOfField": "modérée afin de reconnaître toutes les étapes",
+      "detailDensity": "élevé et anatomiquement cohérent",
+      "negativeSpace": "30 % inférieurs du cadre, zone éditoriale sûre entièrement calme, sans visage, mains actives ni lunettes PSiO®",
+      "protectedZones": [
+        "visage",
+        "mains actives",
+        "geste professionnel",
+        "zone dorsale importante",
+        "lunettes PSiO®",
+        "ouverture architecturale"
+      ],
+      "firstLook": "tension et lourdeur du dos",
+      "secondLook": "geste professionnel sur la zone dorsale",
+      "thirdLook": "Fabien, praticien masculin adulte",
+      "colorDominant": "noir profond et or métallique noble satiné, jamais orange, ambre, cuivre ou jaune vif, ni beige",
+      "contrast": "contraste noir et or affirmé, détails corporels et matériels toujours visibles",
+      "materialsTextures": "pierre architecturale, roche naturelle, obsidienne, or satiné",
+      "photoStyle": "photographie éditoriale premium photoréaliste, noir et or, jamais 3D ni illustration ; luxe silencieux, émotionnelle et publicitaire, jamais fond noir vide, spa générique, médicale ou Canva",
+      "referencePolicy": "référence facultative, jamais copiée comme identité",
+      "prompt": "PHOTOGRAPHIE BRUTE — photographie éditoriale premium photoréaliste, noir et or, jamais 3D ni illustration ; luxe silencieux, émotionnelle et publicitaire, jamais fond noir vide, spa générique, médicale ou Canva. GOLDEN TARGET STRUCTUREL : sujet compréhensible sans texte, émotion incarnée, affiche publicitaire premium. MINI-SUJET : tension et lourdeur dorsale. REGISTRES UTILISATEUR APPLIQUÉS : Fantastique, Cinématographie, Architecture. MANIFESTATION VISIBLE : posture fermée, main placée dans le dos et mouvement visiblement limité. TRANSFORMATION : poids architectural concentré près du dos, lumière dorée localisée sur la zone dorsale, puis espace et paysage fantastique qui s’ouvrent. RÔLES ET SOLUTION : enchaînement personnalisé fluide, praticien et bénéficiaire clairement présents. ARCHITECTURE NARRATIVE : masses architecturales exprimant le poids près du dos puis l’ouverture du paysage. FANTASTIQUE LIÉ AU THÈME : gravité visuellement allégée et paysage qui s’ouvre. LUMIÈRE LIÉE AU SUJET : lumière dorée localisée dans le dos puis élargie vers l’ouverture. TROIS PLANS UTILES : premier plan guide visuel sans obstacle ; plan principal, sujet, geste et lumière ; arrière-plan, monde et ouverture prolongeant le sens. COMPOSITION FUTURE : TEXT_MODE_EDITORIAL, texte en zone éditoriale Story 60–76 %, distincte du logo, logo prominent bas centré. ZONES PROTÉGÉES : visage, mains actives, geste professionnel, zone dorsale importante, lunettes PSiO®, ouverture architecturale. UNIVERS ARTISTIQUE SÉLECTIONNÉ : pavillon lacustre ouvert au bord d’une eau noire, plateforme asymétrique, toiture flottante légère et écran minéral latéral. Paysage, eau et ciel visibles autour de la prestation. FAMILLE D’UNIVERS : Jardin d’eau noir et or. LIEU : pavillon lacustre ouvert. TRAITEMENT CINÉMATOGRAPHIQUE : cadrage cinématographique asymétrique, soin prioritaire, paysage respirant autour des personnes. PROFONDEUR : profondeur cinématographique en trois plans. PHÉNOMÈNE FANTASTIQUE PÉRIPHÉRIQUE : reflet impossible ou brume périphérique discrète, jamais portail central ou objet occulte. MATIÈRES : pierre architecturale, roche naturelle, obsidienne, or satiné. LUMIÈRE NARRATIVE : la pierre architecturale et la roche naturelle se répondent sous une lumière dorée latérale. ANCRAGES RÉALISTES : geste métier clairement visible, personnes et rôles lisibles, matériel réel fidèle. AMPLIFICATEURS SYMBOLIQUES : reflet impossible ou brume périphérique discrète, jamais portail central ou objet occulte, empreinte SDZ périphérique discrète. RAISON DE DIFFÉRENCIATION : pavillon lacustre ouvert, geste en diagonale et profondeur progressive ; architecture, lumière et phénomène différents des créations récentes. La prestation reste réaliste, professionnelle et crédible. L’univers peut transfigurer ou dépasser visuellement le cabinet réel afin de créer une affiche cinématographique, architecturale ou fantastique, sans devenir un spa générique, une clinique ou un décor sans soin. OBJECTIF MARKETING : Faire réserver. IDÉE CENTRALE : tension et lourdeur dorsale. ÉMOTION : confiance, apaisement premium. SUJETS : principal, tension et sensation de lourdeur du dos du bénéficiaire ; secondaire, geste professionnel sur la zone dorsale ; troisième regard, Fabien, praticien masculin adulte. ACTION : enchaînement personnalisé fluide, praticien et bénéficiaire clairement présents. IDENTITÉS : 2 personne(s) unique(s). PRATICIEN : Le praticien est obligatoirement un homme adulte, Fabien. Aucune praticienne, aucune femme dans le rôle du praticien. Le bénéficiaire peut être une femme, mais les rôles restent parfaitement identifiables.   MISE EN SCÈNE : premier plan, guide visuel sans obstacle ; plan principal, tension et sensation de lourdeur du dos du bénéficiaire et enchaînement personnalisé fluide, praticien et bénéficiaire clairement présents ; plan secondaire, geste professionnel sur la zone dorsale ; arrière-plan, pavillon lacustre ouvert au bord d’une eau noire, plateforme asymétrique, toiture flottante légère et écran minéral latéral. Paysage, eau et ciel visibles autour de la prestation. LIGNES DE FUITE : diagonales douces reliant naturellement les étapes et guidant le regard. ÉQUILIBRE DES MASSES : soin, personnes, geste et matériel 70 % de la narration ; décor artistique 30 % maximum, toujours secondaire. MOUVEMENT : du geste métier vers la résolution en profondeur. LUMIÈRE : la pierre architecturale et la roche naturelle se répondent sous une lumière dorée latérale ; léger contre-jour doré secondaire. CAMÉRA : focale 35 mm ; distance plan moyen éditorial permettant de lire tous les plans ; hauteur naturelle du geste ; angle trois-quarts naturel ; profondeur de champ modérée afin de reconnaître toutes les étapes. DÉTAILS : élevé et anatomiquement cohérent. MATIÈRES ET TEXTURES : pierre architecturale, roche naturelle, obsidienne, or satiné. HIÉRARCHIE : premier regard, tension et lourdeur du dos ; deuxième regard, geste professionnel sur la zone dorsale ; troisième regard, Fabien, praticien masculin adulte. PALETTE : noir profond et or métallique noble satiné, jamais orange, ambre, cuivre ou jaune vif, ni beige. CONTRASTE : contraste noir et or affirmé, détails corporels et matériels toujours visibles. ZONE NÉGATIVE POUR SHARP : 30 % inférieurs du cadre, zone éditoriale sûre entièrement calme, sans visage, mains actives ni lunettes PSiO®. Protéger absolument : visage, mains actives, geste professionnel, zone dorsale importante, lunettes PSiO®, ouverture architecturale. Reconnaissance métier : alternance de gestes enveloppants et ciblés. Matériel autorisé : table, drap noir, pierre architecturale, roche naturelle, obsidienne, marbre noir, écran minéral et relief sculpté lorsque l’univers les prévoit. EXCLUSIONS ABSOLUES : matériel médical inventé, scanner, écran médical, boîtier ou câble inventé, faux logo, texte généré, spa oriental générique, bambou, lotus, serviettes roulées, bougies, galets empilés façon zen, ambiance horrifique ou occulte, collage Canva, cases ou bordures, pierres chaudes de massage, galets décoratifs de spa, pierre de soin fictive. ÉLÉMENTS SOUMIS À ANTI-RÉPÉTITION, PAS INTERDITS : arcade, arche, portail, statue, architecture monumentale, cercle lumineux, faisceau, structure minérale, pavillon, jardin d’eau, constellation, sculpture. référence facultative, jamais copiée comme identité. SORTIE BRUTE OBLIGATOIRE : aucun texte, logo, signature, CTA, coordonnées, cadre, badge ou pictogramme."
+    },
+    "promptInspector": "PHOTOGRAPHIE BRUTE — photographie éditoriale premium photoréaliste, noir et or, jamais 3D ni illustration ; luxe silencieux, émotionnelle et publicitaire, jamais fond noir vide, spa générique, médicale ou Canva. GOLDEN TARGET STRUCTUREL : sujet compréhensible sans texte, émotion incarnée, affiche publicitaire premium. MINI-SUJET : tension et lourdeur dorsale. REGISTRES UTILISATEUR APPLIQUÉS : Fantastique, Cinématographie, Architecture. MANIFESTATION VISIBLE : posture fermée, main placée dans le dos et mouvement visiblement limité. TRANSFORMATION : poids architectural concentré près du dos, lumière dorée localisée sur la zone dorsale, puis espace et paysage fantastique qui s’ouvrent. RÔLES ET SOLUTION : enchaînement personnalisé fluide, praticien et bénéficiaire clairement présents. ARCHITECTURE NARRATIVE : masses architecturales exprimant le poids près du dos puis l’ouverture du paysage. FANTASTIQUE LIÉ AU THÈME : gravité visuellement allégée et paysage qui s’ouvre. LUMIÈRE LIÉE AU SUJET : lumière dorée localisée dans le dos puis élargie vers l’ouverture. TROIS PLANS UTILES : premier plan guide visuel sans obstacle ; plan principal, sujet, geste et lumière ; arrière-plan, monde et ouverture prolongeant le sens. COMPOSITION FUTURE : TEXT_MODE_EDITORIAL, texte en zone éditoriale Story 60–76 %, distincte du logo, logo prominent bas centré. ZONES PROTÉGÉES : visage, mains actives, geste professionnel, zone dorsale importante, lunettes PSiO®, ouverture architecturale. UNIVERS ARTISTIQUE SÉLECTIONNÉ : pavillon lacustre ouvert au bord d’une eau noire, plateforme asymétrique, toiture flottante légère et écran minéral latéral. Paysage, eau et ciel visibles autour de la prestation. FAMILLE D’UNIVERS : Jardin d’eau noir et or. LIEU : pavillon lacustre ouvert. TRAITEMENT CINÉMATOGRAPHIQUE : cadrage cinématographique asymétrique, soin prioritaire, paysage respirant autour des personnes. PROFONDEUR : profondeur cinématographique en trois plans. PHÉNOMÈNE FANTASTIQUE PÉRIPHÉRIQUE : reflet impossible ou brume périphérique discrète, jamais portail central ou objet occulte. MATIÈRES : pierre architecturale, roche naturelle, obsidienne, or satiné. LUMIÈRE NARRATIVE : la pierre architecturale et la roche naturelle se répondent sous une lumière dorée latérale. ANCRAGES RÉALISTES : geste métier clairement visible, personnes et rôles lisibles, matériel réel fidèle. AMPLIFICATEURS SYMBOLIQUES : reflet impossible ou brume périphérique discrète, jamais portail central ou objet occulte, empreinte SDZ périphérique discrète. RAISON DE DIFFÉRENCIATION : pavillon lacustre ouvert, geste en diagonale et profondeur progressive ; architecture, lumière et phénomène différents des créations récentes. La prestation reste réaliste, professionnelle et crédible. L’univers peut transfigurer ou dépasser visuellement le cabinet réel afin de créer une affiche cinématographique, architecturale ou fantastique, sans devenir un spa générique, une clinique ou un décor sans soin. OBJECTIF MARKETING : Faire réserver. IDÉE CENTRALE : tension et lourdeur dorsale. ÉMOTION : confiance, apaisement premium. SUJETS : principal, tension et sensation de lourdeur du dos du bénéficiaire ; secondaire, geste professionnel sur la zone dorsale ; troisième regard, Fabien, praticien masculin adulte. ACTION : enchaînement personnalisé fluide, praticien et bénéficiaire clairement présents. IDENTITÉS : 2 personne(s) unique(s). PRATICIEN : Le praticien est obligatoirement un homme adulte, Fabien. Aucune praticienne, aucune femme dans le rôle du praticien. Le bénéficiaire peut être une femme, mais les rôles restent parfaitement identifiables.   MISE EN SCÈNE : premier plan, guide visuel sans obstacle ; plan principal, tension et sensation de lourdeur du dos du bénéficiaire et enchaînement personnalisé fluide, praticien et bénéficiaire clairement présents ; plan secondaire, geste professionnel sur la zone dorsale ; arrière-plan, pavillon lacustre ouvert au bord d’une eau noire, plateforme asymétrique, toiture flottante légère et écran minéral latéral. Paysage, eau et ciel visibles autour de la prestation. LIGNES DE FUITE : diagonales douces reliant naturellement les étapes et guidant le regard. ÉQUILIBRE DES MASSES : soin, personnes, geste et matériel 70 % de la narration ; décor artistique 30 % maximum, toujours secondaire. MOUVEMENT : du geste métier vers la résolution en profondeur. LUMIÈRE : la pierre architecturale et la roche naturelle se répondent sous une lumière dorée latérale ; léger contre-jour doré secondaire. CAMÉRA : focale 35 mm ; distance plan moyen éditorial permettant de lire tous les plans ; hauteur naturelle du geste ; angle trois-quarts naturel ; profondeur de champ modérée afin de reconnaître toutes les étapes. DÉTAILS : élevé et anatomiquement cohérent. MATIÈRES ET TEXTURES : pierre architecturale, roche naturelle, obsidienne, or satiné. HIÉRARCHIE : premier regard, tension et lourdeur du dos ; deuxième regard, geste professionnel sur la zone dorsale ; troisième regard, Fabien, praticien masculin adulte. PALETTE : noir profond et or métallique noble satiné, jamais orange, ambre, cuivre ou jaune vif, ni beige. CONTRASTE : contraste noir et or affirmé, détails corporels et matériels toujours visibles. ZONE NÉGATIVE POUR SHARP : 30 % inférieurs du cadre, zone éditoriale sûre entièrement calme, sans visage, mains actives ni lunettes PSiO®. Protéger absolument : visage, mains actives, geste professionnel, zone dorsale importante, lunettes PSiO®, ouverture architecturale. Reconnaissance métier : alternance de gestes enveloppants et ciblés. Matériel autorisé : table, drap noir, pierre architecturale, roche naturelle, obsidienne, marbre noir, écran minéral et relief sculpté lorsque l’univers les prévoit. EXCLUSIONS ABSOLUES : matériel médical inventé, scanner, écran médical, boîtier ou câble inventé, faux logo, texte généré, spa oriental générique, bambou, lotus, serviettes roulées, bougies, galets empilés façon zen, ambiance horrifique ou occulte, collage Canva, cases ou bordures, pierres chaudes de massage, galets décoratifs de spa, pierre de soin fictive. ÉLÉMENTS SOUMIS À ANTI-RÉPÉTITION, PAS INTERDITS : arcade, arche, portail, statue, architecture monumentale, cercle lumineux, faisceau, structure minérale, pavillon, jardin d’eau, constellation, sculpture. référence facultative, jamais copiée comme identité. SORTIE BRUTE OBLIGATOIRE : aucun texte, logo, signature, CTA, coordonnées, cadre, badge ou pictogramme.",
+    "buildJobInputPrompt": "PHOTOGRAPHIE BRUTE — photographie éditoriale premium photoréaliste, noir et or, jamais 3D ni illustration ; luxe silencieux, émotionnelle et publicitaire, jamais fond noir vide, spa générique, médicale ou Canva. GOLDEN TARGET STRUCTUREL : sujet compréhensible sans texte, émotion incarnée, affiche publicitaire premium. MINI-SUJET : tension et lourdeur dorsale. REGISTRES UTILISATEUR APPLIQUÉS : Fantastique, Cinématographie, Architecture. MANIFESTATION VISIBLE : posture fermée, main placée dans le dos et mouvement visiblement limité. TRANSFORMATION : poids architectural concentré près du dos, lumière dorée localisée sur la zone dorsale, puis espace et paysage fantastique qui s’ouvrent. RÔLES ET SOLUTION : enchaînement personnalisé fluide, praticien et bénéficiaire clairement présents. ARCHITECTURE NARRATIVE : masses architecturales exprimant le poids près du dos puis l’ouverture du paysage. FANTASTIQUE LIÉ AU THÈME : gravité visuellement allégée et paysage qui s’ouvre. LUMIÈRE LIÉE AU SUJET : lumière dorée localisée dans le dos puis élargie vers l’ouverture. TROIS PLANS UTILES : premier plan guide visuel sans obstacle ; plan principal, sujet, geste et lumière ; arrière-plan, monde et ouverture prolongeant le sens. COMPOSITION FUTURE : TEXT_MODE_EDITORIAL, texte en zone éditoriale Story 60–76 %, distincte du logo, logo prominent bas centré. ZONES PROTÉGÉES : visage, mains actives, geste professionnel, zone dorsale importante, lunettes PSiO®, ouverture architecturale. UNIVERS ARTISTIQUE SÉLECTIONNÉ : pavillon lacustre ouvert au bord d’une eau noire, plateforme asymétrique, toiture flottante légère et écran minéral latéral. Paysage, eau et ciel visibles autour de la prestation. FAMILLE D’UNIVERS : Jardin d’eau noir et or. LIEU : pavillon lacustre ouvert. TRAITEMENT CINÉMATOGRAPHIQUE : cadrage cinématographique asymétrique, soin prioritaire, paysage respirant autour des personnes. PROFONDEUR : profondeur cinématographique en trois plans. PHÉNOMÈNE FANTASTIQUE PÉRIPHÉRIQUE : reflet impossible ou brume périphérique discrète, jamais portail central ou objet occulte. MATIÈRES : pierre architecturale, roche naturelle, obsidienne, or satiné. LUMIÈRE NARRATIVE : la pierre architecturale et la roche naturelle se répondent sous une lumière dorée latérale. ANCRAGES RÉALISTES : geste métier clairement visible, personnes et rôles lisibles, matériel réel fidèle. AMPLIFICATEURS SYMBOLIQUES : reflet impossible ou brume périphérique discrète, jamais portail central ou objet occulte, empreinte SDZ périphérique discrète. RAISON DE DIFFÉRENCIATION : pavillon lacustre ouvert, geste en diagonale et profondeur progressive ; architecture, lumière et phénomène différents des créations récentes. La prestation reste réaliste, professionnelle et crédible. L’univers peut transfigurer ou dépasser visuellement le cabinet réel afin de créer une affiche cinématographique, architecturale ou fantastique, sans devenir un spa générique, une clinique ou un décor sans soin. OBJECTIF MARKETING : Faire réserver. IDÉE CENTRALE : tension et lourdeur dorsale. ÉMOTION : confiance, apaisement premium. SUJETS : principal, tension et sensation de lourdeur du dos du bénéficiaire ; secondaire, geste professionnel sur la zone dorsale ; troisième regard, Fabien, praticien masculin adulte. ACTION : enchaînement personnalisé fluide, praticien et bénéficiaire clairement présents. IDENTITÉS : 2 personne(s) unique(s). PRATICIEN : Le praticien est obligatoirement un homme adulte, Fabien. Aucune praticienne, aucune femme dans le rôle du praticien. Le bénéficiaire peut être une femme, mais les rôles restent parfaitement identifiables.   MISE EN SCÈNE : premier plan, guide visuel sans obstacle ; plan principal, tension et sensation de lourdeur du dos du bénéficiaire et enchaînement personnalisé fluide, praticien et bénéficiaire clairement présents ; plan secondaire, geste professionnel sur la zone dorsale ; arrière-plan, pavillon lacustre ouvert au bord d’une eau noire, plateforme asymétrique, toiture flottante légère et écran minéral latéral. Paysage, eau et ciel visibles autour de la prestation. LIGNES DE FUITE : diagonales douces reliant naturellement les étapes et guidant le regard. ÉQUILIBRE DES MASSES : soin, personnes, geste et matériel 70 % de la narration ; décor artistique 30 % maximum, toujours secondaire. MOUVEMENT : du geste métier vers la résolution en profondeur. LUMIÈRE : la pierre architecturale et la roche naturelle se répondent sous une lumière dorée latérale ; léger contre-jour doré secondaire. CAMÉRA : focale 35 mm ; distance plan moyen éditorial permettant de lire tous les plans ; hauteur naturelle du geste ; angle trois-quarts naturel ; profondeur de champ modérée afin de reconnaître toutes les étapes. DÉTAILS : élevé et anatomiquement cohérent. MATIÈRES ET TEXTURES : pierre architecturale, roche naturelle, obsidienne, or satiné. HIÉRARCHIE : premier regard, tension et lourdeur du dos ; deuxième regard, geste professionnel sur la zone dorsale ; troisième regard, Fabien, praticien masculin adulte. PALETTE : noir profond et or métallique noble satiné, jamais orange, ambre, cuivre ou jaune vif, ni beige. CONTRASTE : contraste noir et or affirmé, détails corporels et matériels toujours visibles. ZONE NÉGATIVE POUR SHARP : 30 % inférieurs du cadre, zone éditoriale sûre entièrement calme, sans visage, mains actives ni lunettes PSiO®. Protéger absolument : visage, mains actives, geste professionnel, zone dorsale importante, lunettes PSiO®, ouverture architecturale. Reconnaissance métier : alternance de gestes enveloppants et ciblés. Matériel autorisé : table, drap noir, pierre architecturale, roche naturelle, obsidienne, marbre noir, écran minéral et relief sculpté lorsque l’univers les prévoit. EXCLUSIONS ABSOLUES : matériel médical inventé, scanner, écran médical, boîtier ou câble inventé, faux logo, texte généré, spa oriental générique, bambou, lotus, serviettes roulées, bougies, galets empilés façon zen, ambiance horrifique ou occulte, collage Canva, cases ou bordures, pierres chaudes de massage, galets décoratifs de spa, pierre de soin fictive. ÉLÉMENTS SOUMIS À ANTI-RÉPÉTITION, PAS INTERDITS : arcade, arche, portail, statue, architecture monumentale, cercle lumineux, faisceau, structure minérale, pavillon, jardin d’eau, constellation, sculpture. référence facultative, jamais copiée comme identité. SORTIE BRUTE OBLIGATOIRE : aucun texte, logo, signature, CTA, coordonnées, cadre, badge ou pictogramme.",
+    "promptEquality": true
+  },
+  "imageCallsExecuted": 0
+}
