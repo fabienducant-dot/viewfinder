@@ -1,0 +1,444 @@
+{
+  "generatedAt": "2026-08-13T18:46:39.396Z",
+  "generationMode": "préparation gratuite — aucun appel Images exécuté",
+  "scenario": {
+    "service": "Tous sujets",
+    "subject": "Venez découvrir un havre de paix au 11 cour Dupas, 59590 à RAISMES, un voyage sensoriel depuis 2019",
+    "platform": "Instagram",
+    "textChoice": "Automatique recommandé",
+    "requestedMarketingObjective": "Promouvoir une prestation"
+  },
+  "interpretation": {
+    "subjectIntent": "Présenter La Santé des Zèbres et donner envie de découvrir le lieu",
+    "communicationType": "institutional",
+    "factualElements": {
+      "addresses": [
+        "11 cour Dupas, 59590 Raismes"
+      ],
+      "dates": [
+        "depuis 2019"
+      ],
+      "postalCodes": [
+        "59590"
+      ],
+      "userProvided": [
+        "11 cour Dupas, 59590 Raismes",
+        "depuis 2019"
+      ],
+      "official": {
+        "brand": "La Santé des Zèbres",
+        "address": "11 cour Dupas, 59590 Raismes"
+      },
+      "contradictions": []
+    },
+    "emotionalIdea": "Venez découvrir un lieu intime et accueillant, un univers immersif et sensible depuis 2019",
+    "concreteVisualSubject": "une interprétation éditoriale de l’univers du cabinet SDZ, une perspective accueillante, des détails architecturaux noirs et dorés et une atmosphère incarnée",
+    "visualAction": "le regard progresse depuis un détail de matière vers un espace ouvert et accueillant",
+    "environment": "architecture noire texturée et or noble, actuelle, accueillante et habitée",
+    "locationReferenceUsed": false,
+    "locationFidelityMode": "inspired",
+    "titleStrategy": {
+      "source": "intention interprétée",
+      "excludeAddresses": true,
+      "preserveSemanticGroups": true,
+      "title": "DÉCOUVRIR L’UNIVERS SDZ"
+    },
+    "platformCopyStrategy": {
+      "hook": "Une atmosphère se découvre d’abord dans les détails.",
+      "cta": "Découvrez l’univers de La Santé des Zèbres.",
+      "hashtags": [
+        "#LaSanteDesZebres",
+        "#Raismes",
+        "#ProcheValenciennes"
+      ]
+    }
+  },
+  "effectiveMarketingObjective": "Présenter La Santé des Zèbres et donner envie de découvrir le lieu",
+  "artSelection": {
+    "artWorldFamily": "Cabinet cinématographique intime",
+    "locationFamily": "cabinet premium intime",
+    "architectureDescription": "cabinet contemporain intime aux volumes noirs texturés, ouvert par une perspective latérale",
+    "cinematicTreatment": "mise en scène éditoriale proche des détails visuels",
+    "fantasticPhenomenon": "lueur périphérique très discrète dans les matières",
+    "dominantMaterials": [
+      "velours noir",
+      "obsidienne",
+      "or satiné"
+    ],
+    "lightingNarrative": "lumière latérale douce et contre-jour doré",
+    "spatialDepth": "trois plans intimes et lisibles",
+    "artWorld": "Cabinet cinématographique intime",
+    "narrativeVariant": "détails visuels en diagonale et profondeur progressive",
+    "architectureType": "cabinet contemporain intime aux volumes noirs texturés, ouvert par une perspective latérale",
+    "primarySymbol": "lueur périphérique très discrète dans les matières",
+    "secondarySymbol": "empreinte SDZ périphérique discrète",
+    "lightType": "lumière latérale douce et contre-jour doré",
+    "composition": "mise en scène éditoriale proche des détails visuels",
+    "realityAnchors": [
+      "sujet concret lisible",
+      "échelle intime cohérente",
+      "identité du lieu suggérée honnêtement"
+    ],
+    "symbolicAmplifiers": [
+      "lueur périphérique très discrète dans les matières",
+      "empreinte SDZ périphérique discrète"
+    ],
+    "recentHistoryExclusions": [],
+    "differentiationReason": "cabinet premium intime, découverte intime et profondeur maîtrisée ; lumière et atmosphère différentes des créations récentes",
+    "reasonForDifference": "cabinet premium intime, découverte intime et profondeur maîtrisée ; lumière et atmosphère différentes des créations récentes",
+    "absoluteExclusions": [
+      "matériel médical inventé",
+      "scanner",
+      "écran médical",
+      "boîtier ou câble inventé",
+      "faux logo",
+      "texte généré",
+      "spa oriental générique",
+      "bambou",
+      "lotus",
+      "serviettes roulées",
+      "bougies",
+      "galets empilés façon zen",
+      "ambiance horrifique ou occulte",
+      "collage Canva",
+      "cases ou bordures"
+    ],
+    "antiRepetitionElements": [
+      "arcade",
+      "arche",
+      "portail",
+      "statue",
+      "architecture monumentale",
+      "cercle lumineux",
+      "faisceau",
+      "structure minérale",
+      "pavillon",
+      "jardin d’eau",
+      "constellation",
+      "sculpture"
+    ],
+    "environmentScale": "intimate",
+    "referenceFamily": "intime",
+    "archetypeNarratif": "decouverte_intime",
+    "dominantEmotion": "intimité, découverte, accueil et caractère singulier"
+  },
+  "posterStrategy": {
+    "communicationGoal": "Présenter La Santé des Zèbres et donner envie de découvrir le lieu",
+    "coreTheme": "Venez découvrir un lieu intime et accueillant, un univers immersif et sensible depuis 2019",
+    "instantVisualMeaning": "une interprétation éditoriale de l’univers du cabinet SDZ, une perspective accueillante, des détails architecturaux noirs et dorés et une atmosphère incarnée",
+    "subjectManifestation": "une interprétation éditoriale de l’univers du cabinet SDZ, une perspective accueillante, des détails architecturaux noirs et dorés et une atmosphère incarnée",
+    "careOrSolutionManifestation": "le regard progresse depuis un détail de matière vers un espace ouvert et accueillant",
+    "transformationNarrative": "le regard progresse depuis un détail de matière vers un espace ouvert et accueillant; la lumière et la profondeur accompagnent naturellement le message",
+    "emotionalJourney": "état initial visible → évolution crédible → ouverture",
+    "mainSubject": "une interprétation éditoriale de l’univers du cabinet SDZ, une perspective accueillante, des détails architecturaux noirs et dorés et une atmosphère incarnée",
+    "secondarySubject": "détails architecturaux et atmosphère SDZ",
+    "tertiarySubject": "transformation dans cabinet premium intime",
+    "visualHierarchy": [
+      "manifestation principale : une interprétation éditoriale de l’univers du cabinet SDZ, une perspective accueillante, des détails architecturaux noirs et dorés et une atmosphère incarnée",
+      "action visuelle : le regard progresse depuis un détail de matière vers un espace ouvert et accueillant",
+      "transformation dans cabinet premium intime"
+    ],
+    "environmentRole": "architecture noire texturée et or noble, actuelle, accueillante et habitée; cabinet premium intime prolonge visuellement l’intention",
+    "artWorldFamily": "Cabinet cinématographique intime",
+    "locationFamily": "cabinet premium intime",
+    "architecturalStory": "cabinet contemporain intime aux volumes noirs texturés, ouvert par une perspective latérale traduit spatialement le regard progresse depuis un détail de matière vers un espace ouvert et accueillant; la lumière et la profondeur accompagnent naturellement le message",
+    "fantasticStory": "lueur périphérique très discrète dans les matières, relié à l’évolution du sujet",
+    "lightingStory": "lumière latérale douce et contre-jour doré, concentrée sur une interprétation éditoriale de l’univers du cabinet SDZ, une perspective accueillante, des détails architecturaux noirs et dorés et une atmosphère incarnée puis accompagnant la transformation",
+    "compositionType": "Éditoriale",
+    "textMode": "TEXT_MODE_EDITORIAL",
+    "title": "DÉCOUVRIR L’UNIVERS SDZ",
+    "subtitle": "UNE ATMOSPHÈRE SINGULIÈRE",
+    "supportingLine": "",
+    "brandLine": "",
+    "titleLines": [
+      "DÉCOUVRIR L’UNIVERS",
+      "SDZ"
+    ],
+    "subtitleLines": [
+      "UNE ATMOSPHÈRE SINGULIÈRE"
+    ],
+    "titleLineTarget": "1 à 3",
+    "subtitleLineTarget": "1 à 2",
+    "textZones": [
+      "zone éditoriale calculée pour le format, distincte du logo"
+    ],
+    "textSafeArea": {
+      "top": 0.6,
+      "bottom": 0.76,
+      "left": 0.06,
+      "right": 0.94
+    },
+    "logoSafeArea": {
+      "top": 0.77,
+      "bottom": 0.92,
+      "left": 0.2,
+      "right": 0.8
+    },
+    "logoPlacement": "zone dédiée selon le format",
+    "logoScale": "prominent",
+    "protectedSceneAreas": [
+      "élément narratif principal dérivé du sujet",
+      "identité SDZ",
+      "ouverture architecturale"
+    ],
+    "platformAdaptationRules": {
+      "Story": "verticale immersive, zones texte et logo distinctes",
+      "Facebook": "4:5 distinct",
+      "Instagram": "4:5 compact",
+      "Instagram Square": "recomposition carrée dédiée",
+      "Google Business": "sans texte par défaut"
+    },
+    "differentiationReason": "cabinet premium intime, découverte intime et profondeur maîtrisée ; lumière et atmosphère différentes des créations récentes",
+    "metrics": {
+      "titleWordCount": 3,
+      "titleLineCount": 2,
+      "subtitleWordCount": 3,
+      "subtitleLineCount": 1,
+      "textDensityRatio": 0.18461538461538463,
+      "orphanWordDetected": false,
+      "semanticBreakQuality": 9,
+      "mobileReadabilityScore": 9
+    }
+  },
+  "photoBrief": {
+    "kind": "PhotoBrief",
+    "service": "Tous sujets",
+    "platform": "Instagram",
+    "generic": true,
+    "communicationType": "institutional",
+    "marketingObjective": "Présenter La Santé des Zèbres et donner envie de découvrir le lieu",
+    "centralIdea": "Venez découvrir un lieu intime et accueillant, un univers immersif et sensible depuis 2019",
+    "primarySubject": "une interprétation éditoriale de l’univers du cabinet SDZ, une perspective accueillante, des détails architecturaux noirs et dorés et une atmosphère incarnée",
+    "secondarySubject": "détails architecturaux et atmosphère SDZ",
+    "primaryAction": "le regard progresse depuis un détail de matière vers un espace ouvert et accueillant",
+    "foreground": "détail architectural ou matière guidant le regard",
+    "mainPlane": "une interprétation éditoriale de l’univers du cabinet SDZ, une perspective accueillante, des détails architecturaux noirs et dorés et une atmosphère incarnée",
+    "secondaryPlane": "perspective accueillante",
+    "background": "cabinet contemporain intime aux volumes noirs texturés, ouvert par une perspective latérale",
+    "depth": "trois plans intimes et lisibles",
+    "keyLight": "lumière latérale douce et contre-jour doré",
+    "negativeSpace": "zone calme précise opposée aux éléments narratifs protégés",
+    "protectedZones": [
+      "élément narratif principal dérivé du sujet",
+      "identité SDZ",
+      "ouverture architecturale"
+    ],
+    "firstLook": "une interprétation éditoriale de l’univers du cabinet SDZ, une perspective accueillante, des détails architecturaux noirs et dorés et une atmosphère incarnée",
+    "secondLook": "le regard progresse depuis un détail de matière vers un espace ouvert et accueillant",
+    "thirdLook": "identité SDZ et environnement",
+    "colorDominant": "noir profond et or métallique noble satiné, jamais orange, ambre, cuivre ou jaune vif, ni beige",
+    "contrast": "contraste noir et or maîtrisé, détails du lieu toujours lisibles",
+    "materialsTextures": "velours noir, obsidienne, or satiné",
+    "photoStyle": "photographie éditoriale premium photoréaliste, noir et or, jamais 3D ni illustration ; luxe silencieux, émotionnelle et publicitaire, jamais fond noir vide, spa générique, médicale ou Canva",
+    "presenceSoin": "none",
+    "locationReferenceUsed": false,
+    "locationFidelityMode": "inspired",
+    "prompt": "PHOTOGRAPHIE BRUTE — photographie éditoriale premium photoréaliste, noir et or, jamais 3D ni illustration ; luxe silencieux, émotionnelle et publicitaire, jamais fond noir vide, spa générique, médicale ou Canva. FIDÉLITÉ DU LIEU : INTERPRÉTATION INSPIRÉE : aucune référence photographique officielle du lieu n’est utilisée ; ne pas prétendre reproduire fidèlement l’espace réel. INTENTION : Présenter La Santé des Zèbres et donner envie de découvrir le lieu. SUJET CONCRET : une interprétation éditoriale de l’univers du cabinet SDZ, une perspective accueillante, des détails architecturaux noirs et dorés et une atmosphère incarnée. ACTION VISUELLE : le regard progresse depuis un détail de matière vers un espace ouvert et accueillant. ENVIRONNEMENT : architecture noire texturée et or noble, actuelle, accueillante et habitée. UNIVERS ARTISTIQUE : cabinet contemporain intime aux volumes noirs texturés, ouvert par une perspective latérale. FAMILLE : Cabinet cinématographique intime. LIEU : cabinet premium intime. PROFONDEUR : trois plans intimes et lisibles. MATIÈRES : velours noir, obsidienne, or satiné. LUMIÈRE : lumière latérale douce et contre-jour doré. PHÉNOMÈNE PÉRIPHÉRIQUE : lueur périphérique très discrète dans les matières. COMPOSITION : premier plan, détail architectural ou matière guidant le regard ; plan principal, une interprétation éditoriale de l’univers du cabinet SDZ, une perspective accueillante, des détails architecturaux noirs et dorés et une atmosphère incarnée ; arrière-plan, perspective accueillante et profondeur. La présence humaine reste facultative et sert uniquement l’atmosphère. Réserver zone éditoriale calculée pour le format, distincte du logo et la zone de marque sans masquer le sujet. Photographie éditoriale premium, actuelle, incarnée, aux noirs détaillés et à l’or noble. SORTIE BRUTE : aucun texte, logo, signature, CTA, coordonnées, cadre, badge ou pictogramme."
+  },
+  "legacyProjection": {
+    "sceneFamily": "cabinet premium intime",
+    "familleUnivers": "Cabinet cinématographique intime",
+    "decor": "cabinet contemporain intime aux volumes noirs texturés, ouvert par une perspective latérale",
+    "architecture": "cabinet contemporain intime aux volumes noirs texturés, ouvert par une perspective latérale",
+    "environmentRole": "architecture noire texturée et or noble, actuelle, accueillante et habitée; cabinet premium intime prolonge visuellement l’intention",
+    "lumiere": "lumière latérale douce et contre-jour doré, concentrée sur une interprétation éditoriale de l’univers du cabinet SDZ, une perspective accueillante, des détails architecturaux noirs et dorés et une atmosphère incarnée puis accompagnant la transformation",
+    "matieres": "velours noir, obsidienne, or satiné",
+    "phenomeneFantastique": "lueur périphérique très discrète dans les matières",
+    "ideeVisuelle": "une interprétation éditoriale de l’univers du cabinet SDZ, une perspective accueillante, des détails architecturaux noirs et dorés et une atmosphère incarnée ; architecture noire texturée et or noble, actuelle, accueillante et habitée; cabinet premium intime prolonge visuellement l’intention",
+    "sujetPrincipal": "une interprétation éditoriale de l’univers du cabinet SDZ, une perspective accueillante, des détails architecturaux noirs et dorés et une atmosphère incarnée",
+    "sujetSecondaire": "détails architecturaux et atmosphère SDZ",
+    "action": "le regard progresse depuis un détail de matière vers un espace ouvert et accueillant",
+    "pointDeTransformation": "le regard progresse depuis un détail de matière vers un espace ouvert et accueillant; la lumière et la profondeur accompagnent naturellement le message",
+    "texteImage": "DÉCOUVRIR L’UNIVERS SDZ | UNE ATMOSPHÈRE SINGULIÈRE",
+    "zoneTexte": "zone éditoriale calculée pour le format, distincte du logo",
+    "zoneLogo": "{\"top\":0.77,\"bottom\":0.92,\"left\":0.2,\"right\":0.8}",
+    "messageCentral": "Venez découvrir un lieu intime et accueillant, un univers immersif et sensible depuis 2019",
+    "objectifMarketing": "Présenter La Santé des Zèbres et donner envie de découvrir le lieu",
+    "raisonDifferenceAvecHistorique": "cabinet premium intime, découverte intime et profondeur maîtrisée ; lumière et atmosphère différentes des créations récentes",
+    "caracteristiquePrestationVisible": "identité du lieu et atmosphère SDZ",
+    "presenceSoin": "aucune",
+    "archetypeNarratif": "decouverte_intime",
+    "referenceFamily": "intime",
+    "locationReferenceUsed": false,
+    "locationFidelityMode": "inspired",
+    "cadrage": "perspective architecturale accueillante, détails du lieu et profondeur lisible",
+    "compositionInterdite": [
+      "matériel médical inventé",
+      "scanner",
+      "écran médical",
+      "boîtier ou câble inventé",
+      "faux logo",
+      "texte généré",
+      "spa oriental générique",
+      "bambou",
+      "lotus",
+      "serviettes roulées",
+      "bougies",
+      "galets empilés façon zen",
+      "ambiance horrifique ou occulte",
+      "collage Canva",
+      "cases ou bordures"
+    ],
+    "negativePrompt": "matériel médical inventé, scanner, écran médical, boîtier ou câble inventé, faux logo, texte généré, spa oriental générique, bambou, lotus, serviettes roulées, bougies, galets empilés façon zen, ambiance horrifique ou occulte, collage Canva, cases ou bordures",
+    "selectedAntiRepetitionElements": []
+  },
+  "postCopyStrategy": {
+    "platform": "Instagram",
+    "communicationGoal": "Présenter La Santé des Zèbres et donner envie de découvrir le lieu",
+    "audienceIntent": "Présenter La Santé des Zèbres et donner envie de découvrir le lieu",
+    "emotionalHook": "Une atmosphère se découvre d’abord dans les détails.",
+    "narrativeAngle": "institutional",
+    "sensoryVocabulary": [
+      "présence",
+      "matière",
+      "perspective",
+      "lumière"
+    ],
+    "serviceExplanation": "La Santé des Zèbres et son univers à Raismes",
+    "validatedBenefits": [],
+    "localSeoIntent": "La Santé des Zèbres à Raismes, proche Valenciennes",
+    "primaryKeyword": "La Santé des Zèbres à Raismes",
+    "secondaryKeywords": [
+      "Raismes",
+      "proche Valenciennes",
+      "univers SDZ"
+    ],
+    "locationSignals": [
+      "Raismes, proche Valenciennes"
+    ],
+    "practicalInformation": [
+      "11 cour Dupas, 59590 Raismes",
+      "depuis 2019"
+    ],
+    "factualElements": {
+      "addresses": [
+        "11 cour Dupas, 59590 Raismes"
+      ],
+      "dates": [
+        "depuis 2019"
+      ],
+      "postalCodes": [
+        "59590"
+      ],
+      "userProvided": [
+        "11 cour Dupas, 59590 Raismes",
+        "depuis 2019"
+      ],
+      "official": {
+        "brand": "La Santé des Zèbres",
+        "address": "11 cour Dupas, 59590 Raismes"
+      },
+      "contradictions": []
+    },
+    "cta": "Découvrez l’univers de La Santé des Zèbres.",
+    "hashtagStrategy": {
+      "max": 5,
+      "items": [
+        "#LaSanteDesZebres",
+        "#Raismes",
+        "#ProcheValenciennes"
+      ]
+    },
+    "targetLength": "80 à 150 mots",
+    "paragraphRhythm": "paragraphes courts et aérés",
+    "emojiPolicy": "rare et utile",
+    "prohibitedClaims": [
+      "fait inventé",
+      "prestation non demandée",
+      "tarif ou durée non validés"
+    ],
+    "differentiationReason": "Angle institutional, différent des 0 textes récents",
+    "controls": {
+      "keywordStuffingRisk": 1,
+      "genericOpeningRisk": 1,
+      "platformMismatchRisk": 1,
+      "medicalClaimRisk": 0,
+      "duplicateCopyRisk": 1,
+      "localSeoPresence": true,
+      "ctaClarity": 9,
+      "emotionalImpact": 8,
+      "readabilityScore": 9,
+      "unsupportedFactRisk": 1,
+      "exactServiceNamePreserved": true,
+      "outdatedLinkRisk": 0,
+      "factualContradictions": []
+    }
+  },
+  "campaignCreativeDirection": {
+    "service": "Tous sujets",
+    "centralIdea": "Venez découvrir un lieu intime et accueillant, un univers immersif et sensible depuis 2019",
+    "artWorld": "Cabinet cinématographique intime",
+    "locationFamily": "cabinet premium intime",
+    "palette": "noir profond et or noble",
+    "lighting": "lumière latérale douce et contre-jour doré, concentrée sur une interprétation éditoriale de l’univers du cabinet SDZ, une perspective accueillante, des détails architecturaux noirs et dorés et une atmosphère incarnée puis accompagnant la transformation",
+    "visualVocabulary": [
+      "cabinet contemporain intime aux volumes noirs texturés, ouvert par une perspective latérale traduit spatialement le regard progresse depuis un détail de matière vers un espace ouvert et accueillant; la lumière et la profondeur accompagnent naturellement le message",
+      "lueur périphérique très discrète dans les matières, relié à l’évolution du sujet"
+    ],
+    "centralMessage": "DÉCOUVRIR L’UNIVERS SDZ",
+    "emotionalArc": "état initial visible → évolution crédible → ouverture",
+    "seoAngle": "La Santé des Zèbres à Raismes, proche Valenciennes",
+    "primaryKeywords": [
+      "La Santé des Zèbres à Raismes"
+    ],
+    "principalCta": "Découvrez l’univers de La Santé des Zèbres.",
+    "consistencyRules": [
+      "même monde",
+      "même promesse autorisée",
+      "informations métier identiques",
+      "layouts distincts"
+    ]
+  },
+  "consistencyReport": {
+    "heuristic": true,
+    "notice": "Estimations automatiques, pas des certitudes.",
+    "checks": {
+      "subjectServiceConsistency": true,
+      "serviceVisuallyRecognizable": true,
+      "requestedFocusRespected": true,
+      "rolesAndPeopleConsistent": true,
+      "artDirectionConsistency": true,
+      "uniqueArchitecture": true,
+      "transformationDistinctFromInitialState": true,
+      "uniqueV3Text": true,
+      "claimsAllowed": true,
+      "brandTextRedundancyRisk": false,
+      "noCareResidualWhenCareAbsent": true,
+      "environmentScaleConsistency": true,
+      "addressGrammarValid": true,
+      "locationFidelityDeclared": true,
+      "layoutCollisionRisk": false,
+      "protectedAreaOverlapRisk": false,
+      "mobileReadability": 9,
+      "formatSpecificRecomposition": true,
+      "platformPayloadConsistency": true,
+      "campaignConsistency": true,
+      "promptInspectorMatchesImages": true,
+      "imageGenerationCallCountPlanned": 1
+    },
+    "contradictions": [],
+    "claimIssues": [],
+    "blockingReasons": [],
+    "ready": true,
+    "action": "valider"
+  },
+  "promptParity": {
+    "inspector": "PHOTOGRAPHIE BRUTE — photographie éditoriale premium photoréaliste, noir et or, jamais 3D ni illustration ; luxe silencieux, émotionnelle et publicitaire, jamais fond noir vide, spa générique, médicale ou Canva. FIDÉLITÉ DU LIEU : INTERPRÉTATION INSPIRÉE : aucune référence photographique officielle du lieu n’est utilisée ; ne pas prétendre reproduire fidèlement l’espace réel. INTENTION : Présenter La Santé des Zèbres et donner envie de découvrir le lieu. SUJET CONCRET : une interprétation éditoriale de l’univers du cabinet SDZ, une perspective accueillante, des détails architecturaux noirs et dorés et une atmosphère incarnée. ACTION VISUELLE : le regard progresse depuis un détail de matière vers un espace ouvert et accueillant. ENVIRONNEMENT : architecture noire texturée et or noble, actuelle, accueillante et habitée. UNIVERS ARTISTIQUE : cabinet contemporain intime aux volumes noirs texturés, ouvert par une perspective latérale. FAMILLE : Cabinet cinématographique intime. LIEU : cabinet premium intime. PROFONDEUR : trois plans intimes et lisibles. MATIÈRES : velours noir, obsidienne, or satiné. LUMIÈRE : lumière latérale douce et contre-jour doré. PHÉNOMÈNE PÉRIPHÉRIQUE : lueur périphérique très discrète dans les matières. COMPOSITION : premier plan, détail architectural ou matière guidant le regard ; plan principal, une interprétation éditoriale de l’univers du cabinet SDZ, une perspective accueillante, des détails architecturaux noirs et dorés et une atmosphère incarnée ; arrière-plan, perspective accueillante et profondeur. La présence humaine reste facultative et sert uniquement l’atmosphère. Réserver zone éditoriale calculée pour le format, distincte du logo et la zone de marque sans masquer le sujet. Photographie éditoriale premium, actuelle, incarnée, aux noirs détaillés et à l’or noble. SORTIE BRUTE : aucun texte, logo, signature, CTA, coordonnées, cadre, badge ou pictogramme.",
+    "plan": "PHOTOGRAPHIE BRUTE — photographie éditoriale premium photoréaliste, noir et or, jamais 3D ni illustration ; luxe silencieux, émotionnelle et publicitaire, jamais fond noir vide, spa générique, médicale ou Canva. FIDÉLITÉ DU LIEU : INTERPRÉTATION INSPIRÉE : aucune référence photographique officielle du lieu n’est utilisée ; ne pas prétendre reproduire fidèlement l’espace réel. INTENTION : Présenter La Santé des Zèbres et donner envie de découvrir le lieu. SUJET CONCRET : une interprétation éditoriale de l’univers du cabinet SDZ, une perspective accueillante, des détails architecturaux noirs et dorés et une atmosphère incarnée. ACTION VISUELLE : le regard progresse depuis un détail de matière vers un espace ouvert et accueillant. ENVIRONNEMENT : architecture noire texturée et or noble, actuelle, accueillante et habitée. UNIVERS ARTISTIQUE : cabinet contemporain intime aux volumes noirs texturés, ouvert par une perspective latérale. FAMILLE : Cabinet cinématographique intime. LIEU : cabinet premium intime. PROFONDEUR : trois plans intimes et lisibles. MATIÈRES : velours noir, obsidienne, or satiné. LUMIÈRE : lumière latérale douce et contre-jour doré. PHÉNOMÈNE PÉRIPHÉRIQUE : lueur périphérique très discrète dans les matières. COMPOSITION : premier plan, détail architectural ou matière guidant le regard ; plan principal, une interprétation éditoriale de l’univers du cabinet SDZ, une perspective accueillante, des détails architecturaux noirs et dorés et une atmosphère incarnée ; arrière-plan, perspective accueillante et profondeur. La présence humaine reste facultative et sert uniquement l’atmosphère. Réserver zone éditoriale calculée pour le format, distincte du logo et la zone de marque sans masquer le sujet. Photographie éditoriale premium, actuelle, incarnée, aux noirs détaillés et à l’or noble. SORTIE BRUTE : aucun texte, logo, signature, CTA, coordonnées, cadre, badge ou pictogramme.",
+    "job": "PHOTOGRAPHIE BRUTE — photographie éditoriale premium photoréaliste, noir et or, jamais 3D ni illustration ; luxe silencieux, émotionnelle et publicitaire, jamais fond noir vide, spa générique, médicale ou Canva. FIDÉLITÉ DU LIEU : INTERPRÉTATION INSPIRÉE : aucune référence photographique officielle du lieu n’est utilisée ; ne pas prétendre reproduire fidèlement l’espace réel. INTENTION : Présenter La Santé des Zèbres et donner envie de découvrir le lieu. SUJET CONCRET : une interprétation éditoriale de l’univers du cabinet SDZ, une perspective accueillante, des détails architecturaux noirs et dorés et une atmosphère incarnée. ACTION VISUELLE : le regard progresse depuis un détail de matière vers un espace ouvert et accueillant. ENVIRONNEMENT : architecture noire texturée et or noble, actuelle, accueillante et habitée. UNIVERS ARTISTIQUE : cabinet contemporain intime aux volumes noirs texturés, ouvert par une perspective latérale. FAMILLE : Cabinet cinématographique intime. LIEU : cabinet premium intime. PROFONDEUR : trois plans intimes et lisibles. MATIÈRES : velours noir, obsidienne, or satiné. LUMIÈRE : lumière latérale douce et contre-jour doré. PHÉNOMÈNE PÉRIPHÉRIQUE : lueur périphérique très discrète dans les matières. COMPOSITION : premier plan, détail architectural ou matière guidant le regard ; plan principal, une interprétation éditoriale de l’univers du cabinet SDZ, une perspective accueillante, des détails architecturaux noirs et dorés et une atmosphère incarnée ; arrière-plan, perspective accueillante et profondeur. La présence humaine reste facultative et sert uniquement l’atmosphère. Réserver zone éditoriale calculée pour le format, distincte du logo et la zone de marque sans masquer le sujet. Photographie éditoriale premium, actuelle, incarnée, aux noirs détaillés et à l’or noble. SORTIE BRUTE : aucun texte, logo, signature, CTA, coordonnées, cadre, badge ou pictogramme.",
+    "identical": true
+  },
+  "makePayloadProof": {
+    "visibleText": "Texte institutionnel validé",
+    "validatedText": "Texte institutionnel validé",
+    "makeText": "Texte institutionnel validé",
+    "identical": true
+  },
+  "costSafety": {
+    "costMode": "test",
+    "quality": "low",
+    "n": 1,
+    "plannedImageCalls": 1,
+    "executedImageCalls": 0
+  }
+}
