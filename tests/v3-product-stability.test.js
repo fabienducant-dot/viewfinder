@@ -21,6 +21,34 @@ test("Tous sujets transforme une phrase institutionnelle en décision éditorial
   assert.equal(plan.consistencyReport.ready,true);
 });
 
+test("Tous sujets institutionnel produit une scène de cabinet concrète sans injonction métier contradictoire",()=>{
+  const plan=planV3({service:"Tous sujets",platform:"Instagram",subject:institutionalSubject,textChoice:"automatic",costMode:"test",creativeSeed:"institutional-scene",artHistory:[{locationFamily:"cabinet premium intime"}]});
+  assert.equal(plan.artDirection.artistic.locationFamily,"cabinet premium intime");
+  assert.equal(plan.posterStrategy.mainSubject,"le cabinet SDZ vu depuis son seuil, avec une perspective intérieure intime et crédible");
+  assert.equal(plan.posterStrategy.careOrSolutionManifestation,"invitation visuelle à franchir le seuil et découvrir le lieu");
+  assert.match(plan.photoBrief.prompt,/aucune personne, aucun geste de soin et aucun matériel de prestation sauf demande explicite/i);
+  assert.doesNotMatch(plan.photoBrief.prompt,/geste métier clairement visible|personnes et rôles lisibles|matériel réel fidèle|La prestation reste|action explicitement suggérée|mini-sujet reste compréhensible|autour de la prestation|soin prioritaire|naturelle du geste|détails corporels et matériels/i);
+  assert.equal(plan.consistencyReport.checks.genericSceneConcrete,true);
+  assert.equal(plan.consistencyReport.checks.genericPromptUnambiguous,true);
+});
+
+test("les cinq familles Tous sujets restent concrètes et cohérentes avant tout appel Images",()=>{
+  const cases=[
+    ["institutional","Venez découvrir notre cabinet à Raismes, expertise depuis 2017."],
+    ["event","Journée portes ouvertes le 10 septembre pour découvrir le lieu."],
+    ["offer","Nouveau bon cadeau pour offrir une attention singulière."],
+    ["transformation","Retrouver de l’élan après une période de fatigue."],
+    ["editorial","La force tranquille du zèbre dans un monde pressé."],
+  ];
+  for(const [kind,subject] of cases){
+    const plan=planV3({service:"Tous sujets",platform:"Instagram",subject,textChoice:"automatic",costMode:"test",creativeSeed:`generic-${kind}`});
+    assert.equal(plan.subjectBrief.editorialKind,kind);
+    assert.equal(plan.consistencyReport.ready,true);
+    assert.equal(plan.consistencyReport.checks.genericSceneConcrete,true);
+    assert.equal(plan.consistencyReport.checks.genericPromptUnambiguous,true);
+  }
+});
+
 test("l'extracteur d'adresse sépare voie, code postal, commune et ancienneté",()=>{
   const facts=extractFacts(institutionalSubject);
   assert.equal(facts.address,"11 cour Dupas");
