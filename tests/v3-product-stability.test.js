@@ -27,7 +27,8 @@ test("Tous sujets institutionnel produit une scène de cabinet concrète sans in
   assert.equal(plan.posterStrategy.mainSubject,"le cabinet SDZ vu depuis son seuil, avec une perspective intérieure intime et crédible");
   assert.equal(plan.posterStrategy.careOrSolutionManifestation,"invitation visuelle à franchir le seuil et découvrir le lieu");
   assert.match(plan.photoBrief.prompt,/aucune personne, aucun geste de soin et aucun matériel de prestation sauf demande explicite/i);
-  assert.doesNotMatch(plan.photoBrief.prompt,/geste métier clairement visible|personnes et rôles lisibles|matériel réel fidèle|La prestation reste|action explicitement suggérée|mini-sujet reste compréhensible|autour de la prestation|soin prioritaire|naturelle du geste|détails corporels et matériels/i);
+  assert.doesNotMatch(plan.photoBrief.prompt,/geste métier clairement visible|personnes et rôles lisibles|matériel réel fidèle|La prestation reste|action explicitement suggérée|mini-sujet reste compréhensible|autour de la prestation|soin prioritaire|naturelle du geste|détails corporels et matériels|proche des gestes|interaction centrale/i);
+  assert.equal(plan.legacyProjection.caracteristiquePrestationVisible,"le cabinet et son atmosphère accueillante sont immédiatement reconnaissables");
   assert.equal(plan.consistencyReport.checks.genericSceneConcrete,true);
   assert.equal(plan.consistencyReport.checks.genericPromptUnambiguous,true);
 });

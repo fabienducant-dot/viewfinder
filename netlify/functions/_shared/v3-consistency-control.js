@@ -17,7 +17,7 @@ function buildResolvedConsistencyReport(args){
  if(!args.contract.generic)return base;
  const {subjectBrief,posterStrategy,photoBrief}=args;
  const prompt=normalize(photoBrief.prompt);
- const genericPromptUnambiguous=!/(geste metier clairement visible|personnes et roles lisibles|materiel reel fidele|la prestation reste|action explicitement suggeree|mini-sujet reste comprehensible|sujet, personnes ou objet derives exclusivement)/.test(prompt);
+ const genericPromptUnambiguous=!/(geste metier clairement visible|personnes et roles lisibles|materiel reel fidele|la prestation reste|action explicitement suggeree|mini-sujet reste comprehensible|sujet, personnes ou objet derives exclusivement|proche des gestes|interaction centrale)/.test(prompt);
  const required=[posterStrategy.mainSubject,posterStrategy.careOrSolutionManifestation,subjectBrief.officialRecognition];
  const genericSceneConcrete=required.every(value=>value&&prompt.includes(normalize(value)));
  const subjectServiceConsistency=subjectMeaningIsExplicit(subjectBrief,posterStrategy)&&genericSceneConcrete;
