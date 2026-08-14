@@ -95,13 +95,15 @@ test("un logo opaque sur fond noir est détouré avant composition", async () =>
 test("le contrôle final fait confiance au logo exact composé par le serveur et bloque encore l'OCR", () => {
   assert.match(index, /officialLogoConformity="exact"/);
   assert.match(index, /overlay\.rawOverlayDetected=overlay\.expectedTextExact!==true/);
-  assert.match(index, /3\.0\.0-art-direction-poster-engine/);
+  assert.match(index, /3\.1\.0-stable-publishing-pipeline/);
 });
 
 test("le lock-up serveur protège le sujet et sépare accroche, logo et signature", () => {
   const compositor = fs.readFileSync(path.join(root, "netlify/functions/_shared/brand-compositor.js"), "utf8");
-  assert.match(compositor, /\["Instagram","Facebook","Story"\]\.includes\(platform\)/);
-  assert.match(compositor, /const dividerY = headlineEnd/);
+  assert.match(compositor, /function fitTypography/);
+  assert.match(compositor, /textArea:/);
+  assert.match(compositor, /logoArea/);
+  assert.match(compositor, /Collision entre la zone de texte et la zone du logo/);
   assert.match(index, /const brandSafePercent = platform === "Story" \? 32 : 38/);
   assert.match(index, /réserve les \$\{brandSafePercent\}% inférieurs du cadre comme champ éditorial/);
   assert.match(index, /fixed\.zoneTexte="inférieure"/);

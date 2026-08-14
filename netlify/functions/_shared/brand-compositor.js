@@ -109,22 +109,32 @@ function measureVectorText(fontSet,text,fontSize,letterSpacing=0){
   return chars.reduce((sum,character)=>{const latin=fontSet.latin.charToGlyph(character);const font=latin.index===0&&character!=="\0"?fontSet.extended:fontSet.latin;const glyph=font.charToGlyph(character);return sum+(glyph.advanceWidth||font.unitsPerEm*.38)*fontSize/font.unitsPerEm;},0)+Math.max(0,chars.length-1)*letterSpacing;
 }
 function fitFontSize(fontSet,lines,preferred,minimum,safeWidth){let size=preferred;while(size>minimum&&lines.some(line=>measureVectorText(fontSet,line,size)>safeWidth))size--;return size;}
+function fitTypography({titleLines,subtitleLines,safeWidth,safeHeight,preferredTitle,preferredSubtitle,minimumTitle,minimumSubtitle}){
+  let titleSize=fitFontSize(DISPLAY_FONT,titleLines,preferredTitle,minimumTitle,safeWidth);
+  let subtitleSize=fitFontSize(TEXT_FONT,subtitleLines,preferredSubtitle,minimumSubtitle,safeWidth);
+  const usedHeight=()=>titleLines.length*titleSize*1.08+(subtitleLines.length?subtitleSize*.55+subtitleLines.length*subtitleSize*1.12:0);
+  while(usedHeight()>safeHeight&&(titleSize>minimumTitle||subtitleSize>minimumSubtitle)){
+    if(titleSize>minimumTitle)titleSize--;
+    if(subtitleSize>minimumSubtitle)subtitleSize--;
+  }
+  return {titleSize,subtitleSize,usedHeight:usedHeight()};
+}
 async function hasOpaqueLogoRectangle(buffer){const {data,info}=await sharp(buffer).ensureAlpha().raw().toBuffer({resolveWithObject:true});const inset=Math.max(0,Math.round(Math.min(info.width,info.height)*.02));return [[inset,inset],[info.width-1-inset,inset],[inset,info.height-1-inset],[info.width-1-inset,info.height-1-inset]].every(([x,y])=>{const o=(y*info.width+x)*info.channels;return data[o+3]>245&&Math.max(data[o],data[o+1],data[o+2])<=55;});}
 
-function layoutFor(width, height, platform, requestedZone, hasHeadline, selectedLayout){
+function layoutFor(width, height, platform, requestedZone, hasHeadline, selectedLayout, posterStrategy){
   const normalized=normalizePlatform(platform);
   const template=(selectedLayout&&selectedLayout.template)||PLATFORM_TEMPLATES[normalized];
   if(template){
     const spec=template.lockup;
     const margin=Math.max(Math.round(width*.06),Math.round(width*template.margins));
-    const story=normalized==="Story";
-    const x=Math.max(margin,Math.round(width*spec.x));
-    const y=story?Math.round(height*.60):Math.round(height*spec.y);
-    const boxWidth=Math.min(Math.round(width*spec.width),width-x-margin);
-    const textHeight=Math.round(height*(story?.16:(hasHeadline?.18:.04)));
-    const logoHeight=Math.round(height*(story?.10:(height>width?.12:.18)));
-    const textTop=y,textBottom=Math.min(height-margin,textTop+textHeight),logoTop=textBottom;
-    const result={x,y,width:boxWidth,height:textHeight,margin,portrait:height>width*1.35,landscape:width>height*1.35,template,align:spec.align,textArea:{top:textTop,bottom:textBottom},logoArea:{top:logoTop,bottom:Math.min(height-margin,logoTop+logoHeight)}};
+    const textSafe=posterStrategy?.textSafeArea;
+    const logoSafe=posterStrategy?.logoSafeArea;
+    const x=textSafe?Math.max(margin,Math.round(width*textSafe.left)):Math.max(margin,Math.round(width*spec.x));
+    const y=textSafe?Math.max(margin,Math.round(height*textSafe.top)):Math.max(margin,Math.round(height*spec.y));
+    const boxWidth=textSafe?Math.min(Math.round(width*(textSafe.right-textSafe.left)),width-x-margin):Math.min(Math.round(width*spec.width),width-x-margin);
+    const textBottom=textSafe?Math.round(height*textSafe.bottom):Math.min(height-margin,y+Math.round(height*(hasHeadline?.18:.04)));
+    const logoArea=logoSafe?{left:Math.round(width*logoSafe.left),right:Math.round(width*logoSafe.right),top:Math.round(height*logoSafe.top),bottom:Math.round(height*logoSafe.bottom)}:{left:x,right:x+boxWidth,top:textBottom,bottom:Math.min(height-margin,textBottom+Math.round(height*(height>width?.12:.18)))};
+    const result={x,y,width:boxWidth,height:Math.max(1,textBottom-y),margin,portrait:height>width*1.35,landscape:width>height*1.35,template,align:spec.align,textArea:{top:y,bottom:textBottom},logoArea};
     return result;
   }
   /* L'identité et l'accroche forment un cartouche éditorial unique en bas de l'image. L'ancien
@@ -157,11 +167,11 @@ function buildOverlaySvg(width, height, layout, platform, headline, posterStrate
   const textMode=posterStrategy?.textMode||"TEXT_MODE_EDITORIAL";
   const titleLines=posterStrategy?.titleLines||semanticLines(title,story?4:3,story?18:22);
   const subtitleLines=textMode==="TEXT_MODE_MINIMAL"?[]:(posterStrategy?.subtitleLines||semanticLines(subtitle,2,28));
-  const titleSize=fitFontSize(DISPLAY_FONT,titleLines,preferredTitle,Math.round(26*scale),safeWidth);
-  const subtitleSize=fitFontSize(TEXT_FONT,subtitleLines,preferredSubtitle,Math.round(20*scale),safeWidth);
+  const type=fitTypography({titleLines,subtitleLines,safeWidth,safeHeight:Math.max(1,layout.textArea.bottom-layout.textArea.top-Math.round(height*.018)),preferredTitle,preferredSubtitle,minimumTitle:Math.round(24*scale),minimumSubtitle:Math.round(18*scale)});
+  const titleSize=type.titleSize,subtitleSize=type.subtitleSize;
   const centerX = layout.x + layout.width / 2;
-  const plannedLogoWidth = Math.round(layout.width * (layout.portrait ? 0.115 : 0.10));
-  const textTop = layout.y + Math.round(layout.height * 0.12);
+  const logoCenterX=layout.logoArea?.left!==undefined?(layout.logoArea.left+layout.logoArea.right)/2:centerX;
+  const textTop = layout.textArea.top + Math.round((layout.textArea.bottom-layout.textArea.top) * 0.08);
   let textY = textTop + titleSize;
   const titleNodes = titleLines.map((line, index)=>
     vectorText(DISPLAY_FONT, line, centerX, textY + index * titleSize * 1.05, titleSize, "title")
@@ -170,16 +180,15 @@ function buildOverlaySvg(width, height, layout, platform, headline, posterStrate
   const subtitleNodes = subtitleLines.map((line, index)=>
     vectorText(TEXT_FONT, line, centerX, textY + index * subtitleSize * 1.10, subtitleSize, "subtitle")
   ).join("");
-  const headlineEnd = textY + Math.max(1, subtitleLines.length) * subtitleSize * 1.10;
-  const dividerY = headlineEnd + Math.round(layout.height * 0.055);
-  const plannedLogoTop = dividerY + Math.round(layout.height * 0.055);
-  const brandY = layout.logoArea ? Math.min(height-Math.round(height*.055),layout.logoArea.bottom+Math.round(brandSize*1.15)) : plannedLogoTop + plannedLogoWidth + Math.round(brandSize * 1.18);
+  const headlineEnd = subtitleLines.length?textY+subtitleLines.length*subtitleSize*1.10:textY;
+  const dividerY = Math.min(layout.textArea.bottom-Math.round(height*.008),headlineEnd+Math.round(height*.012));
+  const brandY = Math.min(height-layout.margin-Math.round(citySize*1.8),layout.logoArea.bottom+Math.round(brandSize*1.05));
   const scrimTop = Math.max(0, layout.y - Math.round(height * 0.025));
   const scrimBottom = Math.min(height, layout.y + layout.height + Math.round(height * 0.025));
   const border = Math.max(2, Math.round(width * 0.0017));
   const contactFields=(layout.template&&layout.template.contactFields)||[];
   const contactText=contactFields.map(key=>BRAND_CONTACTS[key]).filter(Boolean).join(" · ");
-  const contactY=Math.min(height-Math.max(18,Math.round(height*.025)),layout.y+layout.height-Math.round(layout.height*.06));
+  const contactY=Math.min(height-layout.margin,brandY+brandSize*1.38+citySize*1.55);
   return Buffer.from(`
     <svg width="${width}" height="${height}" viewBox="0 0 ${width} ${height}" xmlns="http://www.w3.org/2000/svg">
       <defs>
@@ -202,9 +211,9 @@ function buildOverlaySvg(width, height, layout, platform, headline, posterStrate
       <rect x="0" y="${scrimTop}" width="${width}" height="${scrimBottom-scrimTop}" fill="url(#scrim)"/>
       <rect x="${Math.round(width*.018)}" y="${Math.round(height*.012)}" width="${Math.round(width*.964)}" height="${Math.round(height*.976)}" rx="${Math.round(width*.004)}" fill="none" stroke="${GOLD}" stroke-opacity=".68" stroke-width="${border}"/>
       <line x1="${layout.x + layout.width*.30}" y1="${dividerY}" x2="${layout.x + layout.width*.70}" y2="${dividerY}" stroke="${GOLD}" stroke-width="${border}" stroke-opacity=".82"/>
-      ${vectorText(DISPLAY_FONT, "LA SANTÉ DES ZÈBRES", centerX, brandY, brandSize, "brand")}
-      ${vectorText(DISPLAY_FONT, "RAISMES", centerX, brandY + brandSize*1.38, citySize, "city")}
-      ${vectorText(TEXT_FONT, contactText, centerX, contactY, Math.max(13,Math.round(citySize*.82)), "contact")}
+      ${vectorText(DISPLAY_FONT, "LA SANTÉ DES ZÈBRES", logoCenterX, brandY, brandSize, "brand")}
+      ${vectorText(DISPLAY_FONT, "RAISMES", logoCenterX, brandY + brandSize*1.38, citySize, "city")}
+      ${vectorText(TEXT_FONT, contactText, logoCenterX, contactY, Math.max(13,Math.round(citySize*.82)), "contact")}
       ${titleNodes}${subtitleNodes}
     </svg>`);
 }
@@ -241,23 +250,24 @@ async function composeBrandPoster({ imageBuffer, logoDataUrl, platform, headline
   const textMode=posterStrategy?.textMode||"TEXT_MODE_EDITORIAL";
   if(textMode==="TEXT_MODE_NONE")headline="";else if(posterStrategy){const subtitle=textMode==="TEXT_MODE_MINIMAL"?"":posterStrategy.subtitle;headline=[posterStrategy.title,subtitle].filter(Boolean).join(" | ");}
   const hasHeadline = Boolean(String(headline || "").trim());
-  const layout = layoutFor(width, height, platform, zoneText, hasHeadline, selectedLayout);
+  const layout = layoutFor(width, height, platform, zoneText, hasHeadline, selectedLayout,posterStrategy);
   const { title, subtitle } = headlineParts(headline);
   const story=normalizePlatform(platform)==="Story";
   const scale = Math.max(0.78, Math.min(1.55, width / 1088));
   const titleLines = posterStrategy?.titleLines||semanticLines(title,story?4:3,story?18:22);
   const subtitleLines = textMode==="TEXT_MODE_MINIMAL"?[]:(posterStrategy?.subtitleLines||semanticLines(subtitle,2,28));
   const safeWidth=Math.min(layout.width,width-Math.max(layout.margin,Math.round(width*.06))*2);
-  const titleSize=fitFontSize(DISPLAY_FONT,titleLines,Math.round((story?48:(layout.portrait?67:62))*scale),Math.round(26*scale),safeWidth);
-  const subtitleSize=fitFontSize(TEXT_FONT,subtitleLines,Math.round((story?32:(layout.portrait?42:38))*scale),Math.round(20*scale),safeWidth);
-  const textTop = layout.y + Math.round(layout.height * 0.12);
+  const type=fitTypography({titleLines,subtitleLines,safeWidth,safeHeight:Math.max(1,layout.textArea.bottom-layout.textArea.top-Math.round(height*.018)),preferredTitle:Math.round((story?48:(layout.portrait?67:62))*scale),preferredSubtitle:Math.round((story?32:(layout.portrait?42:38))*scale),minimumTitle:Math.round(24*scale),minimumSubtitle:Math.round(18*scale)});
+  const titleSize=type.titleSize,subtitleSize=type.subtitleSize;
+  const textTop = layout.textArea.top + Math.round((layout.textArea.bottom-layout.textArea.top) * 0.08);
   const textY = textTop + titleSize + titleLines.length * titleSize * 1.05 + subtitleSize * 0.45;
   const headlineEnd = textY + Math.max(1, subtitleLines.length) * subtitleSize * 1.10;
   const dividerY = headlineEnd + Math.round(layout.height * 0.055);
   const cleanLogo = await prepareLogoOverlay(logoBuffer);
   const logoMeta = await sharp(cleanLogo).metadata();
   const logoFraction=posterStrategy?.logoScale==="discreet"?.12:posterStrategy?.logoScale==="standard"?.16:.21;
-  const desiredLogoWidth = Math.round(layout.width * logoFraction);
+  const logoAreaWidth=(layout.logoArea?.right-layout.logoArea?.left)||layout.width;
+  const desiredLogoWidth = Math.round(logoAreaWidth * logoFraction/.21);
   const minimumBottomMargin = Math.max(Math.round(height*.035), 24);
   const logoZoneTop=layout.logoArea?.top??Math.round(dividerY + layout.height*.055);
   const logoZoneBottom=layout.logoArea?.bottom??(height-minimumBottomMargin);
@@ -265,11 +275,13 @@ async function composeBrandPoster({ imageBuffer, logoDataUrl, platform, headline
   const sourceRatio = (logoMeta.width||1)/(logoMeta.height||1);
   const logoWidth = Math.max(24, Math.min(desiredLogoWidth, Math.floor(availableHeight*sourceRatio)));
   const logoTop = Math.max(logoZoneTop,Math.min(logoZoneBottom-Math.ceil(logoWidth/sourceRatio),logoZoneTop));
-  const logoLeft = Math.round(layout.x + (layout.width - logoWidth) / 2);
+  const logoLeft = Math.round((layout.logoArea?.left??layout.x) + (logoAreaWidth - logoWidth) / 2);
   const estimatedLogoHeight=Math.ceil(logoWidth/sourceRatio);
-  if(layout.x<Math.round(width*.06)||layout.x+layout.width>width-Math.round(width*.06))throw new Error("Marges latérales du lock-up insuffisantes.");
+  if(layout.x<Math.round(width*.04)||layout.x+layout.width>width-Math.round(width*.04))throw new Error("Marges latérales du lock-up insuffisantes.");
   if(logoLeft<0||logoTop<0||logoLeft+logoWidth>width||logoTop+estimatedLogoHeight>height-minimumBottomMargin)throw new Error("Logo hors cadre.");
   if(titleLines.some(line=>measureVectorText(DISPLAY_FONT,line,titleSize)>safeWidth)||subtitleLines.some(line=>measureVectorText(TEXT_FONT,line,subtitleSize)>safeWidth))throw new Error("Texte hors cadre après mesure typographique.");
+  if(type.usedHeight>layout.textArea.bottom-layout.textArea.top)throw new Error("Bloc typographique trop haut pour la zone sûre.");
+  if(layout.textArea.bottom>layout.logoArea.top)throw new Error("Collision entre la zone de texte et la zone du logo.");
   const resizedLogo = await sharp(cleanLogo, { failOn: "none" })
     .resize({ width: logoWidth, withoutEnlargement: false, fit: "inside" })
     .png().toBuffer();
@@ -284,4 +296,4 @@ async function composeBrandPoster({ imageBuffer, logoDataUrl, platform, headline
     .toBuffer();
 }
 
-module.exports = { BRAND_TOKENS, composeBrandPoster, dataUrlToBuffer, escapeXml, wrapWords, normalizedZone, prepareLogoOverlay, hasOpaqueLogoRectangle,vectorText, measureVectorText,fitFontSize,layoutFor, BRAND_CONTACTS };
+module.exports = { BRAND_TOKENS, composeBrandPoster, dataUrlToBuffer, escapeXml, wrapWords, normalizedZone, prepareLogoOverlay, hasOpaqueLogoRectangle,vectorText, measureVectorText,fitFontSize,fitTypography,layoutFor, BRAND_CONTACTS };
