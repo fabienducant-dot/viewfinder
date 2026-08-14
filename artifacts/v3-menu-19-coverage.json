@@ -1,0 +1,420 @@
+{
+  "source": "v3-service-menu.js",
+  "generatedWithoutImagesApi": true,
+  "counts": {
+    "businessServices": 18,
+    "allSubjectsOptions": 1,
+    "visibleChoices": 19
+  },
+  "classification": {
+    "present": [
+      "massage sur table",
+      "massage habillé sur futon",
+      "femme enceinte",
+      "enfant accompagné",
+      "prestation ciblée",
+      "soin énergétique",
+      "Reiki adulte",
+      "PSiO®",
+      "biorésonance",
+      "pack combiné",
+      "entreprise"
+    ],
+    "absentFromCanonicalMenu": [
+      "Reiki enfant ou animal",
+      "ventouses sèches"
+    ]
+  },
+  "coverage": [
+    {
+      "index": 1,
+      "name": "Tous sujets",
+      "kind": "Tous sujets",
+      "category": "tous sujets",
+      "miniSubject": "Actualité de La Santé des Zèbres",
+      "format": "4x5-feed",
+      "platform": "Instagram",
+      "textMode": "none",
+      "registers": [],
+      "consistencyReady": true,
+      "promptInspectorIdentical": true,
+      "referencesRequired": [],
+      "imageCallsExecuted": 0,
+      "plannedImageCalls": 1,
+      "n": 1,
+      "result": "validé pour confirmation"
+    },
+    {
+      "index": 2,
+      "name": "Massage Zébré",
+      "kind": "prestation",
+      "category": "massage sur table",
+      "miniSubject": "alternance de gestes enveloppants et ciblés — enchaînement personnalisé fluide",
+      "format": "4x5-social",
+      "platform": "Facebook",
+      "textMode": "title",
+      "registers": [
+        "Cinématographie"
+      ],
+      "consistencyReady": true,
+      "promptInspectorIdentical": true,
+      "referencesRequired": [],
+      "imageCallsExecuted": 0,
+      "plannedImageCalls": 1,
+      "n": 1,
+      "result": "validé pour confirmation"
+    },
+    {
+      "index": 3,
+      "name": "Massage Ayurvédique Abhyanga",
+      "kind": "prestation",
+      "category": "massage sur table",
+      "miniSubject": "huile et mouvements continus tête-pieds — long mouvement huilé synchronisé",
+      "format": "4x3-local",
+      "platform": "Google Business",
+      "textMode": "automatic",
+      "registers": [
+        "Architecture"
+      ],
+      "consistencyReady": true,
+      "promptInspectorIdentical": true,
+      "referencesRequired": [],
+      "imageCallsExecuted": 0,
+      "plannedImageCalls": 1,
+      "n": 1,
+      "result": "validé pour confirmation"
+    },
+    {
+      "index": 4,
+      "name": "Massage Balinais",
+      "kind": "prestation",
+      "category": "massage sur table",
+      "miniSubject": "pressions profondes et étirements balinais — pression palmaire puis étirement",
+      "format": "9x16-fullscreen",
+      "platform": "Story",
+      "textMode": "complete",
+      "registers": [
+        "Fantastique"
+      ],
+      "consistencyReady": true,
+      "promptInspectorIdentical": true,
+      "referencesRequired": [],
+      "imageCallsExecuted": 0,
+      "plannedImageCalls": 1,
+      "n": 1,
+      "result": "validé pour confirmation"
+    },
+    {
+      "index": 5,
+      "name": "Massage Thaï traditionnel",
+      "kind": "prestation",
+      "category": "massage habillé sur futon",
+      "miniSubject": "futon au sol, posture thaï habillée — pression et étirement assisté",
+      "format": "1x1-feed",
+      "platform": "Instagram Square",
+      "textMode": "none",
+      "registers": [
+        "Fantastique",
+        "Cinématographie",
+        "Architecture"
+      ],
+      "consistencyReady": true,
+      "promptInspectorIdentical": true,
+      "referencesRequired": [],
+      "imageCallsExecuted": 0,
+      "plannedImageCalls": 1,
+      "n": 1,
+      "result": "validé pour confirmation"
+    },
+    {
+      "index": 6,
+      "name": "Massage Femme enceinte",
+      "kind": "prestation",
+      "category": "femme enceinte",
+      "miniSubject": "ventre visible, coussins de soutien — massage latéral doux",
+      "format": "4x5-feed",
+      "platform": "Instagram",
+      "textMode": "title",
+      "registers": [],
+      "consistencyReady": true,
+      "promptInspectorIdentical": true,
+      "referencesRequired": [],
+      "imageCallsExecuted": 0,
+      "plannedImageCalls": 1,
+      "n": 1,
+      "result": "validé pour confirmation"
+    },
+    {
+      "index": 7,
+      "name": "Massage Enfant",
+      "kind": "prestation",
+      "category": "enfant accompagné",
+      "miniSubject": "enfant, consentement et accompagnant visible — geste doux avec parent présent",
+      "format": "4x5-social",
+      "platform": "Facebook",
+      "textMode": "automatic",
+      "registers": [
+        "Cinématographie"
+      ],
+      "consistencyReady": true,
+      "promptInspectorIdentical": true,
+      "referencesRequired": [],
+      "imageCallsExecuted": 0,
+      "plannedImageCalls": 1,
+      "n": 1,
+      "result": "validé pour confirmation"
+    },
+    {
+      "index": 8,
+      "name": "Réflexologie plantaire thaïlandaise",
+      "kind": "prestation",
+      "category": "prestation ciblée",
+      "miniSubject": "pied et points de pression clairement visibles — pression précise du pied",
+      "format": "4x3-local",
+      "platform": "Google Business",
+      "textMode": "complete",
+      "registers": [
+        "Architecture"
+      ],
+      "consistencyReady": true,
+      "promptInspectorIdentical": true,
+      "referencesRequired": [],
+      "imageCallsExecuted": 0,
+      "plannedImageCalls": 1,
+      "n": 1,
+      "result": "validé pour confirmation"
+    },
+    {
+      "index": 9,
+      "name": "Massage japonais du visage",
+      "kind": "prestation",
+      "category": "prestation ciblée",
+      "miniSubject": "gestuelle faciale japonaise nette — lifting manuel symétrique",
+      "format": "9x16-fullscreen",
+      "platform": "Story",
+      "textMode": "none",
+      "registers": [
+        "Fantastique"
+      ],
+      "consistencyReady": true,
+      "promptInspectorIdentical": true,
+      "referencesRequired": [],
+      "imageCallsExecuted": 0,
+      "plannedImageCalls": 1,
+      "n": 1,
+      "result": "validé pour confirmation"
+    },
+    {
+      "index": 10,
+      "name": "Massage lymphatique expert",
+      "kind": "prestation",
+      "category": "massage sur table",
+      "miniSubject": "mouvements directionnels doux — pompage lymphatique léger",
+      "format": "1x1-feed",
+      "platform": "Instagram Square",
+      "textMode": "title",
+      "registers": [
+        "Fantastique",
+        "Cinématographie",
+        "Architecture"
+      ],
+      "consistencyReady": true,
+      "promptInspectorIdentical": true,
+      "referencesRequired": [],
+      "imageCallsExecuted": 0,
+      "plannedImageCalls": 1,
+      "n": 1,
+      "result": "validé pour confirmation"
+    },
+    {
+      "index": 11,
+      "name": "Soin énergétique",
+      "kind": "prestation",
+      "category": "soin énergétique",
+      "miniSubject": "travail sans contact reconnaissable — mains immobiles à distance du corps",
+      "format": "4x5-feed",
+      "platform": "Instagram",
+      "textMode": "automatic",
+      "registers": [],
+      "consistencyReady": true,
+      "promptInspectorIdentical": true,
+      "referencesRequired": [],
+      "imageCallsExecuted": 0,
+      "plannedImageCalls": 1,
+      "n": 1,
+      "result": "validé pour confirmation"
+    },
+    {
+      "index": 12,
+      "name": "Reiki",
+      "kind": "prestation",
+      "category": "Reiki adulte",
+      "miniSubject": "mains parallèles au-dessus du torse — imposition des mains sans contact",
+      "format": "4x5-social",
+      "platform": "Facebook",
+      "textMode": "complete",
+      "registers": [
+        "Cinématographie"
+      ],
+      "consistencyReady": true,
+      "promptInspectorIdentical": true,
+      "referencesRequired": [],
+      "imageCallsExecuted": 0,
+      "plannedImageCalls": 1,
+      "n": 1,
+      "result": "validé pour confirmation"
+    },
+    {
+      "index": 13,
+      "name": "Luminothérapie PSIO®",
+      "kind": "prestation",
+      "category": "PSiO®",
+      "miniSubject": "lunettes officielles fidèles à la référence — séance immobile lunettes portées",
+      "format": "4x3-local",
+      "platform": "Google Business",
+      "textMode": "none",
+      "registers": [
+        "Architecture"
+      ],
+      "consistencyReady": true,
+      "promptInspectorIdentical": true,
+      "referencesRequired": [
+        "profile_worn",
+        "front_worn",
+        "product"
+      ],
+      "imageCallsExecuted": 0,
+      "plannedImageCalls": 1,
+      "n": 1,
+      "result": "validé pour confirmation"
+    },
+    {
+      "index": 14,
+      "name": "Biorésonance quantique",
+      "kind": "prestation",
+      "category": "biorésonance",
+      "miniSubject": "séance de bilan clairement encadrée — lecture professionnelle du dispositif réel",
+      "format": "9x16-fullscreen",
+      "platform": "Story",
+      "textMode": "title",
+      "registers": [
+        "Fantastique"
+      ],
+      "consistencyReady": true,
+      "promptInspectorIdentical": true,
+      "referencesRequired": [],
+      "imageCallsExecuted": 0,
+      "plannedImageCalls": 1,
+      "n": 1,
+      "result": "validé pour confirmation"
+    },
+    {
+      "index": 15,
+      "name": "Soin minceur",
+      "kind": "prestation",
+      "category": "prestation ciblée",
+      "miniSubject": "geste raffermissant manuel visible — palper-rouler manuel",
+      "format": "1x1-feed",
+      "platform": "Instagram Square",
+      "textMode": "automatic",
+      "registers": [
+        "Fantastique",
+        "Cinématographie",
+        "Architecture"
+      ],
+      "consistencyReady": true,
+      "promptInspectorIdentical": true,
+      "referencesRequired": [],
+      "imageCallsExecuted": 0,
+      "plannedImageCalls": 1,
+      "n": 1,
+      "result": "validé pour confirmation"
+    },
+    {
+      "index": 16,
+      "name": "Offre Sylver",
+      "kind": "prestation",
+      "category": "pack combiné",
+      "miniSubject": "deux étapes continues, lunettes officielles au second plan — Massage Abhyanga OU Zébré puis séance PSiO®",
+      "format": "4x5-feed",
+      "platform": "Instagram",
+      "textMode": "complete",
+      "registers": [],
+      "consistencyReady": true,
+      "promptInspectorIdentical": true,
+      "referencesRequired": [
+        "profile_worn",
+        "front_worn",
+        "product"
+      ],
+      "imageCallsExecuted": 0,
+      "plannedImageCalls": 1,
+      "n": 1,
+      "result": "validé pour confirmation"
+    },
+    {
+      "index": 17,
+      "name": "Offre Gold",
+      "kind": "prestation",
+      "category": "pack combiné",
+      "miniSubject": "trois étapes continues et toutes lisibles — massage au premier plan, Reiki au plan secondaire, PSiO® à l'arrière-plan",
+      "format": "4x5-social",
+      "platform": "Facebook",
+      "textMode": "none",
+      "registers": [
+        "Cinématographie"
+      ],
+      "consistencyReady": true,
+      "promptInspectorIdentical": true,
+      "referencesRequired": [
+        "profile_worn",
+        "front_worn",
+        "product"
+      ],
+      "imageCallsExecuted": 0,
+      "plannedImageCalls": 1,
+      "n": 1,
+      "result": "validé pour confirmation"
+    },
+    {
+      "index": 18,
+      "name": "Massage dos/zone",
+      "kind": "prestation",
+      "category": "prestation ciblée",
+      "miniSubject": "zone ciblée au centre de la narration — geste précis sur la zone",
+      "format": "4x3-local",
+      "platform": "Google Business",
+      "textMode": "title",
+      "registers": [
+        "Architecture"
+      ],
+      "consistencyReady": true,
+      "promptInspectorIdentical": true,
+      "referencesRequired": [],
+      "imageCallsExecuted": 0,
+      "plannedImageCalls": 1,
+      "n": 1,
+      "result": "validé pour confirmation"
+    },
+    {
+      "index": 19,
+      "name": "Prestations en entreprise",
+      "kind": "prestation",
+      "category": "entreprise",
+      "miniSubject": "chaise de massage et environnement de travail — massage assis ergonomique",
+      "format": "9x16-fullscreen",
+      "platform": "Story",
+      "textMode": "automatic",
+      "registers": [
+        "Fantastique"
+      ],
+      "consistencyReady": true,
+      "promptInspectorIdentical": true,
+      "referencesRequired": [],
+      "imageCallsExecuted": 0,
+      "plannedImageCalls": 1,
+      "n": 1,
+      "result": "validé pour confirmation"
+    }
+  ]
+}

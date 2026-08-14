@@ -1,0 +1,2085 @@
+{
+  "fixture": "generated in the test temporary directory",
+  "validation": "deterministic technical manifest; PNG outputs are intentionally ignored",
+  "renders": [
+    {
+      "version": 2,
+      "platform": "Instagram Square",
+      "format": {
+        "width": 1080,
+        "height": 1080
+      },
+      "variant": "Editorial",
+      "title": "DÉCOUVRIR L’UNIVERS SDZ",
+      "subtitle": "UNE ATMOSPHÈRE SINGULIÈRE",
+      "titleLines": [
+        "DÉCOUVRIR L’UNIVERS",
+        "SDZ"
+      ],
+      "subtitleLines": [
+        "UNE ATMOSPHÈRE SINGULIÈRE"
+      ],
+      "safeAreas": {
+        "text": {
+          "left": 65,
+          "top": 594,
+          "right": 1015,
+          "bottom": 778
+        },
+        "logo": {
+          "left": 292,
+          "top": 799,
+          "right": 788,
+          "bottom": 994
+        },
+        "source": "posterStrategy.safeAreasByFormat"
+      },
+      "boxes": {
+        "text": {
+          "left": 65,
+          "top": 594,
+          "right": 1015,
+          "bottom": 778
+        },
+        "title": {
+          "left": 80,
+          "top": 609,
+          "right": 1000,
+          "bottom": 705.6
+        },
+        "subtitle": {
+          "left": 80,
+          "top": 720.6,
+          "right": 1000,
+          "bottom": 762.4
+        },
+        "logoSafe": {
+          "left": 292,
+          "top": 799,
+          "right": 788,
+          "bottom": 994
+        },
+        "logo": {
+          "left": 459,
+          "top": 815,
+          "right": 622,
+          "bottom": 978
+        }
+      },
+      "fontSizes": {
+        "title": 46,
+        "subtitle": 38
+      },
+      "svg": {
+        "viewBox": "0 0 1080 1080",
+        "preserveAspectRatio": "xMidYMid meet",
+        "titleColor": "#D9AD3B",
+        "subtitleColor": "#F0D889"
+      },
+      "logo": {
+        "sourceWidth": 512,
+        "sourceHeight": 512,
+        "renderedWidth": 163,
+        "renderedHeight": 163,
+        "sourceRatio": 1,
+        "renderedRatio": 1,
+        "fit": "contain",
+        "fullyVisible": true,
+        "opaqueRectangle": false
+      },
+      "checks": {
+        "titleWithinSafeArea": true,
+        "subtitleWithinSafeArea": true,
+        "textWithinSafeArea": true,
+        "logoWithinSafeArea": true,
+        "titleSubtitleCollision": false,
+        "textLogoCollision": false,
+        "canvasOverflow": false,
+        "opaqueLogoRectangle": false,
+        "formatSpecificRecomposition": true,
+        "mobileReadabilityEstimated": true
+      },
+      "imageGenerationCallCount": 0
+    },
+    {
+      "version": 2,
+      "platform": "Instagram Square",
+      "format": {
+        "width": 1080,
+        "height": 1080
+      },
+      "variant": "Cinematic",
+      "title": "DÉCOUVRIR L’UNIVERS SDZ",
+      "subtitle": "UNE ATMOSPHÈRE SINGULIÈRE",
+      "titleLines": [
+        "DÉCOUVRIR L’UNIVERS",
+        "SDZ"
+      ],
+      "subtitleLines": [
+        "UNE ATMOSPHÈRE SINGULIÈRE"
+      ],
+      "safeAreas": {
+        "text": {
+          "left": 65,
+          "top": 594,
+          "right": 1015,
+          "bottom": 778
+        },
+        "logo": {
+          "left": 292,
+          "top": 799,
+          "right": 788,
+          "bottom": 994
+        },
+        "source": "posterStrategy.safeAreasByFormat"
+      },
+      "boxes": {
+        "text": {
+          "left": 65,
+          "top": 594,
+          "right": 1015,
+          "bottom": 778
+        },
+        "title": {
+          "left": 80,
+          "top": 611,
+          "right": 1000,
+          "bottom": 707.6
+        },
+        "subtitle": {
+          "left": 80,
+          "top": 722.6,
+          "right": 1000,
+          "bottom": 757.8
+        },
+        "logoSafe": {
+          "left": 292,
+          "top": 799,
+          "right": 788,
+          "bottom": 994
+        },
+        "logo": {
+          "left": 459,
+          "top": 815,
+          "right": 622,
+          "bottom": 978
+        }
+      },
+      "fontSizes": {
+        "title": 46,
+        "subtitle": 32
+      },
+      "svg": {
+        "viewBox": "0 0 1080 1080",
+        "preserveAspectRatio": "xMidYMid meet",
+        "titleColor": "#D9AD3B",
+        "subtitleColor": "#F0D889"
+      },
+      "logo": {
+        "sourceWidth": 512,
+        "sourceHeight": 512,
+        "renderedWidth": 163,
+        "renderedHeight": 163,
+        "sourceRatio": 1,
+        "renderedRatio": 1,
+        "fit": "contain",
+        "fullyVisible": true,
+        "opaqueRectangle": false
+      },
+      "checks": {
+        "titleWithinSafeArea": true,
+        "subtitleWithinSafeArea": true,
+        "textWithinSafeArea": true,
+        "logoWithinSafeArea": true,
+        "titleSubtitleCollision": false,
+        "textLogoCollision": false,
+        "canvasOverflow": false,
+        "opaqueLogoRectangle": false,
+        "formatSpecificRecomposition": true,
+        "mobileReadabilityEstimated": true
+      },
+      "imageGenerationCallCount": 0
+    },
+    {
+      "version": 2,
+      "platform": "Instagram Square",
+      "format": {
+        "width": 1080,
+        "height": 1080
+      },
+      "variant": "Minimalist",
+      "title": "DÉCOUVRIR L’UNIVERS SDZ",
+      "subtitle": "UNE ATMOSPHÈRE SINGULIÈRE",
+      "titleLines": [
+        "DÉCOUVRIR L’UNIVERS",
+        "SDZ"
+      ],
+      "subtitleLines": [
+        "UNE ATMOSPHÈRE SINGULIÈRE"
+      ],
+      "safeAreas": {
+        "text": {
+          "left": 65,
+          "top": 594,
+          "right": 1015,
+          "bottom": 778
+        },
+        "logo": {
+          "left": 292,
+          "top": 799,
+          "right": 788,
+          "bottom": 994
+        },
+        "source": "posterStrategy.safeAreasByFormat"
+      },
+      "boxes": {
+        "text": {
+          "left": 65,
+          "top": 594,
+          "right": 1015,
+          "bottom": 778
+        },
+        "title": {
+          "left": 80,
+          "top": 618,
+          "right": 1000,
+          "bottom": 714.6
+        },
+        "subtitle": {
+          "left": 80,
+          "top": 729.6,
+          "right": 1000,
+          "bottom": 760.4
+        },
+        "logoSafe": {
+          "left": 292,
+          "top": 799,
+          "right": 788,
+          "bottom": 994
+        },
+        "logo": {
+          "left": 459,
+          "top": 815,
+          "right": 622,
+          "bottom": 978
+        }
+      },
+      "fontSizes": {
+        "title": 46,
+        "subtitle": 28
+      },
+      "svg": {
+        "viewBox": "0 0 1080 1080",
+        "preserveAspectRatio": "xMidYMid meet",
+        "titleColor": "#D9AD3B",
+        "subtitleColor": "#F0D889"
+      },
+      "logo": {
+        "sourceWidth": 512,
+        "sourceHeight": 512,
+        "renderedWidth": 163,
+        "renderedHeight": 163,
+        "sourceRatio": 1,
+        "renderedRatio": 1,
+        "fit": "contain",
+        "fullyVisible": true,
+        "opaqueRectangle": false
+      },
+      "checks": {
+        "titleWithinSafeArea": true,
+        "subtitleWithinSafeArea": true,
+        "textWithinSafeArea": true,
+        "logoWithinSafeArea": true,
+        "titleSubtitleCollision": false,
+        "textLogoCollision": false,
+        "canvasOverflow": false,
+        "opaqueLogoRectangle": false,
+        "formatSpecificRecomposition": true,
+        "mobileReadabilityEstimated": true
+      },
+      "imageGenerationCallCount": 0
+    },
+    {
+      "version": 2,
+      "platform": "Instagram Portrait",
+      "format": {
+        "width": 1080,
+        "height": 1350
+      },
+      "variant": "Editorial",
+      "title": "DÉCOUVRIR L’UNIVERS SDZ",
+      "subtitle": "UNE ATMOSPHÈRE SINGULIÈRE",
+      "titleLines": [
+        "DÉCOUVRIR L’UNIVERS",
+        "SDZ"
+      ],
+      "subtitleLines": [
+        "UNE ATMOSPHÈRE SINGULIÈRE"
+      ],
+      "safeAreas": {
+        "text": {
+          "left": 65,
+          "top": 783,
+          "right": 1015,
+          "bottom": 999
+        },
+        "logo": {
+          "left": 259,
+          "top": 1026,
+          "right": 821,
+          "bottom": 1242
+        },
+        "source": "posterStrategy.safeAreasByFormat"
+      },
+      "boxes": {
+        "text": {
+          "left": 65,
+          "top": 783,
+          "right": 1015,
+          "bottom": 999
+        },
+        "title": {
+          "left": 82,
+          "top": 803,
+          "right": 998,
+          "bottom": 918.5
+        },
+        "subtitle": {
+          "left": 82,
+          "top": 936.5,
+          "right": 998,
+          "bottom": 978.3
+        },
+        "logoSafe": {
+          "left": 259,
+          "top": 1026,
+          "right": 821,
+          "bottom": 1242
+        },
+        "logo": {
+          "left": 449,
+          "top": 1043,
+          "right": 631,
+          "bottom": 1225
+        }
+      },
+      "fontSizes": {
+        "title": 55,
+        "subtitle": 38
+      },
+      "svg": {
+        "viewBox": "0 0 1080 1350",
+        "preserveAspectRatio": "xMidYMid meet",
+        "titleColor": "#D9AD3B",
+        "subtitleColor": "#F0D889"
+      },
+      "logo": {
+        "sourceWidth": 512,
+        "sourceHeight": 512,
+        "renderedWidth": 182,
+        "renderedHeight": 182,
+        "sourceRatio": 1,
+        "renderedRatio": 1,
+        "fit": "contain",
+        "fullyVisible": true,
+        "opaqueRectangle": false
+      },
+      "checks": {
+        "titleWithinSafeArea": true,
+        "subtitleWithinSafeArea": true,
+        "textWithinSafeArea": true,
+        "logoWithinSafeArea": true,
+        "titleSubtitleCollision": false,
+        "textLogoCollision": false,
+        "canvasOverflow": false,
+        "opaqueLogoRectangle": false,
+        "formatSpecificRecomposition": true,
+        "mobileReadabilityEstimated": true
+      },
+      "imageGenerationCallCount": 0
+    },
+    {
+      "version": 2,
+      "platform": "Instagram Portrait",
+      "format": {
+        "width": 1080,
+        "height": 1350
+      },
+      "variant": "Cinematic",
+      "title": "DÉCOUVRIR L’UNIVERS SDZ",
+      "subtitle": "UNE ATMOSPHÈRE SINGULIÈRE",
+      "titleLines": [
+        "DÉCOUVRIR L’UNIVERS",
+        "SDZ"
+      ],
+      "subtitleLines": [
+        "UNE ATMOSPHÈRE SINGULIÈRE"
+      ],
+      "safeAreas": {
+        "text": {
+          "left": 65,
+          "top": 783,
+          "right": 1015,
+          "bottom": 999
+        },
+        "logo": {
+          "left": 259,
+          "top": 1026,
+          "right": 821,
+          "bottom": 1242
+        },
+        "source": "posterStrategy.safeAreasByFormat"
+      },
+      "boxes": {
+        "text": {
+          "left": 65,
+          "top": 783,
+          "right": 1015,
+          "bottom": 999
+        },
+        "title": {
+          "left": 82,
+          "top": 805,
+          "right": 998,
+          "bottom": 916.3
+        },
+        "subtitle": {
+          "left": 82,
+          "top": 933.3,
+          "right": 998,
+          "bottom": 968.5
+        },
+        "logoSafe": {
+          "left": 259,
+          "top": 1026,
+          "right": 821,
+          "bottom": 1242
+        },
+        "logo": {
+          "left": 449,
+          "top": 1043,
+          "right": 631,
+          "bottom": 1225
+        }
+      },
+      "fontSizes": {
+        "title": 53,
+        "subtitle": 32
+      },
+      "svg": {
+        "viewBox": "0 0 1080 1350",
+        "preserveAspectRatio": "xMidYMid meet",
+        "titleColor": "#D9AD3B",
+        "subtitleColor": "#F0D889"
+      },
+      "logo": {
+        "sourceWidth": 512,
+        "sourceHeight": 512,
+        "renderedWidth": 182,
+        "renderedHeight": 182,
+        "sourceRatio": 1,
+        "renderedRatio": 1,
+        "fit": "contain",
+        "fullyVisible": true,
+        "opaqueRectangle": false
+      },
+      "checks": {
+        "titleWithinSafeArea": true,
+        "subtitleWithinSafeArea": true,
+        "textWithinSafeArea": true,
+        "logoWithinSafeArea": true,
+        "titleSubtitleCollision": false,
+        "textLogoCollision": false,
+        "canvasOverflow": false,
+        "opaqueLogoRectangle": false,
+        "formatSpecificRecomposition": true,
+        "mobileReadabilityEstimated": true
+      },
+      "imageGenerationCallCount": 0
+    },
+    {
+      "version": 2,
+      "platform": "Instagram Portrait",
+      "format": {
+        "width": 1080,
+        "height": 1350
+      },
+      "variant": "Minimalist",
+      "title": "DÉCOUVRIR L’UNIVERS SDZ",
+      "subtitle": "UNE ATMOSPHÈRE SINGULIÈRE",
+      "titleLines": [
+        "DÉCOUVRIR L’UNIVERS",
+        "SDZ"
+      ],
+      "subtitleLines": [
+        "UNE ATMOSPHÈRE SINGULIÈRE"
+      ],
+      "safeAreas": {
+        "text": {
+          "left": 65,
+          "top": 783,
+          "right": 1015,
+          "bottom": 999
+        },
+        "logo": {
+          "left": 259,
+          "top": 1026,
+          "right": 821,
+          "bottom": 1242
+        },
+        "source": "posterStrategy.safeAreasByFormat"
+      },
+      "boxes": {
+        "text": {
+          "left": 65,
+          "top": 783,
+          "right": 1015,
+          "bottom": 999
+        },
+        "title": {
+          "left": 82,
+          "top": 830,
+          "right": 998,
+          "bottom": 926.6
+        },
+        "subtitle": {
+          "left": 82,
+          "top": 941.6,
+          "right": 998,
+          "bottom": 972.4
+        },
+        "logoSafe": {
+          "left": 259,
+          "top": 1026,
+          "right": 821,
+          "bottom": 1242
+        },
+        "logo": {
+          "left": 449,
+          "top": 1043,
+          "right": 631,
+          "bottom": 1225
+        }
+      },
+      "fontSizes": {
+        "title": 46,
+        "subtitle": 28
+      },
+      "svg": {
+        "viewBox": "0 0 1080 1350",
+        "preserveAspectRatio": "xMidYMid meet",
+        "titleColor": "#D9AD3B",
+        "subtitleColor": "#F0D889"
+      },
+      "logo": {
+        "sourceWidth": 512,
+        "sourceHeight": 512,
+        "renderedWidth": 182,
+        "renderedHeight": 182,
+        "sourceRatio": 1,
+        "renderedRatio": 1,
+        "fit": "contain",
+        "fullyVisible": true,
+        "opaqueRectangle": false
+      },
+      "checks": {
+        "titleWithinSafeArea": true,
+        "subtitleWithinSafeArea": true,
+        "textWithinSafeArea": true,
+        "logoWithinSafeArea": true,
+        "titleSubtitleCollision": false,
+        "textLogoCollision": false,
+        "canvasOverflow": false,
+        "opaqueLogoRectangle": false,
+        "formatSpecificRecomposition": true,
+        "mobileReadabilityEstimated": true
+      },
+      "imageGenerationCallCount": 0
+    },
+    {
+      "version": 2,
+      "platform": "Facebook",
+      "format": {
+        "width": 1200,
+        "height": 1500
+      },
+      "variant": "Editorial",
+      "title": "DÉCOUVRIR L’UNIVERS SDZ",
+      "subtitle": "UNE ATMOSPHÈRE SINGULIÈRE",
+      "titleLines": [
+        "DÉCOUVRIR L’UNIVERS",
+        "SDZ"
+      ],
+      "subtitleLines": [
+        "UNE ATMOSPHÈRE SINGULIÈRE"
+      ],
+      "safeAreas": {
+        "text": {
+          "left": 66,
+          "top": 150,
+          "right": 768,
+          "bottom": 510
+        },
+        "logo": {
+          "left": 96,
+          "top": 570,
+          "right": 576,
+          "bottom": 915
+        },
+        "source": "posterStrategy.safeAreasByFormat"
+      },
+      "boxes": {
+        "text": {
+          "left": 66,
+          "top": 150,
+          "right": 768,
+          "bottom": 510
+        },
+        "title": {
+          "left": 95,
+          "top": 244,
+          "right": 739,
+          "bottom": 353.2
+        },
+        "subtitle": {
+          "left": 95,
+          "top": 370.2,
+          "right": 739,
+          "bottom": 415.3
+        },
+        "logoSafe": {
+          "left": 96,
+          "top": 570,
+          "right": 576,
+          "bottom": 915
+        },
+        "logo": {
+          "left": 192,
+          "top": 598,
+          "right": 481,
+          "bottom": 887
+        }
+      },
+      "fontSizes": {
+        "title": 52,
+        "subtitle": 41
+      },
+      "svg": {
+        "viewBox": "0 0 1200 1500",
+        "preserveAspectRatio": "xMidYMid meet",
+        "titleColor": "#D9AD3B",
+        "subtitleColor": "#F0D889"
+      },
+      "logo": {
+        "sourceWidth": 512,
+        "sourceHeight": 512,
+        "renderedWidth": 289,
+        "renderedHeight": 289,
+        "sourceRatio": 1,
+        "renderedRatio": 1,
+        "fit": "contain",
+        "fullyVisible": true,
+        "opaqueRectangle": false
+      },
+      "checks": {
+        "titleWithinSafeArea": true,
+        "subtitleWithinSafeArea": true,
+        "textWithinSafeArea": true,
+        "logoWithinSafeArea": true,
+        "titleSubtitleCollision": false,
+        "textLogoCollision": false,
+        "canvasOverflow": false,
+        "opaqueLogoRectangle": false,
+        "formatSpecificRecomposition": true,
+        "mobileReadabilityEstimated": true
+      },
+      "imageGenerationCallCount": 0
+    },
+    {
+      "version": 2,
+      "platform": "Facebook",
+      "format": {
+        "width": 1200,
+        "height": 1500
+      },
+      "variant": "Cinematic",
+      "title": "DÉCOUVRIR L’UNIVERS SDZ",
+      "subtitle": "UNE ATMOSPHÈRE SINGULIÈRE",
+      "titleLines": [
+        "DÉCOUVRIR L’UNIVERS",
+        "SDZ"
+      ],
+      "subtitleLines": [
+        "UNE ATMOSPHÈRE SINGULIÈRE"
+      ],
+      "safeAreas": {
+        "text": {
+          "left": 66,
+          "top": 150,
+          "right": 768,
+          "bottom": 510
+        },
+        "logo": {
+          "left": 96,
+          "top": 570,
+          "right": 576,
+          "bottom": 915
+        },
+        "source": "posterStrategy.safeAreasByFormat"
+      },
+      "boxes": {
+        "text": {
+          "left": 66,
+          "top": 150,
+          "right": 768,
+          "bottom": 510
+        },
+        "title": {
+          "left": 95,
+          "top": 213,
+          "right": 739,
+          "bottom": 322.2
+        },
+        "subtitle": {
+          "left": 95,
+          "top": 339.2,
+          "right": 739,
+          "bottom": 378.8
+        },
+        "logoSafe": {
+          "left": 96,
+          "top": 570,
+          "right": 576,
+          "bottom": 915
+        },
+        "logo": {
+          "left": 192,
+          "top": 598,
+          "right": 481,
+          "bottom": 887
+        }
+      },
+      "fontSizes": {
+        "title": 52,
+        "subtitle": 36
+      },
+      "svg": {
+        "viewBox": "0 0 1200 1500",
+        "preserveAspectRatio": "xMidYMid meet",
+        "titleColor": "#D9AD3B",
+        "subtitleColor": "#F0D889"
+      },
+      "logo": {
+        "sourceWidth": 512,
+        "sourceHeight": 512,
+        "renderedWidth": 289,
+        "renderedHeight": 289,
+        "sourceRatio": 1,
+        "renderedRatio": 1,
+        "fit": "contain",
+        "fullyVisible": true,
+        "opaqueRectangle": false
+      },
+      "checks": {
+        "titleWithinSafeArea": true,
+        "subtitleWithinSafeArea": true,
+        "textWithinSafeArea": true,
+        "logoWithinSafeArea": true,
+        "titleSubtitleCollision": false,
+        "textLogoCollision": false,
+        "canvasOverflow": false,
+        "opaqueLogoRectangle": false,
+        "formatSpecificRecomposition": true,
+        "mobileReadabilityEstimated": true
+      },
+      "imageGenerationCallCount": 0
+    },
+    {
+      "version": 2,
+      "platform": "Facebook",
+      "format": {
+        "width": 1200,
+        "height": 1500
+      },
+      "variant": "Minimalist",
+      "title": "DÉCOUVRIR L’UNIVERS SDZ",
+      "subtitle": "UNE ATMOSPHÈRE SINGULIÈRE",
+      "titleLines": [
+        "DÉCOUVRIR L’UNIVERS",
+        "SDZ"
+      ],
+      "subtitleLines": [
+        "UNE ATMOSPHÈRE SINGULIÈRE"
+      ],
+      "safeAreas": {
+        "text": {
+          "left": 66,
+          "top": 150,
+          "right": 768,
+          "bottom": 510
+        },
+        "logo": {
+          "left": 96,
+          "top": 570,
+          "right": 576,
+          "bottom": 915
+        },
+        "source": "posterStrategy.safeAreasByFormat"
+      },
+      "boxes": {
+        "text": {
+          "left": 66,
+          "top": 150,
+          "right": 768,
+          "bottom": 510
+        },
+        "title": {
+          "left": 95,
+          "top": 288,
+          "right": 739,
+          "bottom": 395.1
+        },
+        "subtitle": {
+          "left": 95,
+          "top": 411.1,
+          "right": 739,
+          "bottom": 445.20000000000005
+        },
+        "logoSafe": {
+          "left": 96,
+          "top": 570,
+          "right": 576,
+          "bottom": 915
+        },
+        "logo": {
+          "left": 192,
+          "top": 598,
+          "right": 481,
+          "bottom": 887
+        }
+      },
+      "fontSizes": {
+        "title": 51,
+        "subtitle": 31
+      },
+      "svg": {
+        "viewBox": "0 0 1200 1500",
+        "preserveAspectRatio": "xMidYMid meet",
+        "titleColor": "#D9AD3B",
+        "subtitleColor": "#F0D889"
+      },
+      "logo": {
+        "sourceWidth": 512,
+        "sourceHeight": 512,
+        "renderedWidth": 289,
+        "renderedHeight": 289,
+        "sourceRatio": 1,
+        "renderedRatio": 1,
+        "fit": "contain",
+        "fullyVisible": true,
+        "opaqueRectangle": false
+      },
+      "checks": {
+        "titleWithinSafeArea": true,
+        "subtitleWithinSafeArea": true,
+        "textWithinSafeArea": true,
+        "logoWithinSafeArea": true,
+        "titleSubtitleCollision": false,
+        "textLogoCollision": false,
+        "canvasOverflow": false,
+        "opaqueLogoRectangle": false,
+        "formatSpecificRecomposition": true,
+        "mobileReadabilityEstimated": true
+      },
+      "imageGenerationCallCount": 0
+    },
+    {
+      "version": 2,
+      "platform": "Story",
+      "format": {
+        "width": 1080,
+        "height": 1920
+      },
+      "variant": "Editorial",
+      "title": "DÉCOUVRIR L’UNIVERS SDZ",
+      "subtitle": "UNE ATMOSPHÈRE SINGULIÈRE",
+      "titleLines": [
+        "DÉCOUVRIR L’UNIVERS",
+        "SDZ"
+      ],
+      "subtitleLines": [
+        "UNE ATMOSPHÈRE SINGULIÈRE"
+      ],
+      "safeAreas": {
+        "text": {
+          "left": 76,
+          "top": 1152,
+          "right": 1004,
+          "bottom": 1421
+        },
+        "logo": {
+          "left": 238,
+          "top": 1459,
+          "right": 842,
+          "bottom": 1690
+        },
+        "source": "posterStrategy.safeAreasByFormat"
+      },
+      "boxes": {
+        "text": {
+          "left": 76,
+          "top": 1152,
+          "right": 1004,
+          "bottom": 1421
+        },
+        "title": {
+          "left": 98,
+          "top": 1211,
+          "right": 982,
+          "bottom": 1311.8
+        },
+        "subtitle": {
+          "left": 98,
+          "top": 1326.8,
+          "right": 982,
+          "bottom": 1362
+        },
+        "logoSafe": {
+          "left": 238,
+          "top": 1459,
+          "right": 842,
+          "bottom": 1690
+        },
+        "logo": {
+          "left": 443,
+          "top": 1477,
+          "right": 638,
+          "bottom": 1672
+        }
+      },
+      "fontSizes": {
+        "title": 48,
+        "subtitle": 32
+      },
+      "svg": {
+        "viewBox": "0 0 1080 1920",
+        "preserveAspectRatio": "xMidYMid meet",
+        "titleColor": "#D9AD3B",
+        "subtitleColor": "#F0D889"
+      },
+      "logo": {
+        "sourceWidth": 512,
+        "sourceHeight": 512,
+        "renderedWidth": 195,
+        "renderedHeight": 195,
+        "sourceRatio": 1,
+        "renderedRatio": 1,
+        "fit": "contain",
+        "fullyVisible": true,
+        "opaqueRectangle": false
+      },
+      "checks": {
+        "titleWithinSafeArea": true,
+        "subtitleWithinSafeArea": true,
+        "textWithinSafeArea": true,
+        "logoWithinSafeArea": true,
+        "titleSubtitleCollision": false,
+        "textLogoCollision": false,
+        "canvasOverflow": false,
+        "opaqueLogoRectangle": false,
+        "formatSpecificRecomposition": true,
+        "mobileReadabilityEstimated": true
+      },
+      "imageGenerationCallCount": 0
+    },
+    {
+      "version": 2,
+      "platform": "Story",
+      "format": {
+        "width": 1080,
+        "height": 1920
+      },
+      "variant": "Cinematic",
+      "title": "DÉCOUVRIR L’UNIVERS SDZ",
+      "subtitle": "UNE ATMOSPHÈRE SINGULIÈRE",
+      "titleLines": [
+        "DÉCOUVRIR L’UNIVERS",
+        "SDZ"
+      ],
+      "subtitleLines": [
+        "UNE ATMOSPHÈRE SINGULIÈRE"
+      ],
+      "safeAreas": {
+        "text": {
+          "left": 76,
+          "top": 1152,
+          "right": 1004,
+          "bottom": 1421
+        },
+        "logo": {
+          "left": 238,
+          "top": 1459,
+          "right": 842,
+          "bottom": 1690
+        },
+        "source": "posterStrategy.safeAreasByFormat"
+      },
+      "boxes": {
+        "text": {
+          "left": 76,
+          "top": 1152,
+          "right": 1004,
+          "bottom": 1421
+        },
+        "title": {
+          "left": 98,
+          "top": 1198,
+          "right": 982,
+          "bottom": 1284.1
+        },
+        "subtitle": {
+          "left": 98,
+          "top": 1297.1,
+          "right": 982,
+          "bottom": 1326.8
+        },
+        "logoSafe": {
+          "left": 238,
+          "top": 1459,
+          "right": 842,
+          "bottom": 1690
+        },
+        "logo": {
+          "left": 443,
+          "top": 1477,
+          "right": 638,
+          "bottom": 1672
+        }
+      },
+      "fontSizes": {
+        "title": 41,
+        "subtitle": 27
+      },
+      "svg": {
+        "viewBox": "0 0 1080 1920",
+        "preserveAspectRatio": "xMidYMid meet",
+        "titleColor": "#D9AD3B",
+        "subtitleColor": "#F0D889"
+      },
+      "logo": {
+        "sourceWidth": 512,
+        "sourceHeight": 512,
+        "renderedWidth": 195,
+        "renderedHeight": 195,
+        "sourceRatio": 1,
+        "renderedRatio": 1,
+        "fit": "contain",
+        "fullyVisible": true,
+        "opaqueRectangle": false
+      },
+      "checks": {
+        "titleWithinSafeArea": true,
+        "subtitleWithinSafeArea": true,
+        "textWithinSafeArea": true,
+        "logoWithinSafeArea": true,
+        "titleSubtitleCollision": false,
+        "textLogoCollision": false,
+        "canvasOverflow": false,
+        "opaqueLogoRectangle": false,
+        "formatSpecificRecomposition": true,
+        "mobileReadabilityEstimated": true
+      },
+      "imageGenerationCallCount": 0
+    },
+    {
+      "version": 2,
+      "platform": "Story",
+      "format": {
+        "width": 1080,
+        "height": 1920
+      },
+      "variant": "Minimalist",
+      "title": "DÉCOUVRIR L’UNIVERS SDZ",
+      "subtitle": "UNE ATMOSPHÈRE SINGULIÈRE",
+      "titleLines": [
+        "DÉCOUVRIR L’UNIVERS",
+        "SDZ"
+      ],
+      "subtitleLines": [
+        "UNE ATMOSPHÈRE SINGULIÈRE"
+      ],
+      "safeAreas": {
+        "text": {
+          "left": 76,
+          "top": 1152,
+          "right": 1004,
+          "bottom": 1421
+        },
+        "logo": {
+          "left": 238,
+          "top": 1459,
+          "right": 842,
+          "bottom": 1690
+        },
+        "source": "posterStrategy.safeAreasByFormat"
+      },
+      "boxes": {
+        "text": {
+          "left": 76,
+          "top": 1152,
+          "right": 1004,
+          "bottom": 1421
+        },
+        "title": {
+          "left": 98,
+          "top": 1260,
+          "right": 982,
+          "bottom": 1333.5
+        },
+        "subtitle": {
+          "left": 98,
+          "top": 1344.5,
+          "right": 982,
+          "bottom": 1370.9
+        },
+        "logoSafe": {
+          "left": 238,
+          "top": 1459,
+          "right": 842,
+          "bottom": 1690
+        },
+        "logo": {
+          "left": 443,
+          "top": 1477,
+          "right": 638,
+          "bottom": 1672
+        }
+      },
+      "fontSizes": {
+        "title": 35,
+        "subtitle": 24
+      },
+      "svg": {
+        "viewBox": "0 0 1080 1920",
+        "preserveAspectRatio": "xMidYMid meet",
+        "titleColor": "#D9AD3B",
+        "subtitleColor": "#F0D889"
+      },
+      "logo": {
+        "sourceWidth": 512,
+        "sourceHeight": 512,
+        "renderedWidth": 195,
+        "renderedHeight": 195,
+        "sourceRatio": 1,
+        "renderedRatio": 1,
+        "fit": "contain",
+        "fullyVisible": true,
+        "opaqueRectangle": false
+      },
+      "checks": {
+        "titleWithinSafeArea": true,
+        "subtitleWithinSafeArea": true,
+        "textWithinSafeArea": true,
+        "logoWithinSafeArea": true,
+        "titleSubtitleCollision": false,
+        "textLogoCollision": false,
+        "canvasOverflow": false,
+        "opaqueLogoRectangle": false,
+        "formatSpecificRecomposition": true,
+        "mobileReadabilityEstimated": true
+      },
+      "imageGenerationCallCount": 0
+    },
+    {
+      "version": 2,
+      "platform": "Google Business",
+      "format": {
+        "width": 1200,
+        "height": 900
+      },
+      "variant": "Editorial",
+      "title": "DÉCOUVRIR L’UNIVERS SDZ",
+      "subtitle": "UNE ATMOSPHÈRE SINGULIÈRE",
+      "titleLines": [
+        "DÉCOUVRIR L’UNIVERS",
+        "SDZ"
+      ],
+      "subtitleLines": [
+        "UNE ATMOSPHÈRE SINGULIÈRE"
+      ],
+      "safeAreas": {
+        "text": {
+          "left": 72,
+          "top": 513,
+          "right": 648,
+          "bottom": 675
+        },
+        "logo": {
+          "left": 96,
+          "top": 693,
+          "right": 516,
+          "bottom": 828
+        },
+        "source": "posterStrategy.safeAreasByFormat"
+      },
+      "boxes": {
+        "text": {
+          "left": 72,
+          "top": 513,
+          "right": 648,
+          "bottom": 675
+        },
+        "title": {
+          "left": 85,
+          "top": 526,
+          "right": 635,
+          "bottom": 612.1
+        },
+        "subtitle": {
+          "left": 85,
+          "top": 625.1,
+          "right": 635,
+          "bottom": 661.4
+        },
+        "logoSafe": {
+          "left": 96,
+          "top": 693,
+          "right": 516,
+          "bottom": 828
+        },
+        "logo": {
+          "left": 251,
+          "top": 705,
+          "right": 362,
+          "bottom": 816
+        }
+      },
+      "fontSizes": {
+        "title": 41,
+        "subtitle": 33
+      },
+      "svg": {
+        "viewBox": "0 0 1200 900",
+        "preserveAspectRatio": "xMidYMid meet",
+        "titleColor": "#D9AD3B",
+        "subtitleColor": "#F0D889"
+      },
+      "logo": {
+        "sourceWidth": 512,
+        "sourceHeight": 512,
+        "renderedWidth": 111,
+        "renderedHeight": 111,
+        "sourceRatio": 1,
+        "renderedRatio": 1,
+        "fit": "contain",
+        "fullyVisible": true,
+        "opaqueRectangle": false
+      },
+      "checks": {
+        "titleWithinSafeArea": true,
+        "subtitleWithinSafeArea": true,
+        "textWithinSafeArea": true,
+        "logoWithinSafeArea": true,
+        "titleSubtitleCollision": false,
+        "textLogoCollision": false,
+        "canvasOverflow": false,
+        "opaqueLogoRectangle": false,
+        "formatSpecificRecomposition": true,
+        "mobileReadabilityEstimated": true
+      },
+      "imageGenerationCallCount": 0
+    },
+    {
+      "version": 2,
+      "platform": "Google Business",
+      "format": {
+        "width": 1200,
+        "height": 900
+      },
+      "variant": "Cinematic",
+      "title": "DÉCOUVRIR L’UNIVERS SDZ",
+      "subtitle": "UNE ATMOSPHÈRE SINGULIÈRE",
+      "titleLines": [
+        "DÉCOUVRIR L’UNIVERS",
+        "SDZ"
+      ],
+      "subtitleLines": [
+        "UNE ATMOSPHÈRE SINGULIÈRE"
+      ],
+      "safeAreas": {
+        "text": {
+          "left": 72,
+          "top": 513,
+          "right": 648,
+          "bottom": 675
+        },
+        "logo": {
+          "left": 96,
+          "top": 693,
+          "right": 516,
+          "bottom": 828
+        },
+        "source": "posterStrategy.safeAreasByFormat"
+      },
+      "boxes": {
+        "text": {
+          "left": 72,
+          "top": 513,
+          "right": 648,
+          "bottom": 675
+        },
+        "title": {
+          "left": 85,
+          "top": 526,
+          "right": 635,
+          "bottom": 612.1
+        },
+        "subtitle": {
+          "left": 85,
+          "top": 625.1,
+          "right": 635,
+          "bottom": 661.4
+        },
+        "logoSafe": {
+          "left": 96,
+          "top": 693,
+          "right": 516,
+          "bottom": 828
+        },
+        "logo": {
+          "left": 251,
+          "top": 705,
+          "right": 362,
+          "bottom": 816
+        }
+      },
+      "fontSizes": {
+        "title": 41,
+        "subtitle": 33
+      },
+      "svg": {
+        "viewBox": "0 0 1200 900",
+        "preserveAspectRatio": "xMidYMid meet",
+        "titleColor": "#D9AD3B",
+        "subtitleColor": "#F0D889"
+      },
+      "logo": {
+        "sourceWidth": 512,
+        "sourceHeight": 512,
+        "renderedWidth": 111,
+        "renderedHeight": 111,
+        "sourceRatio": 1,
+        "renderedRatio": 1,
+        "fit": "contain",
+        "fullyVisible": true,
+        "opaqueRectangle": false
+      },
+      "checks": {
+        "titleWithinSafeArea": true,
+        "subtitleWithinSafeArea": true,
+        "textWithinSafeArea": true,
+        "logoWithinSafeArea": true,
+        "titleSubtitleCollision": false,
+        "textLogoCollision": false,
+        "canvasOverflow": false,
+        "opaqueLogoRectangle": false,
+        "formatSpecificRecomposition": true,
+        "mobileReadabilityEstimated": true
+      },
+      "imageGenerationCallCount": 0
+    },
+    {
+      "version": 2,
+      "platform": "Google Business",
+      "format": {
+        "width": 1200,
+        "height": 900
+      },
+      "variant": "Minimalist",
+      "title": "DÉCOUVRIR L’UNIVERS SDZ",
+      "subtitle": "UNE ATMOSPHÈRE SINGULIÈRE",
+      "titleLines": [
+        "DÉCOUVRIR L’UNIVERS",
+        "SDZ"
+      ],
+      "subtitleLines": [
+        "UNE ATMOSPHÈRE SINGULIÈRE"
+      ],
+      "safeAreas": {
+        "text": {
+          "left": 72,
+          "top": 513,
+          "right": 648,
+          "bottom": 675
+        },
+        "logo": {
+          "left": 96,
+          "top": 693,
+          "right": 516,
+          "bottom": 828
+        },
+        "source": "posterStrategy.safeAreasByFormat"
+      },
+      "boxes": {
+        "text": {
+          "left": 72,
+          "top": 513,
+          "right": 648,
+          "bottom": 675
+        },
+        "title": {
+          "left": 85,
+          "top": 528,
+          "right": 635,
+          "bottom": 614.1
+        },
+        "subtitle": {
+          "left": 85,
+          "top": 627.1,
+          "right": 635,
+          "bottom": 661.2
+        },
+        "logoSafe": {
+          "left": 96,
+          "top": 693,
+          "right": 516,
+          "bottom": 828
+        },
+        "logo": {
+          "left": 251,
+          "top": 705,
+          "right": 362,
+          "bottom": 816
+        }
+      },
+      "fontSizes": {
+        "title": 41,
+        "subtitle": 31
+      },
+      "svg": {
+        "viewBox": "0 0 1200 900",
+        "preserveAspectRatio": "xMidYMid meet",
+        "titleColor": "#D9AD3B",
+        "subtitleColor": "#F0D889"
+      },
+      "logo": {
+        "sourceWidth": 512,
+        "sourceHeight": 512,
+        "renderedWidth": 111,
+        "renderedHeight": 111,
+        "sourceRatio": 1,
+        "renderedRatio": 1,
+        "fit": "contain",
+        "fullyVisible": true,
+        "opaqueRectangle": false
+      },
+      "checks": {
+        "titleWithinSafeArea": true,
+        "subtitleWithinSafeArea": true,
+        "textWithinSafeArea": true,
+        "logoWithinSafeArea": true,
+        "titleSubtitleCollision": false,
+        "textLogoCollision": false,
+        "canvasOverflow": false,
+        "opaqueLogoRectangle": false,
+        "formatSpecificRecomposition": true,
+        "mobileReadabilityEstimated": true
+      },
+      "imageGenerationCallCount": 0
+    },
+    {
+      "version": 2,
+      "platform": "Blog",
+      "format": {
+        "width": 1920,
+        "height": 1080
+      },
+      "variant": "Editorial",
+      "title": "DÉCOUVRIR L’UNIVERS SDZ",
+      "subtitle": "UNE ATMOSPHÈRE SINGULIÈRE",
+      "titleLines": [
+        "DÉCOUVRIR L’UNIVERS",
+        "SDZ"
+      ],
+      "subtitleLines": [
+        "UNE ATMOSPHÈRE SINGULIÈRE"
+      ],
+      "safeAreas": {
+        "text": {
+          "left": 1037,
+          "top": 140,
+          "right": 1824,
+          "bottom": 432
+        },
+        "logo": {
+          "left": 1229,
+          "top": 464,
+          "right": 1690,
+          "bottom": 778
+        },
+        "source": "posterStrategy.safeAreasByFormat"
+      },
+      "boxes": {
+        "text": {
+          "left": 1037,
+          "top": 140,
+          "right": 1824,
+          "bottom": 432
+        },
+        "title": {
+          "left": 1060,
+          "top": 188,
+          "right": 1801,
+          "bottom": 314
+        },
+        "subtitle": {
+          "left": 1060,
+          "top": 333,
+          "right": 1801,
+          "bottom": 384.7
+        },
+        "logoSafe": {
+          "left": 1229,
+          "top": 464,
+          "right": 1690,
+          "bottom": 778
+        },
+        "logo": {
+          "left": 1328,
+          "top": 489,
+          "right": 1592,
+          "bottom": 753
+        }
+      },
+      "fontSizes": {
+        "title": 60,
+        "subtitle": 47
+      },
+      "svg": {
+        "viewBox": "0 0 1920 1080",
+        "preserveAspectRatio": "xMidYMid meet",
+        "titleColor": "#D9AD3B",
+        "subtitleColor": "#F0D889"
+      },
+      "logo": {
+        "sourceWidth": 512,
+        "sourceHeight": 512,
+        "renderedWidth": 264,
+        "renderedHeight": 264,
+        "sourceRatio": 1,
+        "renderedRatio": 1,
+        "fit": "contain",
+        "fullyVisible": true,
+        "opaqueRectangle": false
+      },
+      "checks": {
+        "titleWithinSafeArea": true,
+        "subtitleWithinSafeArea": true,
+        "textWithinSafeArea": true,
+        "logoWithinSafeArea": true,
+        "titleSubtitleCollision": false,
+        "textLogoCollision": false,
+        "canvasOverflow": false,
+        "opaqueLogoRectangle": false,
+        "formatSpecificRecomposition": true,
+        "mobileReadabilityEstimated": true
+      },
+      "imageGenerationCallCount": 0
+    },
+    {
+      "version": 2,
+      "platform": "Blog",
+      "format": {
+        "width": 1920,
+        "height": 1080
+      },
+      "variant": "Cinematic",
+      "title": "DÉCOUVRIR L’UNIVERS SDZ",
+      "subtitle": "UNE ATMOSPHÈRE SINGULIÈRE",
+      "titleLines": [
+        "DÉCOUVRIR L’UNIVERS",
+        "SDZ"
+      ],
+      "subtitleLines": [
+        "UNE ATMOSPHÈRE SINGULIÈRE"
+      ],
+      "safeAreas": {
+        "text": {
+          "left": 1037,
+          "top": 140,
+          "right": 1824,
+          "bottom": 432
+        },
+        "logo": {
+          "left": 1229,
+          "top": 464,
+          "right": 1690,
+          "bottom": 778
+        },
+        "source": "posterStrategy.safeAreasByFormat"
+      },
+      "boxes": {
+        "text": {
+          "left": 1037,
+          "top": 140,
+          "right": 1824,
+          "bottom": 432
+        },
+        "title": {
+          "left": 1060,
+          "top": 175,
+          "right": 1801,
+          "bottom": 301
+        },
+        "subtitle": {
+          "left": 1060,
+          "top": 320,
+          "right": 1801,
+          "bottom": 371.7
+        },
+        "logoSafe": {
+          "left": 1229,
+          "top": 464,
+          "right": 1690,
+          "bottom": 778
+        },
+        "logo": {
+          "left": 1328,
+          "top": 489,
+          "right": 1592,
+          "bottom": 753
+        }
+      },
+      "fontSizes": {
+        "title": 60,
+        "subtitle": 47
+      },
+      "svg": {
+        "viewBox": "0 0 1920 1080",
+        "preserveAspectRatio": "xMidYMid meet",
+        "titleColor": "#D9AD3B",
+        "subtitleColor": "#F0D889"
+      },
+      "logo": {
+        "sourceWidth": 512,
+        "sourceHeight": 512,
+        "renderedWidth": 264,
+        "renderedHeight": 264,
+        "sourceRatio": 1,
+        "renderedRatio": 1,
+        "fit": "contain",
+        "fullyVisible": true,
+        "opaqueRectangle": false
+      },
+      "checks": {
+        "titleWithinSafeArea": true,
+        "subtitleWithinSafeArea": true,
+        "textWithinSafeArea": true,
+        "logoWithinSafeArea": true,
+        "titleSubtitleCollision": false,
+        "textLogoCollision": false,
+        "canvasOverflow": false,
+        "opaqueLogoRectangle": false,
+        "formatSpecificRecomposition": true,
+        "mobileReadabilityEstimated": true
+      },
+      "imageGenerationCallCount": 0
+    },
+    {
+      "version": 2,
+      "platform": "Blog",
+      "format": {
+        "width": 1920,
+        "height": 1080
+      },
+      "variant": "Minimalist",
+      "title": "DÉCOUVRIR L’UNIVERS SDZ",
+      "subtitle": "UNE ATMOSPHÈRE SINGULIÈRE",
+      "titleLines": [
+        "DÉCOUVRIR L’UNIVERS",
+        "SDZ"
+      ],
+      "subtitleLines": [
+        "UNE ATMOSPHÈRE SINGULIÈRE"
+      ],
+      "safeAreas": {
+        "text": {
+          "left": 1037,
+          "top": 140,
+          "right": 1824,
+          "bottom": 432
+        },
+        "logo": {
+          "left": 1229,
+          "top": 464,
+          "right": 1690,
+          "bottom": 778
+        },
+        "source": "posterStrategy.safeAreasByFormat"
+      },
+      "boxes": {
+        "text": {
+          "left": 1037,
+          "top": 140,
+          "right": 1824,
+          "bottom": 432
+        },
+        "title": {
+          "left": 1060,
+          "top": 202,
+          "right": 1801,
+          "bottom": 328
+        },
+        "subtitle": {
+          "left": 1060,
+          "top": 347,
+          "right": 1801,
+          "bottom": 395.4
+        },
+        "logoSafe": {
+          "left": 1229,
+          "top": 464,
+          "right": 1690,
+          "bottom": 778
+        },
+        "logo": {
+          "left": 1328,
+          "top": 489,
+          "right": 1592,
+          "bottom": 753
+        }
+      },
+      "fontSizes": {
+        "title": 60,
+        "subtitle": 44
+      },
+      "svg": {
+        "viewBox": "0 0 1920 1080",
+        "preserveAspectRatio": "xMidYMid meet",
+        "titleColor": "#D9AD3B",
+        "subtitleColor": "#F0D889"
+      },
+      "logo": {
+        "sourceWidth": 512,
+        "sourceHeight": 512,
+        "renderedWidth": 264,
+        "renderedHeight": 264,
+        "sourceRatio": 1,
+        "renderedRatio": 1,
+        "fit": "contain",
+        "fullyVisible": true,
+        "opaqueRectangle": false
+      },
+      "checks": {
+        "titleWithinSafeArea": true,
+        "subtitleWithinSafeArea": true,
+        "textWithinSafeArea": true,
+        "logoWithinSafeArea": true,
+        "titleSubtitleCollision": false,
+        "textLogoCollision": false,
+        "canvasOverflow": false,
+        "opaqueLogoRectangle": false,
+        "formatSpecificRecomposition": true,
+        "mobileReadabilityEstimated": true
+      },
+      "imageGenerationCallCount": 0
+    },
+    {
+      "version": 2,
+      "platform": "Bannière",
+      "format": {
+        "width": 1920,
+        "height": 640
+      },
+      "variant": "Editorial",
+      "title": "DÉCOUVRIR L’UNIVERS SDZ",
+      "subtitle": "UNE ATMOSPHÈRE SINGULIÈRE",
+      "titleLines": [
+        "DÉCOUVRIR L’UNIVERS",
+        "SDZ"
+      ],
+      "subtitleLines": [
+        "UNE ATMOSPHÈRE SINGULIÈRE"
+      ],
+      "safeAreas": {
+        "text": {
+          "left": 96,
+          "top": 109,
+          "right": 941,
+          "bottom": 352
+        },
+        "logo": {
+          "left": 250,
+          "top": 378,
+          "right": 749,
+          "bottom": 550
+        },
+        "source": "posterStrategy.safeAreasByFormat"
+      },
+      "boxes": {
+        "text": {
+          "left": 96,
+          "top": 109,
+          "right": 941,
+          "bottom": 352
+        },
+        "title": {
+          "left": 115,
+          "top": 128,
+          "right": 922,
+          "bottom": 258.20000000000005
+        },
+        "subtitle": {
+          "left": 115,
+          "top": 278.20000000000005,
+          "right": 922,
+          "bottom": 332.1
+        },
+        "logoSafe": {
+          "left": 250,
+          "top": 378,
+          "right": 749,
+          "bottom": 550
+        },
+        "logo": {
+          "left": 428,
+          "top": 392,
+          "right": 572,
+          "bottom": 536
+        }
+      },
+      "fontSizes": {
+        "title": 62,
+        "subtitle": 49
+      },
+      "svg": {
+        "viewBox": "0 0 1920 640",
+        "preserveAspectRatio": "xMidYMid meet",
+        "titleColor": "#D9AD3B",
+        "subtitleColor": "#F0D889"
+      },
+      "logo": {
+        "sourceWidth": 512,
+        "sourceHeight": 512,
+        "renderedWidth": 144,
+        "renderedHeight": 144,
+        "sourceRatio": 1,
+        "renderedRatio": 1,
+        "fit": "contain",
+        "fullyVisible": true,
+        "opaqueRectangle": false
+      },
+      "checks": {
+        "titleWithinSafeArea": true,
+        "subtitleWithinSafeArea": true,
+        "textWithinSafeArea": true,
+        "logoWithinSafeArea": true,
+        "titleSubtitleCollision": false,
+        "textLogoCollision": false,
+        "canvasOverflow": false,
+        "opaqueLogoRectangle": false,
+        "formatSpecificRecomposition": true,
+        "mobileReadabilityEstimated": true
+      },
+      "imageGenerationCallCount": 0
+    },
+    {
+      "version": 2,
+      "platform": "Bannière",
+      "format": {
+        "width": 1920,
+        "height": 640
+      },
+      "variant": "Cinematic",
+      "title": "DÉCOUVRIR L’UNIVERS SDZ",
+      "subtitle": "UNE ATMOSPHÈRE SINGULIÈRE",
+      "titleLines": [
+        "DÉCOUVRIR L’UNIVERS",
+        "SDZ"
+      ],
+      "subtitleLines": [
+        "UNE ATMOSPHÈRE SINGULIÈRE"
+      ],
+      "safeAreas": {
+        "text": {
+          "left": 96,
+          "top": 109,
+          "right": 941,
+          "bottom": 352
+        },
+        "logo": {
+          "left": 250,
+          "top": 378,
+          "right": 749,
+          "bottom": 550
+        },
+        "source": "posterStrategy.safeAreasByFormat"
+      },
+      "boxes": {
+        "text": {
+          "left": 96,
+          "top": 109,
+          "right": 941,
+          "bottom": 352
+        },
+        "title": {
+          "left": 115,
+          "top": 128,
+          "right": 922,
+          "bottom": 258.20000000000005
+        },
+        "subtitle": {
+          "left": 115,
+          "top": 278.20000000000005,
+          "right": 922,
+          "bottom": 332.1
+        },
+        "logoSafe": {
+          "left": 250,
+          "top": 378,
+          "right": 749,
+          "bottom": 550
+        },
+        "logo": {
+          "left": 428,
+          "top": 392,
+          "right": 572,
+          "bottom": 536
+        }
+      },
+      "fontSizes": {
+        "title": 62,
+        "subtitle": 49
+      },
+      "svg": {
+        "viewBox": "0 0 1920 640",
+        "preserveAspectRatio": "xMidYMid meet",
+        "titleColor": "#D9AD3B",
+        "subtitleColor": "#F0D889"
+      },
+      "logo": {
+        "sourceWidth": 512,
+        "sourceHeight": 512,
+        "renderedWidth": 144,
+        "renderedHeight": 144,
+        "sourceRatio": 1,
+        "renderedRatio": 1,
+        "fit": "contain",
+        "fullyVisible": true,
+        "opaqueRectangle": false
+      },
+      "checks": {
+        "titleWithinSafeArea": true,
+        "subtitleWithinSafeArea": true,
+        "textWithinSafeArea": true,
+        "logoWithinSafeArea": true,
+        "titleSubtitleCollision": false,
+        "textLogoCollision": false,
+        "canvasOverflow": false,
+        "opaqueLogoRectangle": false,
+        "formatSpecificRecomposition": true,
+        "mobileReadabilityEstimated": true
+      },
+      "imageGenerationCallCount": 0
+    },
+    {
+      "version": 2,
+      "platform": "Bannière",
+      "format": {
+        "width": 1920,
+        "height": 640
+      },
+      "variant": "Minimalist",
+      "title": "DÉCOUVRIR L’UNIVERS SDZ",
+      "subtitle": "UNE ATMOSPHÈRE SINGULIÈRE",
+      "titleLines": [
+        "DÉCOUVRIR L’UNIVERS",
+        "SDZ"
+      ],
+      "subtitleLines": [
+        "UNE ATMOSPHÈRE SINGULIÈRE"
+      ],
+      "safeAreas": {
+        "text": {
+          "left": 96,
+          "top": 109,
+          "right": 941,
+          "bottom": 352
+        },
+        "logo": {
+          "left": 250,
+          "top": 378,
+          "right": 749,
+          "bottom": 550
+        },
+        "source": "posterStrategy.safeAreasByFormat"
+      },
+      "boxes": {
+        "text": {
+          "left": 96,
+          "top": 109,
+          "right": 941,
+          "bottom": 352
+        },
+        "title": {
+          "left": 115,
+          "top": 133,
+          "right": 922,
+          "bottom": 263.20000000000005
+        },
+        "subtitle": {
+          "left": 115,
+          "top": 283.20000000000005,
+          "right": 922,
+          "bottom": 331.6
+        },
+        "logoSafe": {
+          "left": 250,
+          "top": 378,
+          "right": 749,
+          "bottom": 550
+        },
+        "logo": {
+          "left": 428,
+          "top": 392,
+          "right": 572,
+          "bottom": 536
+        }
+      },
+      "fontSizes": {
+        "title": 62,
+        "subtitle": 44
+      },
+      "svg": {
+        "viewBox": "0 0 1920 640",
+        "preserveAspectRatio": "xMidYMid meet",
+        "titleColor": "#D9AD3B",
+        "subtitleColor": "#F0D889"
+      },
+      "logo": {
+        "sourceWidth": 512,
+        "sourceHeight": 512,
+        "renderedWidth": 144,
+        "renderedHeight": 144,
+        "sourceRatio": 1,
+        "renderedRatio": 1,
+        "fit": "contain",
+        "fullyVisible": true,
+        "opaqueRectangle": false
+      },
+      "checks": {
+        "titleWithinSafeArea": true,
+        "subtitleWithinSafeArea": true,
+        "textWithinSafeArea": true,
+        "logoWithinSafeArea": true,
+        "titleSubtitleCollision": false,
+        "textLogoCollision": false,
+        "canvasOverflow": false,
+        "opaqueLogoRectangle": false,
+        "formatSpecificRecomposition": true,
+        "mobileReadabilityEstimated": true
+      },
+      "imageGenerationCallCount": 0
+    }
+  ]
+}

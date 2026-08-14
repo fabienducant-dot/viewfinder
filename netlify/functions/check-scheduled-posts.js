@@ -58,6 +58,13 @@ function parseInstagramText(raw){
     altText: (parts["3"]||"").trim(),
   };
 }
+function validatePlatformPayload(post){
+  const strategy=post.postCopyStrategy||post.creativeBrief?.v3PostCopyStrategy||null;
+  if(strategy?.platform&&strategy.platform!==post.platform)throw new Error(`Payload plateforme incohérent : stratégie ${strategy.platform}, publication ${post.platform}.`);
+  if(typeof post.validatedText==="string"&&post.validatedText!==post.textFinal)throw new Error("Payload Make différent du texte validé dans l’interface.");
+  if(typeof post.validatedAltText==="string"&&post.validatedAltText!==(post.altText||""))throw new Error("Alt text Make différent du texte alternatif validé.");
+  return true;
+}
 
 exports.handler = async () => {
   try {
@@ -91,6 +98,7 @@ exports.handler = async () => {
       console.log(`[check-scheduled-posts] Traitement du post ${post.id} (${post.platform}, prévu ${new Date(post.scheduledAt).toISOString()})`);
 
       try {
+        validatePlatformPayload(post);
         const siteUrl = process.env.SITE_URL || process.env.URL || "";
         const imageUrl = post.imageDataUrl && siteUrl
           ? `${siteUrl.replace(/\/$/, "")}/img/${post.id}.jpg`
@@ -124,6 +132,8 @@ exports.handler = async () => {
             image: post.imageDataUrl || null,
             image_url: imageUrl,
             type_contenu: post.platform,
+            post_copy_strategy: post.postCopyStrategy || post.creativeBrief?.v3PostCopyStrategy || null,
+            campaign_creative_direction: post.campaignCreativeDirection || post.creativeBrief?.v3CampaignCreativeDirection || null,
           }),
         });
         console.log(`[check-scheduled-posts] Post ${post.id} → Make a répondu HTTP ${res.status}`);
@@ -155,5 +165,8 @@ exports.handler = async () => {
     return { statusCode: 500, body: JSON.stringify({ error: String(err.message || err) }) };
   }
 };
+
+exports.validatePlatformPayload=validatePlatformPayload;
+exports.parseInstagramText=parseInstagramText;
 
 /* Toutes les 15 minutes — écriture dans netlify.toml plutôt qu'inline pour rester lisible. */

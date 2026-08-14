@@ -50,7 +50,7 @@ exports.handler = async (event) => {
     }
 
     if (job.status === "failed") {
-      return { statusCode: 200, headers: { "Content-Type": "application/json" }, body: JSON.stringify({ ok: false, jobId, status: "failed", error: job.error }) };
+      return { statusCode: 200, headers: { "Content-Type": "application/json" }, body: JSON.stringify({ ok: false, jobId, status: "failed", error: job.error, costAudit:job.costAudit||null, imageGenerationCallCount:job.imageGenerationCallCount||0 }) };
     }
 
     if (job.status === "completed" && job.resultKey) {
@@ -66,6 +66,12 @@ exports.handler = async (event) => {
             usedReference: !!job.usedReference,
             referenceFallbackReason: job.referenceFallbackReason || null,
             brandComposited: job.brandComposited === true,
+            v3Plan: job.v3Plan || null,
+            v3Finalization: job.v3Finalization || null,
+            rawResultAvailable: !!job.rawResultKey,
+            costAudit: job.costAudit || null,
+            referenceAudit: job.referenceAudit || null,
+            artFingerprint: job.artFingerprint || null,
             usage: job.usage || null,
           },
         }),
