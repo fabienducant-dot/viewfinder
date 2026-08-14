@@ -11,6 +11,9 @@
 const { getStore } = require("@netlify/blobs");
 const crypto = require("crypto");
 const { resolveInvocationBaseUrl } = require("./_shared/netlify-invocation-url");
+const { planV3, validatePreparedPlan } = require("./_shared/v3-pipeline");
+const {costMode,selectedReferenceRoles,buildCostAudit}=require("./_shared/v3-cost-control");
+const {getPsioStatus,getPsioReferencesForRoles}=require("./_shared/v3-psio-references");
 
 function openJobStore(){
   const opts = { consistency: "strong" }; // écriture puis relecture quasi immédiate du statut : la
@@ -20,6 +23,24 @@ function openJobStore(){
     return getStore({ name: "viewfinder-image-jobs", siteID: process.env.BLOBS_SITE_ID, token: process.env.BLOBS_TOKEN, ...opts });
   }
   return getStore({ name: "viewfinder-image-jobs", ...opts });
+}
+
+function buildJobInput(payload){
+  let {prompt,size,model,quality,referenceImageUrls,referenceImageData,brandComposition}=payload;
+  let v3Plan=null;
+  const mode=costMode(payload.costMode||"test");
+  if(mode.id==="recompose")throw new Error("La recomposition doit utiliser l’endpoint gratuit dédié.");
+  if(mode.requiresConfirmation&&payload.costConfirmed!==true)throw new Error(`Confirmation explicite requise pour le coût estimé (${mode.estimatedPhotoEur.toFixed(2)} €).`);
+  if(payload.v3Plan){v3Plan=validatePreparedPlan(payload.v3Plan);prompt=v3Plan.photoBrief.prompt;}else if(payload.v3){v3Plan=planV3(payload.v3);prompt=v3Plan.photoBrief.prompt;}
+  if(v3Plan&&v3Plan.costMode!==mode.id)throw new Error(`Incohérence de coût : plan ${v3Plan.costMode}, confirmation ${mode.id}.`);
+  if(mode.id==="test"&&quality&&quality!==mode.quality)throw new Error("Incohérence de coût : Mode Test demandé, qualité haute détectée");
+  if(typeof prompt!=="string"||!prompt.trim())throw new Error("Le prompt est requis");
+  const referenceImageCount=(referenceImageUrls||[]).length+(referenceImageData||[]).length;
+  const effectiveSize=size||"1024x1024";
+  const referenceRoles=selectedReferenceRoles(mode.id,referenceImageCount?["profile_worn","front_worn","product"].slice(0,referenceImageCount):[]);
+  const costAudit=buildCostAudit({mode:mode.id,referenceImageCount,referenceRoles,requestedQuality:quality||mode.quality,requestedSize:size||"1024x1024",effectiveSize});
+  if(costAudit.requiresAdditionalConfirmation&&payload.costCeilingConfirmed!==true)throw new Error(`Confirmation supplémentaire requise : total prudent maximal ${costAudit.estimatedTotalMax.toFixed(3)} €.`);
+  return {prompt,size:effectiveSize,model:model||"gpt-image-2",quality:mode.quality,requestedQuality:quality||mode.quality,effectiveQuality:mode.quality,requestedSize:size||"1024x1024",effectiveSize,costMode:mode.id,referenceImageUrls,referenceImageData,referenceRoles,referenceRequired:payload.referenceRequired===true,brandComposition,v3Plan,clientRequestId:String(payload.clientRequestId||""),costAudit};
 }
 
 exports.handler = async (event) => {
@@ -33,20 +54,23 @@ exports.handler = async (event) => {
   } catch (e) {
     return { statusCode: 400, headers: { "Content-Type": "application/json" }, body: JSON.stringify({ error: "Corps de requête invalide" }) };
   }
-  const { prompt, size, model, quality, referenceImageUrls, referenceImageData, brandComposition } = payload;
-  const referenceRequired = payload.referenceRequired === true;
-  if (typeof prompt !== "string" || !prompt.trim()) {
-    return { statusCode: 400, headers: { "Content-Type": "application/json" }, body: JSON.stringify({ error: "Le prompt est requis" }) };
-  }
+  let input;
+  try{input=buildJobInput(payload);}catch(error){return {statusCode:400,headers:{"Content-Type":"application/json"},body:JSON.stringify({error:String(error.message||error)})};}
+  if(input.v3Plan?.psioRequired){let status,persistent;try{status=await getPsioStatus(true);const roles=selectedReferenceRoles(input.costMode,status.psioReferenceRoles.filter(x=>x.available).map(x=>x.role));persistent=await getPsioReferencesForRoles(roles);input.referenceRoles=roles;}catch(error){return {statusCode:503,headers:{"Content-Type":"application/json"},body:JSON.stringify({error:`Stockage PSiO® inaccessible : ${String(error.message||error)}`,imageGenerationCallCount:0})};}if(!status.psioReferenceReady||!persistent.length)return {statusCode:409,headers:{"Content-Type":"application/json"},body:JSON.stringify({error:"Références officielles PSiO® incomplètes — aucun job créé.",psioReferenceReady:false,psioReferenceCount:status.psioReferenceCount,imageGenerationCallCount:0})};input.referenceImageUrls=[];input.referenceImageData=persistent.map(x=>x.dataUrl);input.referenceRequired=true;input.costAudit=buildCostAudit({mode:input.costMode,referenceImageCount:persistent.length,referenceRoles:input.referenceRoles,requestedQuality:input.requestedQuality,requestedSize:input.requestedSize,effectiveSize:input.effectiveSize});if(input.costAudit.requiresAdditionalConfirmation&&payload.costCeilingConfirmed!==true)return {statusCode:428,headers:{"Content-Type":"application/json"},body:JSON.stringify({error:`Confirmation supplémentaire requise : total prudent maximal ${input.costAudit.estimatedTotalMax.toFixed(3)} €.`,costAudit:input.costAudit,imageGenerationCallCount:0})};}
+  const {prompt,size,model,quality,referenceImageUrls,referenceImageData,referenceRequired,brandComposition,v3Plan}=input;
 
   try {
     const jobId = crypto.randomUUID();
     const now = Date.now();
     const store = openJobStore();
+    const idempotencyKey=input.clientRequestId||crypto.createHash("sha256").update(JSON.stringify({prompt:input.prompt,size:input.size,costMode:input.costMode,brandComposition:input.brandComposition})).digest("hex");
+    const existingRaw=await store.get(`idempotency/${idempotencyKey}`);
+    if(existingRaw){const existing=JSON.parse(existingRaw);return {statusCode:200,headers:{"Content-Type":"application/json"},body:JSON.stringify({ok:true,jobId:existing.jobId,status:existing.status||"queued",deduplicated:true})};}
+    await store.set(`idempotency/${idempotencyKey}`,JSON.stringify({jobId,status:"queued",createdAt:now}));
 
     // Entrée complète (peut contenir jusqu'à 4 images en base64) écrite en Blobs — jamais transmise
     // telle quelle au déclenchement de la Background Function.
-    await store.set(`jobs/${jobId}/input`, JSON.stringify({ prompt, size, model, quality, referenceImageUrls, referenceImageData, referenceRequired, brandComposition }));
+    await store.set(`jobs/${jobId}/input`, JSON.stringify(input));
 
     await store.set(`jobs/${jobId}`, JSON.stringify({
       jobId,
@@ -57,6 +81,14 @@ exports.handler = async (event) => {
       resultKey: null,
       usedReference: null,
       referenceFallbackReason: null,
+      costAudit:input.costAudit,
+      costMode:input.costMode,
+      requestedQuality:input.requestedQuality,
+      effectiveQuality:input.effectiveQuality,
+      requestedSize:input.requestedSize,
+      effectiveSize:input.effectiveSize,
+      imageGenerationCallCount:0,
+      idempotencyKey,
     }));
 
     // Le job doit déclencher la Background Function du MÊME déploiement. Sur une Deploy Preview,
@@ -120,3 +152,5 @@ exports.handler = async (event) => {
     };
   }
 };
+
+exports.buildJobInput=buildJobInput;
