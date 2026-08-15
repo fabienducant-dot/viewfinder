@@ -95,7 +95,7 @@ test("un logo opaque sur fond noir est détouré avant composition", async () =>
 test("le contrôle final fait confiance au logo exact composé par le serveur et bloque encore l'OCR", () => {
   assert.match(index, /officialLogoConformity="exact"/);
   assert.match(index, /overlay\.rawOverlayDetected=overlay\.expectedTextExact!==true/);
-  assert.match(index, /3\.2\.0-safe-compositor/);
+  assert.match(index, /3\.2\.1-index-integrity/);
 });
 
 test("le lock-up serveur protège le sujet et sépare accroche, logo et signature", () => {
