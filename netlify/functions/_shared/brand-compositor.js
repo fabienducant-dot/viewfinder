@@ -9,6 +9,7 @@ const BRAND_TOKENS=require("./v3-brand-tokens");
 const {semanticLines}=require("./v3-creative-strategy");
 
 const GOLD=BRAND_TOKENS.brandGold, PALE_GOLD=BRAND_TOKENS.brandPaleGold, IVORY=BRAND_TOKENS.brandIvory;
+const COMPOSITOR_VERSION="2.0.0-safe-lockup";
 const BRAND_CONTACTS = Object.freeze({
   domain:"la-sante-des-zebres.com", phone:"06.84.40.69.54",
   address:"11 cour Dupas, 59590 Raismes", email:"fabien.ducant@gmail.com",
@@ -286,14 +287,42 @@ async function composeBrandPoster({ imageBuffer, logoDataUrl, platform, headline
     .resize({ width: logoWidth, withoutEnlargement: false, fit: "inside" })
     .png().toBuffer();
   if(await hasOpaqueLogoRectangle(resizedLogo))throw new Error("Rectangle opaque détecté autour du logo officiel.");
+  const normalizedText=value=>String(value||"").trim().replace(/\s+/g," ");
+  const titleWidths=titleLines.map(line=>measureVectorText(DISPLAY_FONT,line,titleSize));
+  const subtitleWidths=subtitleLines.map(line=>measureVectorText(TEXT_FONT,line,subtitleSize));
+  const compositionManifest=Object.freeze({
+    version:COMPOSITOR_VERSION,
+    platform:normalizePlatform(platform),
+    width,height,
+    title,subtitle,
+    titleLines:[...titleLines],subtitleLines:[...subtitleLines],
+    titleSize,subtitleSize,
+    titleWidths,subtitleWidths,
+    safeWidth,safeHeight:layout.textArea.bottom-layout.textArea.top,
+    usedHeight:type.usedHeight,
+    titleExact:normalizedText(titleLines.join(" "))===normalizedText(title),
+    subtitleExact:normalizedText(subtitleLines.join(" "))===normalizedText(subtitle),
+    textWithinCanvas:[...titleWidths,...subtitleWidths].every(value=>value<=safeWidth)&&type.usedHeight<=layout.textArea.bottom-layout.textArea.top,
+    marginsValid:layout.x>=Math.round(width*.04)&&layout.x+layout.width<=width-Math.round(width*.04),
+    hierarchyValid:!subtitleLines.length||titleSize>subtitleSize,
+    zonesDisjoint:layout.textArea.bottom<=layout.logoArea.top,
+    logoBounds:{left:logoLeft,top:logoTop,width:logoWidth,height:estimatedLogoHeight},
+    logoWithinCanvas:logoLeft>=0&&logoTop>=0&&logoLeft+logoWidth<=width&&logoTop+estimatedLogoHeight<=height-minimumBottomMargin,
+    logoRectangleOpaque:false,
+    completeText:[title,subtitle].filter(Boolean).join(" | "),
+  });
+  if(!compositionManifest.titleExact||!compositionManifest.subtitleExact)throw new Error("Texte validé tronqué ou remplacé pendant la composition.");
+  if(!compositionManifest.hierarchyValid)throw new Error("Hiérarchie typographique invalide : le sous-titre domine le titre.");
   const overlaySvg = buildOverlaySvg(width, height, layout, platform, headline, posterStrategy);
-  return image
+  const output=await image
     .composite([
       { input: overlaySvg, left: 0, top: 0 },
       { input: resizedLogo, left: logoLeft, top: logoTop },
     ])
     .png({ compressionLevel: 9, adaptiveFiltering: true })
     .toBuffer();
+  output.compositionManifest=compositionManifest;
+  return output;
 }
 
-module.exports = { BRAND_TOKENS, composeBrandPoster, dataUrlToBuffer, escapeXml, wrapWords, normalizedZone, prepareLogoOverlay, hasOpaqueLogoRectangle,vectorText, measureVectorText,fitFontSize,fitTypography,layoutFor, BRAND_CONTACTS };
+module.exports = { BRAND_TOKENS, COMPOSITOR_VERSION, composeBrandPoster, dataUrlToBuffer, escapeXml, wrapWords, normalizedZone, prepareLogoOverlay, hasOpaqueLogoRectangle,vectorText, measureVectorText,fitFontSize,fitTypography,layoutFor, BRAND_CONTACTS };

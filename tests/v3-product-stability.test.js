@@ -6,6 +6,8 @@ const path=require("node:path");
 const {planV3}=require("../netlify/functions/_shared/v3-pipeline");
 const {semanticLines,extractFacts}=require("../netlify/functions/_shared/v3-creative-strategy");
 const {layoutFor}=require("../netlify/functions/_shared/brand-compositor");
+const {composeBrandPoster,COMPOSITOR_VERSION}=require("../netlify/functions/_shared/brand-compositor");
+const sharp=require("sharp");
 
 const root=path.join(__dirname,"..");
 const institutionalSubject="Venez découvrir un havre de paix, au 11 cour Dupas, 59590 à Raismes. Expertise et savoir-faire, prestations réalisées par Fabien depuis 2017.";
@@ -69,6 +71,28 @@ test("la typographie conserve tous les mots et les zones restent disjointes",()=
     const layout=layoutFor(dims[0],dims[1],plan.artDirection.platform,"",true,{template:plan.preflight&&plan.preflight.template},template);
     assert.ok(layout.textArea.bottom<=layout.logoArea.top,`${platform}: zones superposées`);
   }
+});
+
+test("le rendu Instagram institutionnel conserve le titre complet, réduit le sous-titre et détoure le logo",async()=>{
+  const plan=planV3({service:"Tous sujets",platform:"Instagram",subject:institutionalSubject,textChoice:"automatic",costMode:"test",creativeSeed:"institutional-compositor-regression"});
+  const image=await sharp({create:{width:1080,height:1350,channels:4,background:"#17120b"}}).png().toBuffer();
+  const logo=fs.readFileSync(path.join(root,"icons/icon-512.png"));
+  const output=await composeBrandPoster({imageBuffer:image,logoDataUrl:`data:image/png;base64,${logo.toString("base64")}`,platform:"Instagram",posterStrategy:plan.posterStrategy});
+  const manifest=output.compositionManifest;
+  assert.equal(manifest.version,COMPOSITOR_VERSION);
+  assert.equal(manifest.completeText,"UN HAVRE DE PAIX À RAISMES | EXPERTISE ET SAVOIR-FAIRE DEPUIS 2017");
+  assert.deepEqual(manifest.titleLines,["UN HAVRE DE PAIX","À RAISMES"]);
+  assert.deepEqual(manifest.subtitleLines,["EXPERTISE ET SAVOIR-FAIRE","DEPUIS 2017"]);
+  assert.equal(manifest.titleExact,true);
+  assert.equal(manifest.subtitleExact,true);
+  assert.equal(manifest.textWithinCanvas,true);
+  assert.equal(manifest.marginsValid,true);
+  assert.equal(manifest.hierarchyValid,true);
+  assert.equal(manifest.zonesDisjoint,true);
+  assert.equal(manifest.logoWithinCanvas,true);
+  assert.equal(manifest.logoRectangleOpaque,false);
+  assert.ok(manifest.titleSize>manifest.subtitleSize);
+  assert.deepEqual([(await sharp(output).metadata()).width,(await sharp(output).metadata()).height],[1080,1350]);
 });
 
 test("le navigateur utilise un plan unique, réemploie l'analyse serveur et garde un chemin de récupération",()=>{
