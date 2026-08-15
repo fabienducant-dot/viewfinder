@@ -16,6 +16,10 @@
 const { getStore } = require("@netlify/blobs");
 const { applyImageEditOptions } = require("./_shared/openai-image-edit-options");
 const { composeBrandPoster } = require("./_shared/brand-compositor");
+const { analyzeImageWithOpenAI } = require("./_shared/v3-image-analyzer");
+const { executeV3Pipeline } = require("./_shared/v3-executor");
+const {buildCostAudit}=require("./_shared/v3-cost-control");
+const {artisticFingerprint}=require("./_shared/v3-pipeline");
 
 const PROCESSING_RECENT_THRESHOLD_MS = 14 * 60 * 1000; // en dessous, on suppose qu'une autre
                                                           // invocation traite déjà ce job
@@ -180,9 +184,14 @@ exports.handler = async (event) => {
       await safeSetJobStatus(store, jobId, { status: "failed", error: { message: "Entrée du job introuvable en Blobs.", source: "storage" } });
       return { statusCode: 200, body: JSON.stringify({ ok: false, error: "Entrée introuvable" }) };
     }
-    const { prompt, size, model, quality, referenceImageUrls, referenceImageData, brandComposition } = input;
+    const { prompt, size, model, quality, requestedQuality, effectiveQuality, requestedSize, effectiveSize, referenceImageUrls, referenceImageData, referenceRoles, brandComposition, v3Plan, costMode } = input;
     const referenceRequired = input.referenceRequired === true;
 
+    if(costMode==="test"&&(quality==="high"||effectiveQuality==="high")){
+      const costAudit=buildCostAudit({mode:"test",referenceImageCount:0,visionUsage:false,imageCalls:0,requestedQuality,requestedSize,effectiveSize});
+      await safeSetJobStatus(store,jobId,{status:"failed",error:{message:"Incohérence de coût : Mode Test demandé, qualité haute détectée",source:"cost-control"},costAudit,imageGenerationCallCount:0});
+      return {statusCode:200,body:JSON.stringify({ok:false,error:"Incohérence de coût : Mode Test demandé, qualité haute détectée",imageGenerationCallCount:0})};
+    }
     const key = process.env.OPENAI_API_KEY;
     if (!key) {
       await safeSetJobStatus(store, jobId, { status: "failed", error: { message: "Variable d'environnement OPENAI_API_KEY manquante sur Netlify", source: "config" } });
@@ -201,7 +210,7 @@ exports.handler = async (event) => {
           usedReference = true;
         } catch (refErr) {
           referenceFallbackReason = String(refErr.message || refErr);
-          if(referenceRequired){
+          if(referenceRequired||v3Plan){
             throw new Error(`Référence obligatoire non utilisée : ${referenceFallbackReason}`);
           }
           // Dégradation propre pour les références artistiques facultatives uniquement.
@@ -223,38 +232,56 @@ exports.handler = async (event) => {
       return { statusCode: 200, body: JSON.stringify({ ok: false, error: "Aucune image reçue du fournisseur." }) };
     }
 
+    // V3 conserve toujours la photographie éditoriale brute, y compris lorsqu'une composition ou
+    // un contrôle aval la refuse. Elle reste distincte de l'affiche finale et du texte du post.
+    const rawResultKey = `jobs/${jobId}/raw-result`;
+    try { await store.set(rawResultKey, JSON.stringify({ b64, url, preserved:true })); }
+    catch(rawWriteErr){
+      await safeSetJobStatus(store, jobId, { status:"failed", error:{ message:`Conservation de la photographie brute impossible : ${String(rawWriteErr.message||rawWriteErr)}`, source:"storage" } });
+      return { statusCode:200, body:JSON.stringify({ok:false,error:"Conservation de la photographie brute impossible"}) };
+    }
+
     let brandComposited = false;
-    if(brandComposition && brandComposition.enabled === true){
+    let v3Finalization = null;
+    let rawImageBuffer = null;
+    if(v3Plan){
+      rawImageBuffer=await generatedImageToBuffer(b64,url);
+      const executed=await executeV3Pipeline({plan:v3Plan,rawImageBuffer,preserveRaw:async()=>{},analyzeImage:(buffer,plan)=>analyzeImageWithOpenAI({key,imageBuffer:buffer,plan}),brandComposition,
+        composeImage:async(buffer,selectedLayout,composition)=>{if(!composition||composition.enabled!==true)throw new Error("Composition de marque V3 absente.");const brandStore=openBrandStore();const rawLogoRecord=await brandStore.get("vf-logo-asset");if(!rawLogoRecord)throw new Error("Logo officiel absent de Netlify Blobs.");const logoRecord=JSON.parse(rawLogoRecord);return composeBrandPoster({imageBuffer:buffer,logoDataUrl:logoRecord.dataUrl,platform:String(composition.platform||"Instagram"),headline:String(composition.headline||""),zoneText:String(composition.zoneText||""),selectedLayout,posterStrategy:v3Plan.posterStrategy});}});
+      v3Finalization=executed.finalization;brandComposited=executed.brandComposited;b64=executed.imageBuffer.toString("base64");url=null;
+    }
+    if(!v3Plan && brandComposition && brandComposition.enabled === true){
       try{
         const brandStore = openBrandStore();
         const rawLogoRecord = await brandStore.get("vf-logo-asset");
         if(!rawLogoRecord) throw new Error("Logo officiel absent de Netlify Blobs.");
         const logoRecord = JSON.parse(rawLogoRecord);
-        const imageBuffer = await generatedImageToBuffer(b64, url);
+        const imageBuffer = rawImageBuffer || await generatedImageToBuffer(b64, url);
         const finalBuffer = await composeBrandPoster({
           imageBuffer,
           logoDataUrl: logoRecord.dataUrl,
           platform: String(brandComposition.platform || "Instagram"),
           headline: String(brandComposition.headline || ""),
           zoneText: String(brandComposition.zoneText || ""),
+          selectedLayout: v3Finalization&&v3Finalization.layout,
         });
         b64 = finalBuffer.toString("base64");
         url = null;
         brandComposited = true;
       }catch(compositionErr){
-        await safeSetJobStatus(store, jobId, {
-          status: "failed",
-          error: { message: `Composition de marque impossible : ${String(compositionErr.message || compositionErr)}`, source: "brand-compositor" },
-          usedReference,
-          referenceFallbackReason,
-        });
-        return { statusCode: 200, body: JSON.stringify({ ok: false, error: "Composition de marque impossible" }) };
+        if(v3Plan){
+          v3Finalization.quality={...v3Finalization.quality,ok:false,technical:{ok:false,errors:[...v3Finalization.quality.technical.errors,"composition_sharp"]}};
+          v3Finalization.error=`Composition de marque impossible : ${String(compositionErr.message||compositionErr)}`;
+        }else{
+          await safeSetJobStatus(store,jobId,{status:"failed",error:{message:`Composition de marque impossible : ${String(compositionErr.message||compositionErr)}`,source:"brand-compositor"},usedReference,referenceFallbackReason,rawResultKey});
+          return {statusCode:200,body:JSON.stringify({ok:false,error:"Composition de marque impossible"})};
+        }
       }
     }
 
     const resultKey = `jobs/${jobId}/result`;
     try {
-      await store.set(resultKey, JSON.stringify({ b64, url, usedReference, brandComposited }));
+      await store.set(resultKey, JSON.stringify({ b64, url, usedReference, brandComposited, v3Finalization }));
     } catch (resultWriteErr) {
       await safeSetJobStatus(store, jobId, { status: "failed", error: { message: `Échec d'écriture du résultat : ${String(resultWriteErr.message || resultWriteErr)}`, source: "storage" }, usedReference, referenceFallbackReason });
       return { statusCode: 200, body: JSON.stringify({ ok: false, error: "Échec d'écriture du résultat" }) };
@@ -263,7 +290,11 @@ exports.handler = async (event) => {
     // usage réel OpenAI Images (tokens texte/image) : persisté dans le STATUT (léger — jamais le b64)
     // pour l'archivage des coûts mesurés côté client. Additif, rétrocompatible.
     const usage = data.usage ? { input_tokens: data.usage.input_tokens ?? null, output_tokens: data.usage.output_tokens ?? null, input_tokens_details: data.usage.input_tokens_details ?? null } : null;
-    await safeSetJobStatus(store, jobId, { status: "completed", error: null, resultKey, usedReference, referenceFallbackReason, brandComposited, usage });
+    const referenceImageCount=(referenceImageUrls||[]).length+(referenceImageData||[]).length;
+    const costAudit=buildCostAudit({mode:costMode||"test",referenceImageCount,referenceRoles,imageUsage:usage,visionUsage:v3Plan?{}:false,retries:0,imageCalls:1,requestedQuality,requestedSize,effectiveSize});
+    const referenceAudit={referenceImageCount,used:usedReference,reason:v3Plan?.psioRequired?"Étape PSiO® contractuelle":"Référence visuelle explicitement sélectionnée",stage:v3Plan?.contract.requiredCompositeStages?.find(x=>/PSiO/i.test(x))||null,roles:referenceRoles||[],estimatedInputImageCostEur:null,costDetermination:"unknown_until_billing",costIncludedInOutputEstimate:false,usage:data.usage?.input_tokens_details||null};
+    const artFingerprint=v3Plan&&v3Finalization?artisticFingerprint(v3Plan,v3Finalization,v3Finalization.quality.ok?"validated":"refused"):null;
+    await safeSetJobStatus(store, jobId, { status: "completed", error: null, resultKey, rawResultKey, usedReference, referenceFallbackReason, brandComposited, v3Plan, v3Finalization,artFingerprint,referenceAudit,costAudit,requestedQuality,effectiveQuality:quality,requestedSize,effectiveSize:size,imageGenerationCallCount:1,usage });
 
     // Nettoyage de l'entrée après usage réussi — best-effort, non bloquant si ça échoue.
     try { await store.delete(`jobs/${jobId}/input`); } catch (deleteErr) { /* pas grave, l'entrée reste simplement, sans impact fonctionnel */ }
