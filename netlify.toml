@@ -1,4 +1,5 @@
 [build]
+  command = "node scripts/verify-index-integrity.js"
   publish = "."
   functions = "netlify/functions"
 

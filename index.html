@@ -117,7 +117,25 @@
 <nav id="nav"></nav>
 <main id="main"></main>
 
+<script src="./v3-service-menu.js"></script>
 <script>
+/* Dépendance de démarrage : déclarée avant state/normalizeState afin d'éviter la zone morte
+   temporelle JavaScript. Une panne d'asset devient visible au lieu de laisser un écran noir. */
+function showViewfinderInitializationError(error){
+  console.error("[Viewfinder initialization]",error);
+  const host=document.getElementById("main");
+  if(!host)return;
+  const message=error&&error.message?String(error.message):"Erreur JavaScript inconnue";
+  host.innerHTML=`<section class="card" role="alert"><h2>Erreur d’initialisation de Viewfinder</h2><p>Rechargez l’application. Si le problème persiste, transmettez le détail affiché dans la console.</p><code>${message.replace(/[<>&]/g,char=>({"<":"&lt;",">":"&gt;","&":"&amp;"}[char]))}</code></section>`;
+}
+window.addEventListener("error",event=>showViewfinderInitializationError(event.error||new Error(event.message||"Erreur de démarrage")));
+window.addEventListener("unhandledrejection",event=>showViewfinderInitializationError(event.reason instanceof Error?event.reason:new Error(String(event.reason||"Promesse rejetée"))));
+const SERVICE_MENU = window.VF_SERVICE_MENU;
+if(!SERVICE_MENU||!Array.isArray(SERVICE_MENU.options)||SERVICE_MENU.options.length!==19){
+  const dependencyError=new Error("Source canonique du menu indisponible ou invalide (v3-service-menu.js).");
+  showViewfinderInitializationError(dependencyError);
+  throw dependencyError;
+}
 /* ============================================================
    STOCKAGE LOCAL
 ============================================================ */
@@ -174,25 +192,29 @@ const ASPECTS = {
 };
 
 const PLATFORMS = ["Instagram","Facebook","Google Business","Article Blog Wix","Story"];
+const LOCKED_BRAND_CONTACTS = Object.freeze({domain:"la-sante-des-zebres.com",phone:"06.84.40.69.54",address:"11 cour Dupas, 59590 Raismes",email:"fabien.ducant@gmail.com"});
 
-/* V1.0 — format officiel Instagram/Facebook : 1080x1350 (4:5), une seule image pour les deux. */
+/* V3 — Instagram et Facebook gardent le ratio 4:5 mais utilisent des compositions distinctes. */
 const PLATFORM_ASPECT = { "Instagram":"4:5", "Facebook":"4:5", "Google Business":"4:3", "Article Blog Wix":"16:9", "Story":"9:16" };
+PLATFORM_ASPECT["Instagram Square"]="1:1";PLATFORM_ASPECT["Bannière"]="3:1";
 // gpt-image-2 accepte les dimensions arbitraires multiples de 16. On génère au plus près du format
 // final afin d'éviter le recadrage destructeur qui vidait les Stories et coupait les compositions.
 const API_IMAGE_SIZE_BY_PLATFORM = {
-  "Story": "1088x1920",
+  "Story": "1008x1792",
   "Instagram": "1088x1360",
   "Facebook": "1088x1360",
   "Google Business": "1200x912",
   "Article Blog Wix": "1920x1088",
+  "Instagram Square":"1080x1080","Bannière":"1920x640",
 };
 /* Le texte est généré dans l'image uniquement sur les formats éditoriaux qui l'autorisent.
    Google Business et la couverture Wix restent volontairement sans accroche. */
 const PLATFORM_OVERLAY = { "Instagram":"accroche", "Facebook":"accroche", "Google Business":"aucun", "Article Blog Wix":"aucun", "Story":"fort" };
+PLATFORM_OVERLAY["Instagram Square"]="accroche";PLATFORM_OVERLAY["Bannière"]="aucun";
 const PLATFORM_MAXCHARS = { "Instagram":110, "Facebook":120, "Google Business":0, "Article Blog Wix":220, "Story":220 };
 const PLATFORM_NOTE = {
   "Instagram": "Format portrait 4:5. Accroche courte intégrée par l'API, avec le logo officiel fourni en référence.",
-  "Facebook": "Utilise exactement la même image que l'Instagram 4:5, texte et identité compris.",
+  "Facebook": "Composition éditoriale Facebook dédiée, distincte de l'affiche Instagram.",
   "Google Business": "Aucun texte sur l'image (recommandation Google) — le texte porte tout le SEO.",
   "Article Blog Wix": "Image de couverture éditoriale, sans texte incrusté (les moteurs de recherche ne lisent pas le texte dans une image) — jamais de faux logo, badge ou icône générés par l'IA. Le SEO de l'image passe par un alt text descriptif riche, généré avec le texte de l'article.",
   "Story": "Format vertical plein écran. Accroche forte, sous-ligne et identité officielle intégrées par l'API à partir du vrai logo fourni en référence. Aucun élément de l'interface Instagram ne fait partie du visuel.",
@@ -512,6 +534,7 @@ const DEFAULT_STYLES = [
 const state = {
   tab: "accueil",
   creationMode: "post", // "image" | "post" | "campaign" — distingue les 3 boutons d'accueil dans l'onglet "Créer un post"
+  costMode: LS.get("vf-cost-mode","test"),
   images: LS.get("vf-images", []),
   librarySearch: "",
   libraryAssetFilter: false,
@@ -530,9 +553,10 @@ const state = {
   da: LS.get("vf-da", DEFAULT_DA),
   network: "Instagram",
   mission: "",
-  prestationName: "",
+  prestationName: "Tous sujets",
   styleId: "",
   topic: "",
+  textOnImageChoice: LS.get("vf-text-on-image","automatic"),
   registres: [], // registres visuels MASTER_IMAGE V2 actifs (voir KNOWN_REGISTRES) — Noir & Or/Constitution sont implicites
   imagePrompt: "", textPrompt: "",
   textPromptOptimized: null, imagePromptOptimized: null,
@@ -645,6 +669,13 @@ function normalizeImage(img){
     usedReference: img.usedReference===true ? true : (img.usedReference===false ? false : undefined),
     referenceFallbackReason: typeof img.referenceFallbackReason==="string" ? img.referenceFallbackReason : undefined,
     altText: typeof img.altText==="string" ? img.altText : undefined,
+    layoutReport: (img.layoutReport&&typeof img.layoutReport==="object") ? img.layoutReport : null,
+    sourceImageJobId: img.sourceImageJobId||null,
+    v3Plan: (img.v3Plan&&typeof img.v3Plan==="object") ? img.v3Plan : null,
+    v3Finalization: (img.v3Finalization&&typeof img.v3Finalization==="object") ? img.v3Finalization : null,
+    rawResultAvailable: img.rawResultAvailable===true,
+    costAudit: img.costAudit||null,
+    artFingerprint: img.artFingerprint||null,
   };
 }
 function normalizeScheduledPost(p){
@@ -681,6 +712,10 @@ function normalizeScheduledPost(p){
     preparedDiagnostics: (p.preparedDiagnostics && typeof p.preparedDiagnostics==="object") ? p.preparedDiagnostics : null,
     contentData: (p.contentData && typeof p.contentData==="object") ? p.contentData : null,
     analysis: (p.analysis && typeof p.analysis==="object") ? p.analysis : null,
+    v3Plan: (p.v3Plan&&typeof p.v3Plan==="object") ? p.v3Plan : null,
+    v3Finalization: (p.v3Finalization&&typeof p.v3Finalization==="object") ? p.v3Finalization : null,
+    v3Quality: (p.v3Quality&&typeof p.v3Quality==="object") ? p.v3Quality : null,
+    sourceImageJobId:p.sourceImageJobId||null,masterRawImageJobId:p.masterRawImageJobId||null,costAudit:p.costAudit||null,artFingerprint:p.artFingerprint||null,platformCrop:p.platformCrop||null,platformLayout:p.platformLayout||null,platformComposition:p.platformComposition||null,platformQualityReport:p.platformQualityReport||null,postCopyStrategy:p.postCopyStrategy||p.creativeBrief?.v3PostCopyStrategy||null,campaignCreativeDirection:p.campaignCreativeDirection||p.creativeBrief?.v3CampaignCreativeDirection||null,
     analysisError: p.analysisError || null,
     textError: p.textError || null,
     usedReference: !!p.usedReference,
@@ -767,7 +802,7 @@ function normalizeState(){
   // Registres visuels MASTER_IMAGE V2 actifs (Noir & Or et Constitution générale sont implicites,
   // jamais dans ce tableau). Toute valeur inconnue (ancien état, migration) est silencieusement retirée.
   state.registres = Array.isArray(state.registres) ? state.registres.filter(r=>KNOWN_REGISTRES.includes(r)) : [];
-  state.prestationName = typeof state.prestationName==="string" ? state.prestationName : "";
+  state.prestationName = SERVICE_MENU.options.some(option=>option.value===state.prestationName) ? state.prestationName : SERVICE_MENU.ALL_SUBJECTS;
   state.textPasted = typeof state.textPasted==="string" ? state.textPasted : "";
   state.pendingAltText = typeof state.pendingAltText==="string" ? state.pendingAltText : "";
   // l'id sélectionné doit toujours pointer vers un élément qui existe réellement, sinon on le réinitialise
@@ -1656,15 +1691,8 @@ function modulesToText(mods){
 function cleanPrompt(text){
   return String(text||"").replace(/[ \t]+\n/g, "\n").replace(/\n{3,}/g, "\n\n").trim();
 }
-/* Liste fixe des prestations reconnues individuellement par le sélecteur.
-   Modifiable ici sans toucher au reste du moteur si de nouvelles prestations apparaissent. */
-const KNOWN_PRESTATIONS = [
-  "Massage Zébré","Massage Ayurvédique Abhyanga","Massage Balinais","Massage Thaï traditionnel",
-  "Massage Femme enceinte","Massage Enfant","Réflexologie plantaire thaïlandaise",
-  "Massage japonais du visage","Massage lymphatique expert","Soin énergétique","Reiki",
-  "Luminothérapie PSIO®","Biorésonance quantique","Soin minceur","Offre Sylver","Offre Gold","Massage dos/zone",
-  "Prestations en entreprise",
-];
+/* Source canonique partagée avec le planner et ses tests : le menu ne maintient aucune seconde liste. */
+const KNOWN_PRESTATIONS = SERVICE_MENU.businessNames;
 
 /* Table d'alias : chaque nom canonique (celui déjà stocké dans les sélections, historiques,
    campagnes et modes existants — JAMAIS modifié) peut être reconnu sous plusieurs formulations
@@ -4274,25 +4302,23 @@ function selectReferencesForBrief(brief, platform, maxCount){
    Les trois vues complémentaires verrouillent la géométrie : produit isolé, face portée et profil
    porté. Visages, poses, fonds et couleurs des photos ne sont jamais des références créatives. */
 const OFFICIAL_PSIO_REFERENCES = [
-  /* L'ordre est contractuel pour /images/edits : l'image portée de profil est la photographie
-     de base, les deux suivantes ne servent qu'à confirmer la géométrie du produit. */
-  { id:"official-psio-profile-v2", path:"/assets/psio-official-reference.jpg", role:"base_profil_portee_a_preserver" },
-  { id:"official-psio-front-v2", path:"/assets/psio-official-front.jpg", role:"controle_face_visiere_pont" },
-  { id:"official-psio-product-v2", path:"/assets/psio-official-product.jpg", role:"controle_commandes_ecran_cables" },
+  { id:"vf-psio-reference-profile-worn", role:"profile_worn", label:"Profil porté" },
+  { id:"vf-psio-reference-front-worn", role:"front_worn", label:"Face portée" },
+  { id:"vf-psio-reference-product", role:"product", label:"Produit isolé" },
 ];
 const OFFICIAL_PSIO_REFERENCE_IDS = new Set(OFFICIAL_PSIO_REFERENCES.map(r=>r.id));
 let _officialPsioReferencesCache = null;
-async function getOfficialPsioReferenceSelections(){
-  if(_officialPsioReferencesCache) return _officialPsioReferencesCache;
-  _officialPsioReferencesCache = await Promise.all(OFFICIAL_PSIO_REFERENCES.map(async ref=>({
-    id: ref.id,
-    dataUrl: await fetchImageAsDataUrl(ref.path),
-    metadata: {
-      productReference: true,
-      prestation: "Luminothérapie PSIO®",
-      referenceRole: ref.role,
-    },
-  })));
+async function getPsioReferenceStatus(){
+  const response=await fetch("/.netlify/functions/psio-references",{cache:"no-store"});
+  const data=await fetchJsonOrThrowRaw(response,"références PSiO®");
+  if(!response.ok||data.error)throw new Error(data.error||`Erreur ${response.status}`);
+  return data;
+}
+async function getOfficialPsioReferenceSelections({refresh=false}={}){
+  if(_officialPsioReferencesCache&&!refresh)return _officialPsioReferencesCache;
+  const status=await getPsioReferenceStatus();
+  if(!status.psioReferenceReady)throw new Error(`Références manquantes : ${status.references.filter(x=>!x.available).map(x=>x.label).join(", ")}`);
+  _officialPsioReferencesCache=await Promise.all(status.references.map(async ref=>({id:ref.id,dataUrl:await fetchImageAsDataUrl(ref.previewUrl),metadata:{productReference:true,prestation:"Luminothérapie PSIO®",referenceRole:ref.role,updatedAt:ref.updatedAt}})));
   return _officialPsioReferencesCache;
 }
 /* Jeu de références produit Healy — même principe que PSiO® : deux vues complémentaires
@@ -4662,7 +4688,8 @@ CHAMP imageHeadline (accroche incrustée sur l'image par post-traitement, Instag
 async function generateContentFromBrief(brief, analysis, platform, mission){
   const provider = state.apiProviders.find(p=>p.id===state.selectedProviderId) || DEFAULT_OPENAI_PROVIDER;
   const systemPrompt = "Tu es le rédacteur officiel de cette marque. Réponds uniquement selon le schéma structuré demandé.";
-  const userPrompt = buildContentFromBriefUserPrompt(brief, analysis, platform, mission);
+  const strategyNote=brief.v3PostCopyStrategy ? `\n\nPOST COPY STRATEGY V3 OBLIGATOIRE : ${JSON.stringify(brief.v3PostCopyStrategy)}\nRespecte exactement le nom de prestation, maximum 5 hashtags Instagram, aucun hashtag Google Business, aucun diagnostic, tarif ou durée inventés, jamais https://la-sante-des-zebres.my-shoop.store/. Le SEO local naturel prioritaire est « cabinet à Raismes, proche Valenciennes ».` : "";
+  const userPrompt = buildContentFromBriefUserPrompt(brief, analysis, platform, mission)+strategyNote;
   const res = await fetch("/.netlify/functions/generate-text", {
     method:"POST", headers:{"Content-Type":"application/json"},
     body: JSON.stringify({ kind: provider.kind, model: provider.model, baseUrl: provider.baseUrl, systemPrompt, userPrompt, responseSchema: CONTENT_FROM_BRIEF_SCHEMA }),
@@ -4674,6 +4701,11 @@ async function generateContentFromBrief(brief, analysis, platform, mission){
   let content;
   try{ content = JSON.parse(data.text); } catch(e){ throw new Error("Sortie non exploitable."); }
   if(Array.isArray(content.hashtags)) content.hashtags = content.hashtags.slice(0,5);
+  const contactLine=[LOCKED_BRAND_CONTACTS.domain,LOCKED_BRAND_CONTACTS.phone,LOCKED_BRAND_CONTACTS.address,LOCKED_BRAND_CONTACTS.email].join(" · ");
+  if(typeof content.caption==="string"){
+    content.caption=content.caption.replace(/(?:https?:\/\/|www\.)\S+|\b[\w.+-]+@[\w.-]+\.[A-Za-z]{2,}\b|\b(?:\+33|0)[\d .-]{8,}\d\b/gi,"").trim();
+    if(["Facebook","Google Business","Article Blog Wix"].includes(platform))content.caption=`${content.caption}\n\n${contactLine}`.trim();
+  }
   if((platform==="Instagram" || platform==="Facebook") && !String(content.imageHeadline||"").trim()){
     const source = String(brief.texteImage || brief.messageCentral || "Révélez votre énergie").replace(/\|/g," ").trim();
     content.imageHeadline = source.split(/\s+/).slice(0,9).join(" ");
@@ -4926,7 +4958,7 @@ async function prepareCreativeBrief(inputs){
   }
 
   let referenceSelections = [], referenceError = null;
-  if(prestation==="Luminothérapie PSIO®"){
+  if(["Luminothérapie PSIO®","Offre Gold","Offre Sylver"].includes(prestation)){
     try{
       // Seules les trois vues produit PSiO® sont autorisées : aucune référence artistique ou
       // ancienne génération ne doit influencer la forme du dispositif officiel.
@@ -4957,7 +4989,7 @@ async function prepareCreativeBrief(inputs){
   if(inputs.userReferenceDataUrl){
     const userRef = { id: inputs.userReferenceImageId || `user-ref-${Date.now()}`, dataUrl: inputs.userReferenceDataUrl, metadata:{ userSupplied:true } };
     // Un produit verrouillé ne perd jamais l'une de ses vues officielles.
-    referenceSelections = (prestation==="Luminothérapie PSIO®" || prestation==="Biorésonance quantique")
+    referenceSelections = (["Luminothérapie PSIO®","Offre Gold","Offre Sylver"].includes(prestation) || prestation==="Biorésonance quantique")
       ? [...referenceSelections, userRef]
       : [...referenceSelections.slice(0, 2), userRef];
   }
@@ -5068,8 +5100,9 @@ async function finalizeGeneratedImage(flow){
         sur le même modèle structuré "NOM COURT | sous-ligne" que PSiO/Story — plus de contentHeadline
         générique pour Instagram/Facebook. Le texte vient du brief créatif (texteImage), jamais de
         GPT-image. Repli identique si texteImage est vide. */
-  const structuredHeadline = flow.brief && typeof flow.brief.texteImage==="string"
-    ? (flow.brief.texteImage.trim() || `${String(flow.brief.messageCentral||"RÉVÉLEZ-VOUS").split(/\s+/).slice(0,4).join(" ")} | LÂCHER-PRISE TOTAL`) : "";
+  const structuredHeadline = flow.v3Plan?.posterStrategy
+    ? [flow.v3Plan.posterStrategy.title,flow.v3Plan.posterStrategy.subtitle].filter(Boolean).join(" | ")
+    : (flow.brief && typeof flow.brief.texteImage==="string" ? flow.brief.texteImage.trim() : "");
   const headline = (!logoInScene && (PLATFORM_OVERLAY[platform]==="accroche" || PLATFORM_OVERLAY[platform]==="fort"))
     ? structuredHeadline : "";
   /* 3) logo : appliqué sauf s'il est déjà dans la scène (texte et signature compris, dans ce cas —
@@ -5108,14 +5141,15 @@ function storeFinalizedCreativeFlow(flow, finalized){
     tags:[platform], favorite:false, logoApplied:finalized.logoApplied,
     usedReference:flow.usedReference, referenceFallbackReason:flow.referenceFallbackReason,
     creativeBrief:flow.brief, creativeContent:flow.content, layoutReport:finalized.layoutReport||null,
-    altText:flow.content ? flow.content.altText : (flow.analysis&&flow.analysis.altText) });
+    altText:flow.content ? flow.content.altText : (flow.analysis&&flow.analysis.altText),sourceImageJobId:flow.sourceImageJobId||null,
+    v3Plan:flow.v3Plan||null,v3Finalization:flow.v3Finalization||null,rawResultAvailable:!!flow.sourceImageJobId,
+    costAudit:flow.costAudit||null,artFingerprint:flow.artFingerprint||null });
   LS.set("vf-images",state.images);
   updateCount();
   state.selectedId=id;
   setPostImageId(id);
   flow.imageId=id;
-  recordStructuredImageEntry(flow.inputs,flow.brief,(flow.referenceSelections||[]).map(r=>r.id),
-    flow.imagePrompt,id);
+  const historyEntry=recordStructuredImageEntry(flow.inputs,flow.brief,(flow.referenceSelections||[]).map(r=>r.id),flow.imagePrompt,id);historyEntry.artFingerprint=flow.artFingerprint||null;LS.set("vf-image-history",state.imageHistory);
   if(flow.content){
     const hashtagsText=(flow.content.hashtags||[]).map(h=>h.startsWith("#")?h:"#"+h).slice(0,5).join(" ");
     state.textPasted=[flow.content.caption||"",hashtagsText].filter(Boolean).join("\n\n");
@@ -5147,10 +5181,67 @@ async function applyHeadlineToItem(item){
   return true;
 }
 
+const RECOVERABLE_IMAGE_JOB_KEY="vf-recoverable-image-jobs-v1";
+function readRecoverableImageJobs(){try{const value=JSON.parse(localStorage.getItem(RECOVERABLE_IMAGE_JOB_KEY)||"[]");return Array.isArray(value)?value:[];}catch(error){return [];}}
+function rememberRecoverableImageJob(flow,jobId,status){
+  if(!jobId)return;
+  const existing=readRecoverableImageJobs().filter(item=>item.jobId!==jobId);
+  existing.unshift({jobId,status:status||"queued",createdAt:Date.now(),inputs:flow.inputs,v3Plan:flow.v3Plan||null,brief:flow.brief||null,content:flow.content||null});
+  try{localStorage.setItem(RECOVERABLE_IMAGE_JOB_KEY,JSON.stringify(existing.slice(0,8)));}catch(error){}
+}
+function analysisFromServer(flow){
+  const actual=flow.v3Finalization?.analysis;
+  if(!actual)return null;
+  const subjects=Array.isArray(actual.subjects)?actual.subjects:[];
+  const equipment=Array.isArray(actual.equipment)?actual.equipment:[];
+  const action=actual.requiredActionVisible===true?(flow.v3Plan?.contract?.requiredAction||flow.brief?.action||""):"";
+  const altParts=[subjects.join(", "),action,equipment.length?`avec ${equipment.join(", ")}`:""].filter(Boolean);
+  let altText=altParts.length?altParts.join(" "):"Visuel éditorial de La Santé des Zèbres.";
+  altText=altText.charAt(0).toUpperCase()+altText.slice(1);
+  return {...actual,visibleSubjects:subjects,visibleAction:action,visibleSetting:flow.v3Plan?.artDirection?.background||"",visibleObjects:equipment,
+    lighting:flow.v3Plan?.artDirection?.keyLight||"",altText,
+    briefMismatch:actual.businessCompliance===false?["La conformité métier de la photographie brute n’a pas été validée."]:[],
+    rawOverlayDetected:false,rawOverlayDescription:"",officialLogoPresent:flow.brandComposited===true,
+    officialLogoConformity:flow.brandComposited===true?"exact":"not_checked",expectedTextExact:flow.brandComposited===true,
+    observedText:[flow.v3Plan?.posterStrategy?.title,flow.v3Plan?.posterStrategy?.subtitle].filter(Boolean).join(" | "),
+    unexpectedOverlayDetected:false,brandValidationNotes:"Composition déterministe côté serveur.",
+    dominantColorCast:Number(actual.paletteDrift||0)>.45?"other":"black_gold",productGeometryConformity:"not_applicable",productGeometryMismatch:""};
+}
+async function recoverAndRecomposeImageJob(record,onStatus){
+  if(!record?.jobId||!record?.v3Plan||!record?.inputs)throw new Error("Dossier de récupération incomplet.");
+  onStatus&&onStatus("Vérification de l'image brute conservée...");
+  let sourceResult=null;
+  const statusResponse=await fetch(`/.netlify/functions/get-image-job?jobId=${encodeURIComponent(record.jobId)}`);
+  const status=await fetchJsonOrThrowRaw(statusResponse,"récupération du travail");
+  if(!statusResponse.ok||status.error)throw new Error(status.error||"Travail source introuvable.");
+  if(status.status==="completed")sourceResult=status.result;
+  else sourceResult=await pollImageJob(record.jobId,onStatus,null);
+  const sourceFinalization=sourceResult.v3Finalization||null;
+  if(!sourceFinalization?.analysis)throw new Error("L'analyse serveur de la photographie brute n'est pas disponible.");
+  onStatus&&onStatus("Recomposition gratuite depuis la photographie brute...");
+  const poster=record.v3Plan.posterStrategy||{};
+  const response=await fetch("/.netlify/functions/recompose-image-job",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({
+    sourceJobId:record.jobId,platform:record.inputs.platform==="Article Blog Wix"?"Blog":record.inputs.platform,
+    headline:[poster.title,poster.subtitle].filter(Boolean).join(" | "),zoneText:String(record.brief?.zoneTexte||"")
+  })});
+  const data=await fetchJsonOrThrowRaw(response,"recomposition gratuite");
+  if(!response.ok||data.error)throw new Error(data.error||"Recomposition impossible.");
+  const flow={phase:"completed",ok:true,inputs:record.inputs,brief:record.brief||record.v3Plan.legacyProjection||{},content:record.content||null,
+    v3Plan:record.v3Plan,v3Finalization:{analysis:sourceFinalization.analysis,layout:data.layout,quality:data.quality},
+    dataUrl:await fetchImageAsDataUrl(data.resultUrl),usedReference:false,referenceFallbackReason:null,serverBrandCompositionUsed:true,
+    brandComposited:true,sourceImageJobId:data.jobId,costAudit:data.costAudit||null,imageUsage:null,artFingerprint:null};
+  flow.analysis=analysisFromServer(flow);
+  if(flow.content)flow.content={...flow.content,altText:flow.analysis?.altText||flow.content.altText};
+  else try{flow.content=await generateContentFromBrief(flow.brief,flow.analysis,flow.inputs.platform,flow.inputs.mission);}
+  catch(error){flow.textError=`Texte non récupéré : ${String(error.message||error)}`;}
+  rememberRecoverableImageJob(flow,data.jobId,"completed");
+  return flow;
+}
+
 async function confirmAndGenerateImage(prepared, onStatus, cancelToken){
   const { inputs, brief, referenceSelections } = prepared;
   const { platform, mission, size } = inputs;
-  const psioReferenceRequired = inputs.prestation==="Luminothérapie PSIO®";
+  const psioReferenceRequired = ["Luminothérapie PSIO®","Offre Gold","Offre Sylver"].includes(inputs.prestation);
   const healyReferenceRequired = inputs.prestation==="Biorésonance quantique";
   const productReferenceRequired = psioReferenceRequired || healyReferenceRequired;
   const brandReferenceRequired = logoRequiredFor(platform);
@@ -5206,12 +5297,21 @@ async function confirmAndGenerateImage(prepared, onStatus, cancelToken){
   let dataUrl, usedReference = false, referenceFallbackReason = null, logoSentAsReference = false,
     brandComposited = false, imageUsage = null;
   let safetyRetryCount = 0;
-  const MAX_SAFETY_RETRIES = 2; // rejets "safety_violations" documentés comme non déterministes :
+  const MAX_SAFETY_RETRIES = 0; // V3 : aucun retry payant silencieux.
     // le même prompt peut donner un rendu différent d'une tentative à l'autre. Plafonné pour
     // maîtriser le coût — jamais de relance illimitée, et seulement pour ce type de rejet précis.
   while(true){
     try{
       const genResult = await callProviderImage(prepared.imagePrompt, size, undefined, onStatus, cancelToken, {
+        v3Plan: prepared.v3Plan || undefined,
+        v3: prepared.v3Plan ? {
+          service: prepared.v3Plan.artDirection.service,
+          platform: prepared.v3Plan.artDirection.platform,
+          marketingObjective: prepared.v3Plan.artDirection.marketingObjective,
+          audience: prepared.v3Plan.artDirection.audience,
+          artHistory:(state.imageHistory||[]).map(x=>x.artFingerprint).filter(Boolean).slice(-10),
+          creativeSeed:prepared.v3Plan.artDirection.creativeSeed,
+        } : undefined,
         smartReferenceDataUrls,
         referenceRequired: productReferenceRequired,
         brandComposition: {
@@ -5221,12 +5321,21 @@ async function confirmAndGenerateImage(prepared, onStatus, cancelToken){
           zoneText: String(brief.zoneTexte || brief.zoneLogo || ""),
         },
         model: "gpt-image-2",
-        quality: "high",
-        onJobCreated: prepared.onImageJobCreated,
+        quality: (state.costMode||"test")==="production" ? "high" : "low",
+        costMode: state.costMode||"test",
+        costConfirmed: true,
+        costCeilingConfirmed: prepared.costCeilingConfirmed===true,
+        clientRequestId: prepared.clientRequestId||uid(),
+        onJobCreated: (jobId)=>{prepared.sourceImageJobId=jobId;rememberRecoverableImageJob(prepared,jobId,"queued");if(typeof prepared.onImageJobCreated==="function")prepared.onImageJobCreated(jobId);},
         resumeJobId: safetyRetryCount===0 ? prepared.resumeJobId : undefined,
       });
       dataUrl = genResult.dataUrl; usedReference = genResult.usedReference; referenceFallbackReason = genResult.referenceFallbackReason;
       logoSentAsReference = false; brandComposited = genResult.brandComposited===true; imageUsage = genResult.imageUsage || null;
+      prepared.v3Plan=genResult.v3Plan||prepared.v3Plan||null;
+      prepared.v3Finalization=genResult.v3Finalization||null;
+      prepared.sourceImageJobId=genResult.jobId||prepared.sourceImageJobId||null;
+      prepared.costAudit=genResult.costAudit||null;prepared.referenceAudit=genResult.referenceAudit||null;prepared.artFingerprint=genResult.artFingerprint||null;
+      rememberRecoverableImageJob(prepared,prepared.sourceImageJobId,"completed");
       break;
     }catch(err){
       const isSafetyRejection = /safety_violations/i.test(String(err.message||err));
@@ -5247,14 +5356,20 @@ async function confirmAndGenerateImage(prepared, onStatus, cancelToken){
       error:`Image refusée : les références produit obligatoires (${psioReferenceRequired ? "PSiO®" : "Healy"}) n'ont pas été utilisées${referenceFallbackReason ? ` (${referenceFallbackReason})` : ""}.`,
     };
   }
-  if(brandReferenceRequired && !brandComposited){
+  if(brandReferenceRequired && !brandComposited && !(prepared.v3Finalization&&prepared.v3Finalization.quality&&prepared.v3Finalization.quality.ok===false)){
     return { ...prepared, phase:"image_failed", ok:false, stage:"brand-compositor",
       error:"Image refusée : le compositeur serveur n'a pas appliqué le logo et les textes officiels exacts." };
   }
 
-  onStatus && onStatus("Analyse de l'image obtenue...");
+  onStatus && onStatus("Validation de l'analyse serveur...");
   let analysis, analysisError = null;
-  try{
+  // Les prestations avec appareil physique conservent la comparaison visuelle
+  // spécialisée avec les références officielles. Pour les autres prestations,
+  // l'analyse V3 déjà réalisée côté serveur est réutilisée afin d'éviter deux
+  // appels de vision supplémentaires et d'accélérer le rendu.
+  const serverAnalysis=productReferenceRequired?null:analysisFromServer({...prepared,brandComposited});
+  if(serverAnalysis){analysis=serverAnalysis;}
+  else try{
     const productReferences=(referenceSelections||[]).filter(r=>(OFFICIAL_PSIO_REFERENCE_IDS.has(r.id)||OFFICIAL_HEALY_REFERENCE_IDS.has(r.id))&&r.dataUrl);
     analysis = await analyzeGeneratedImage(dataUrl, brief, {
       productReferenceDataUrls:productReferences.map(r=>r.dataUrl),
@@ -5278,17 +5393,17 @@ async function confirmAndGenerateImage(prepared, onStatus, cancelToken){
     analysis.unexpectedOverlayDetected=false; analysis.brandValidationNotes="Analyse indisponible.";
   }
 
-  onStatus && onStatus("Rédaction du texte...");
-  let content = null, textError = null;
-  try{
-    content = await generateContentFromBrief(brief, analysis, platform, mission);
-  }catch(err){
-    textError = `Échec de la génération de texte : ${String(err.message||err)} — image conservée, relance du texte seul possible.`;
+  let content = prepared.content||null, textError = prepared.textError||null;
+  if(content){content={...content,altText:analysis.altText||content.altText};}
+  else{
+    onStatus && onStatus("Rédaction du texte...");
+    try{content=await generateContentFromBrief(brief,analysis,platform,mission);textError=null;}
+    catch(err){textError=`Échec de la génération de texte : ${String(err.message||err)} — image conservée, relance du texte seul possible.`;}
   }
 
   return { ...prepared, phase:"completed", ok:true, dataUrl, usedReference, referenceFallbackReason, logoSentAsReference,
     serverBrandCompositionUsed:true, brandComposited, imageUsage,
-    analysis, analysisError, content, textError };
+    analysis, analysisError, content, textError, v3Plan:prepared.v3Plan||null, v3Finalization:prepared.v3Finalization||null };
 }
 
 /* T2 : runLegacyImageGeneration supprimée — code mort (zéro appelant) qui produisait un prompt
@@ -5356,10 +5471,12 @@ function computeRepetitionRisk(platform, text){
 /* ---------- campagne complète : décline le sujet sur tous les formats ---------- */
 const CAMPAIGN_ITEMS = [
   { label:"Google Business", platform:"Google Business" },
-  { label:"Instagram", platform:"Instagram" },
+  { label:"Instagram portrait", platform:"Instagram" },
+  { label:"Instagram carré", platform:"Instagram Square",aspectOverride:"1:1",imageOnly:true },
   { label:"Facebook", platform:"Facebook" },
   { label:"Story", platform:"Story", aspectOverride:"9:16", imageOnly:true },
   { label:"Article Blog Wix", platform:"Article Blog Wix" },
+  { label:"Bannière Wix",platform:"Bannière",aspectOverride:"3:1",imageOnly:true },
 ];
 /* ============================================================
    PARAMÈTRES API — appels directs navigateur → fournisseur.
@@ -5521,6 +5638,19 @@ async function callProviderImage(prompt, size, extraReferenceDataUrls, onStatus,
       referenceImageData: referenceImageData.length ? referenceImageData : undefined,
       referenceRequired: options.referenceRequired===true,
       brandComposition: options.brandComposition || undefined,
+      costMode: options.costMode || state.costMode || "test",
+      costConfirmed: options.costConfirmed === true,
+      costCeilingConfirmed: options.costCeilingConfirmed === true,
+      clientRequestId: options.clientRequestId || undefined,
+      v3Plan: options.v3Plan || undefined,
+      // V3 : le serveur réutilise sans reconstruction le plan préparé et son identifiant stable.
+      // Le modèle image ne reçoit jamais le prompt d'affiche historique contenant logo ou typographie.
+      v3: options.v3 || (state.prestationName && state.prestationName!=="Tous sujets" ? {
+        service:state.prestationName,
+        platform:(options.brandComposition?.platform || state.network)==="Article Blog Wix" ? "Blog" : (options.brandComposition?.platform || state.network),
+        marketingObjective:state.mission || "Faire réserver",
+        audience:"clientèle La Santé des Zèbres",
+      } : undefined),
     }),
   });
   const createData = await fetchJsonOrThrowRaw(createRes, "création du travail");
@@ -5577,9 +5707,14 @@ async function pollImageJob(jobId, onStatus, cancelToken){
       const dataUrl = await fetchImageAsDataUrl(statusData.result.resultUrl);
       vfTrace("4-dataUrl-recupere", { dataUrlLength: dataUrl ? dataUrl.length : 0, prefix: dataUrl ? dataUrl.slice(0,30) : null });
       // logoSentAsReference est ajouté par callProviderImage (seule portée où les URLs de référence existent).
-      return { dataUrl, usedReference: !!statusData.result.usedReference,
+      return { dataUrl, jobId, usedReference: !!statusData.result.usedReference,
         referenceFallbackReason: statusData.result.referenceFallbackReason || null,
         brandComposited: statusData.result.brandComposited===true,
+        v3Plan: statusData.result.v3Plan || null,
+        v3Finalization: statusData.result.v3Finalization || null,
+        costAudit: statusData.result.costAudit || null,
+        referenceAudit: statusData.result.referenceAudit || null,
+        artFingerprint: statusData.result.artFingerprint || null,
         imageUsage: statusData.result.usage || null };
     }
     if(onStatus) onStatus(statusData.status==="processing" ? "Génération OpenAI en cours…" : "Préparation de l'image…");
@@ -5724,10 +5859,95 @@ function computeQualityScore({ platform, textPrompt, textMods, imageMods, totalT
   return { global, dims, weakPoints };
 }
 
+function applyAuthoritativeV3Plan(prepared, plan){
+  if(!prepared||!plan)return prepared;
+  const brief=prepared.brief||(prepared.brief={});
+  const projection=plan.legacyProjection||{};
+  Object.assign(brief,projection,{
+    v3SubjectBrief:plan.subjectBrief,
+    v3PosterStrategy:plan.posterStrategy,
+    v3PostCopyStrategy:plan.postCopyStrategy,
+    v3CampaignCreativeDirection:plan.campaignCreativeDirection
+  });
+  if(brief.miseEnScene){
+    brief.miseEnScene.sujetPrincipal=projection.sujetPrincipal||plan.posterStrategy?.mainSubject;
+    brief.miseEnScene.action=projection.action||plan.posterStrategy?.careOrSolutionManifestation;
+  }
+  const selected=(projection.selectedAntiRepetitionElements||[]).map(x=>String(x).toLowerCase());
+  brief.compositionInterdite=(brief.compositionInterdite||[]).filter(item=>!selected.some(term=>String(item).toLowerCase().includes(term)));
+  prepared.v3Plan=plan;
+  prepared.imagePrompt=plan.photoBrief?.prompt||prepared.imagePrompt;
+  prepared.consistencyReport=plan.consistencyReport||null;
+  if(plan.consistencyReport&&!plan.consistencyReport.ready)prepared.blockingError=`Plan V3 incohérent : ${plan.consistencyReport.blockingReasons.join(", ")}. Recomposez gratuitement avant toute génération.`;
+  return prepared;
+}
+
+/* Chemin produit unique : un seul plan V3 autoritaire, sans Creative Planner V2 ni Rédacteur DA
+   concurrents. Le plan déterministe prépare la photographie, l'affiche et le texte ; un unique
+   appel texte rédige ensuite la légende. Aucun appel Images n'a lieu ici. */
+async function prepareAuthoritativeV3(inputs){
+  const {mission,platform,prestation,topic,registres}=inputs;
+  const normalizedPlatform=platform==="Article Blog Wix"?"Blog":platform;
+  const planResponse=await fetch("/.netlify/functions/plan-v3",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({
+    service:prestation,platform:normalizedPlatform,marketingObjective:mission||"Faire réserver",
+    audience:"clientèle La Santé des Zèbres",artHistory:(state.imageHistory||[]).map(x=>x.artFingerprint).filter(Boolean).slice(-10),
+    creativeSeed:`${prestation}-${topic}-${Date.now()}`,subject:topic,selectedRegisters:[...(registres||[])],
+    textChoice:state.textOnImageChoice||"automatic",costMode:state.costMode||"test",
+    requestedSize:inputs.size||API_IMAGE_SIZE_BY_PLATFORM[platform]||"1024x1024"
+  })});
+  const plan=await fetchJsonOrThrowRaw(planResponse,"Direction Artistique V3");
+  if(!planResponse.ok||plan.error)throw new Error(plan.error||"Plan V3 indisponible");
+  const projection=plan.legacyProjection||{};
+  const brief={...projection,
+    typeCreation:(Array.isArray(registres)&&registres.includes("fantastique"))?"affiche_fantastique":"luxe_silencieux",
+    archetypeNarratif:plan.artDirection?.layoutFamily||"Editorial",
+    emotion:plan.artDirection?.dominantEmotion||plan.contract?.emotion||"présence premium",
+    caracteristiqueSourcePrestation:plan.contract?.generic
+      ? ((plan.subjectBrief?.verifiedFacts||[]).join(" · ")||plan.subjectBrief?.coreTheme||topic)
+      : (plan.contract?.recognition||plan.contract?.requiredAction||prestation),
+    v3SubjectBrief:plan.subjectBrief,v3PosterStrategy:plan.posterStrategy,
+    v3PostCopyStrategy:plan.postCopyStrategy,v3CampaignCreativeDirection:plan.campaignCreativeDirection
+  };
+  const allowed=computeAllowedArchetypes(mission,prestation,platform,brief.typeCreation,null);
+  const exclusions=computeRecentCompositionExclusions(platform,null);
+  const prepared={phase:"prepared",inputs,allowed,exclusions,brief,briefCorrected:false,plannerError:null,
+    usedLocalBriefFallback:false,referenceSelections:[],referenceError:null,imagePrompt:plan.photoBrief.prompt,
+    steps:{allowed:allowed.map(x=>x.id),exclusions,moduleIds:null},blockingError:null,aiLogoIntegrationUsed:false,
+    serverBrandCompositionUsed:false,brandReferenceDataUrl:null,daWriterUsed:false,daWriterFallbackReason:null,
+    usage:{planner:null,redacteur:null},transmissionCheck:null,instrumentation:null,paquetOrchestrateur:null,
+    validatorReport:null,appVersion:VF_VERSION,plannerVersion:"v3",v3Plan:plan,consistencyReport:plan.consistencyReport,
+    clientRequestId:uid(),content:null,textError:null};
+  const planData=plan;
+  applyAuthoritativeV3Plan(prepared,planData);
+
+  try{
+    if(["Luminothérapie PSIO®","Offre Gold","Offre Sylver"].includes(prestation))prepared.referenceSelections=await getOfficialPsioReferenceSelections();
+    else if(prestation==="Biorésonance quantique")prepared.referenceSelections=await getOfficialHealyReferenceSelections();
+    else prepared.referenceSelections=selectReferencesForBrief(brief,platform,2)||[];
+  }catch(error){
+    prepared.referenceError=String(error.message||error);
+    if(plan.psioRequired||prestation==="Biorésonance quantique")prepared.blockingError=`Références produit officielles indisponibles : ${prepared.referenceError}`;
+  }
+  if(inputs.userReferenceDataUrl){
+    const userRef={id:inputs.userReferenceImageId||`user-ref-${Date.now()}`,dataUrl:inputs.userReferenceDataUrl,metadata:{userSupplied:true}};
+    prepared.referenceSelections=[...prepared.referenceSelections.slice(0,3),userRef];
+  }
+  try{
+    const logo=await getOfficialLogoAsset();
+    if(!logo?.dataUrl)prepared.blockingError=prepared.blockingError||"Logo officiel SDZ indisponible — génération bloquée avant l'appel image.";
+    else{prepared.brandReferenceDataUrl=logo.dataUrl;prepared.serverBrandCompositionUsed=true;}
+  }catch(error){prepared.blockingError=prepared.blockingError||`Logo officiel SDZ indisponible — ${String(error.message||error)}`;}
+  if(plan.psioRequired&&!plan.psioReferenceReady){
+    const missing=(plan.psioReferenceRoles||[]).filter(x=>!x.available).map(x=>x.label).join(", ");
+    prepared.blockingError=`Références officielles PSiO® manquantes : ${missing}. Ajoutez-les avant toute confirmation payante.`;
+  }
+  try{prepared.content=await generateContentFromBrief(brief,null,platform,mission);}
+  catch(error){prepared.textError=`Texte non préparé : ${String(error.message||error)}`;}
+  return prepared;
+}
+
 async function generateCampaignPosts(topic, missionKey, onProgress){
-  /* T2 — pipeline UNIQUE : chaque item de campagne est préparé par prepareCreativeBrief
-     (Planner + validation + constructeur unique), séquentiellement. Plus aucun prompt
-     de campagne construit par le legacy. */
+  /* Pipeline produit unique : chaque item reçoit directement son plan V3 autoritaire. */
   const campaignId = uid();
   const posts = [];
   for(let i=0; i<CAMPAIGN_ITEMS.length; i++){
@@ -5735,12 +5955,12 @@ async function generateCampaignPosts(topic, missionKey, onProgress){
     const aspect = item.aspectOverride || PLATFORM_ASPECT[item.platform];
     const isStory = item.platform === "Story";
     if(onProgress) onProgress(`${i+1}/${CAMPAIGN_ITEMS.length} — ${item.label}`);
-    const prepared = await prepareCreativeBrief({ mission: missionKey, platform: item.platform, prestation: state.prestationName, topic, aspectKey: aspect, size: API_IMAGE_SIZE_BY_PLATFORM[item.platform]||"1024x1024", isCampaign:true, registres: Array.isArray(state.registres) ? [...state.registres] : [], userReferenceDataUrl: state.userReferenceUpload && state.userReferenceUpload.dataUrl, userReferenceImageId: state.userReferenceUpload && state.userReferenceUpload.id, aiLogoIntegration: !!state.aiLogoIntegration });
+    const prepared = await prepareAuthoritativeV3({ mission: missionKey, platform: item.platform, prestation: state.prestationName, topic, aspectKey: aspect, size: API_IMAGE_SIZE_BY_PLATFORM[item.platform]||"1024x1024", isCampaign:true, registres: Array.isArray(state.registres) ? [...state.registres] : [], userReferenceDataUrl: state.userReferenceUpload && state.userReferenceUpload.dataUrl, userReferenceImageId: state.userReferenceUpload && state.userReferenceUpload.id, aiLogoIntegration: !!state.aiLogoIntegration });
     posts.push({
       id: uid(), campaignId, campaignTopic: topic, campaignLabel: item.label,
       platform: item.platform, mission: missionKey, topic,
       imagePrompt: prepared.imagePrompt,
-      creativeBrief: prepared.brief || null,
+      creativeBrief: prepared.brief || null,v3Plan:prepared.v3Plan||null,postCopyStrategy:prepared.v3Plan?.postCopyStrategy||null,campaignCreativeDirection:prepared.v3Plan?.campaignCreativeDirection||null,
       aiLogoIntegrationUsed: !!prepared.aiLogoIntegrationUsed,
       serverBrandCompositionUsed: !!prepared.serverBrandCompositionUsed,
       plannerVersion: prepared.plannerVersion,
@@ -5754,9 +5974,9 @@ async function generateCampaignPosts(topic, missionKey, onProgress){
         daWriterFallbackReason: prepared.daWriterFallbackReason || null,
         validatorReport: prepared.validatorReport || null,
       },
-      textPrompt: isStory ? null : buildTextPromptFull(item.platform, topic, missionKey),
-      textFinal: isStory ? null : "", imageDataUrl: null,
-      schedulable: item.platform !== "Article Blog Wix" && item.platform !== "Story",
+      textPrompt: (isStory||item.imageOnly) ? null : buildTextPromptFull(item.platform, topic, missionKey),
+      contentData:prepared.content||null,textFinal: (isStory||item.imageOnly) ? null : (prepared.content?.caption||""), imageDataUrl: null,
+      schedulable: !["Article Blog Wix","Story","Bannière","Instagram Square"].includes(item.platform),
       scheduledAt: null, status: prepared.blockingError ? "bloqué" : "brouillon",
       createdAt: Date.now(), sentAt: null, error: prepared.blockingError || null,
     });
@@ -6888,11 +7108,7 @@ function buildPostTab(){
 
   frag.appendChild(el("p",{class:"label"},"Prestation concernée"));
   const prestationBlocksAvail = extractPrestationBlocks(getMergedPrestationsText());
-  const presSelect = el("select",{}, [
-    el("option",{value:""}, "Non spécifiée"),
-    el("option",{value:"Tous sujets"}, "Tous sujets (pas de prestation en particulier)"),
-    ...KNOWN_PRESTATIONS.map(name=> el("option",{value:name}, prestationBlocksAvail[name] ? name : `${name} (non documentée)`)),
-  ]);
+  const presSelect = el("select",{}, SERVICE_MENU.options.map(option=>el("option",{value:option.value},option.kind==="generic"?option.label:(prestationBlocksAvail[option.value]?option.label:`${option.label} (non documentée)`))));
   presSelect.value = state.prestationName;
   presSelect.addEventListener("change", e=>{ state.prestationName = e.target.value; renderMain(); });
   frag.appendChild(el("div",{style:"margin-bottom:6px;"}, presSelect));
@@ -6938,6 +7154,11 @@ function buildPostTab(){
   const topicArea = el("textarea",{rows:"3", placeholder:"Ex : lancement du Massage Zébré, offre vacances, nouveauté..."}, state.topic);
   topicArea.addEventListener("input", e=>{ state.topic = e.target.value; });
   frag.appendChild(el("div",{style:"margin-bottom:6px;"}, topicArea));
+  frag.appendChild(el("p",{class:"hint",style:"margin:-2px 0 10px;"},"Décrivez simplement le thème, la sensation ou l’idée. Les styles cochés seront appliqués automatiquement. Exemple : “Dos lourd et bloqué” ou “Retrouver de l’élan après une période difficile”."));
+  frag.appendChild(el("p",{class:"label"},"Texte sur l’image"));
+  const textChoice=el("select",{},[
+    el("option",{value:"automatic",selected:state.textOnImageChoice==="automatic"},"Automatique recommandé"),el("option",{value:"title",selected:state.textOnImageChoice==="title"},"Titre seulement"),el("option",{value:"editorial",selected:state.textOnImageChoice==="editorial"},"Titre + sous-titre"),el("option",{value:"complete",selected:state.textOnImageChoice==="complete"},"Informations complètes"),el("option",{value:"none",selected:state.textOnImageChoice==="none"},"Aucun texte")]);
+  textChoice.addEventListener("change",e=>{state.textOnImageChoice=e.target.value;LS.set("vf-text-on-image",state.textOnImageChoice);});frag.appendChild(el("div",{style:"margin-bottom:12px;"},textChoice));
   const topicWarn = el("p",{style:"font-size:12px;color:var(--coral);margin:0 0 12px;min-height:14px;"}, "");
   frag.appendChild(topicWarn);
 
@@ -7019,6 +7240,8 @@ function buildPostTab(){
     const relaunchAnalysisBtn = el("button",{class:"btn-secondary", style:"margin:0 0 10px 8px;display:none;"}, "Relancer l'analyse de l'image");
     const recoverRawBtn = el("button",{class:"btn-secondary", style:"margin:0 0 10px 8px;display:none;"},
       "Finaliser une image brute déjà téléchargée");
+    const recoverServerBtn = el("button",{class:"btn-secondary", style:`margin:0 0 10px 8px;display:${readRecoverableImageJobs().length?"inline-block":"none"};`},
+      "Récupérer la dernière image payée");
     const recoverRawInput = el("input",{type:"file",accept:"image/png,image/jpeg,image/webp",style:"display:none;"});
     const inspectorHost = el("div",{});
     let activeCancelToken = null;
@@ -7063,7 +7286,7 @@ function buildPostTab(){
       confirmBtn.style.display = "none"; regenTextBtn.style.display = "none";
       relaunchAnalysisBtn.style.display = "none"; recoverRawBtn.style.display = "none";
       if(!flow) return;
-      if(flow.phase==="prepared" && !flow.blockingError){
+      if(flow.phase==="prepared" && !flow.blockingError && (!flow.v3Plan?.psioRequired || flow.v3Plan?.psioReferenceReady===true)){
         confirmBtn.style.display = "inline-block";
         recoverRawBtn.style.display = "inline-block";
       }
@@ -7078,10 +7301,23 @@ function buildPostTab(){
       details.appendChild(el("summary",{style:"cursor:pointer;font-size:13px;color:var(--muted);"}, "Prompt Inspector — moteur créatif"));
 
       // ---- Textes bruts nécessaires aux boutons de copie (calculés une seule fois) ----
-      const promptText = flow.imagePrompt || "";
+      // Contrat unique : ce texte est exactement celui que buildJobInput() substitue au prompt
+      // historique avant d'enregistrer le job. Le prompt V2 ne doit jamais être présenté comme envoyé.
+      const promptText = flow.v3Plan?.photoBrief?.prompt || flow.imagePrompt || "";
+      const legacyPromptText = flow.v3Plan?.photoBrief?.prompt && flow.imagePrompt!==promptText ? (flow.imagePrompt||"") : "";
       const jsonText = JSON.stringify(flow.brief, null, 2);
       const engineVersion = flow.appVersion || "ancienne/non identifiée";
-      const combinedText = `========================\nVERSION MOTEUR\n========================\n\n${engineVersion}\n\n========================\nPROMPT OPENAI\n========================\n\n${promptText}\n\n========================\nSTRUCTURED OUTPUT\n========================\n\n${jsonText}`;
+      const combinedText = `========================\nVERSION MOTEUR\n========================\n\n${engineVersion}\n\n========================\nPROMPT OPENAI — RÉELLEMENT TRANSMIS\n========================\n\n${promptText}\n\n========================\nSTRUCTURED OUTPUT\n========================\n\n${jsonText}`;
+
+      // Décision créative visible avant le clic payant : concept, famille et justification.
+      const conceptV3 = flow.v3Plan?.preflight?.concept || "Plan V3 non chargé";
+      const layoutV3 = flow.v3Plan?.preflight?.layout || "—";
+      const rationaleV3 = flow.v3Plan?.preflight?.justification || "—";
+      if(flow.v3Plan?.posterStrategy){const ps=flow.v3Plan.posterStrategy,cs=flow.v3Plan.postCopyStrategy;details.appendChild(el("div",{class:"card",style:"margin:10px 0;"},[el("strong",{},"Prévisualisation gratuite V3"),el("pre",{style:"white-space:pre-wrap;font-size:11px;"},JSON.stringify({subjectBrief:flow.v3Plan.subjectBrief,posterStrategy:ps,postCopyStrategy:cs,campaignCreativeDirection:flow.v3Plan.campaignCreativeDirection,consistencyReport:flow.v3Plan.consistencyReport,scores:flow.v3Plan.freeScores},null,2))]));}
+      details.appendChild(el("div",{class:"card",style:"margin:10px 0;"},[
+        el("strong",{},"Direction Artistique V3 — avant génération payante"),
+        el("p",{},`Concept : ${conceptV3}`), el("p",{},`Layout : ${layoutV3}`), el("p",{},`Justification : ${rationaleV3}`)
+      ]));
 
       // ---- Bandeau récapitulatif (lecture seule de flow.inputs/flow.brief/state.modules — aucune invention) ----
       const safe = v => (v===undefined || v===null || v==="") ? "—" : v;
@@ -7151,7 +7387,7 @@ function buildPostTab(){
       body.appendChild(row("Archétypes interdits (récents)", (flow.exclusions||[]).join(", ") || "aucun"));
       body.appendChild(row("Raison de différenciation", flow.brief && flow.brief.raisonDifferenceAvecHistorique));
       body.appendChild(row("Références sélectionnées", String((flow.referenceSelections||[]).length)));
-      if(flow.inputs && flow.inputs.prestation==="Luminothérapie PSIO®"){
+      if(flow.inputs && ["Luminothérapie PSIO®","Offre Gold","Offre Sylver"].includes(flow.inputs.prestation)){
         body.appendChild(row("Référence produit PSiO® officielle",
           (flow.referenceSelections||[]).filter(r=>OFFICIAL_PSIO_REFERENCE_IDS.has(r.id)).length===OFFICIAL_PSIO_REFERENCES.length
             ? "3 vues chargées et obligatoires ✓" : "Jeu incomplet — génération bloquée"));
@@ -7162,7 +7398,20 @@ function buildPostTab(){
             ? "2 vues chargées et obligatoires ✓" : "Jeu incomplet — génération bloquée"));
       }
       if(flow.phase!=="prepared") body.appendChild(row("Référence réellement utilisée", flow.usedReference ? "Oui ✓" : (flow.referenceFallbackReason ? "Non — repli : "+flow.referenceFallbackReason : "Non demandée")));
-      body.appendChild(row("Modèle", "gpt-image-2 · références obligatoires · qualité haute"));
+      const audit=flow.costAudit||flow.v3Plan?.preflightCostAudit||null,plannedMode=flow.v3Plan?.costMode||state.costMode||"test",plannedQuality=plannedMode==="production"?"high":"low";
+      body.appendChild(row("Mode demandé", audit?.requestedMode||plannedMode));
+      body.appendChild(row("Mode réellement utilisé", audit?.effectiveMode||(flow.phase==="prepared"?"en attente":plannedMode)));
+      body.appendChild(row("Qualité demandée", audit?.requestedQuality||plannedQuality));
+      body.appendChild(row("Qualité réellement utilisée", audit?.effectiveQuality||(flow.phase==="prepared"?`prévue : ${plannedQuality}`:plannedQuality)));
+      body.appendChild(row("Dimensions demandées", audit?.requestedSize||flow.inputs?.size));
+      body.appendChild(row("Dimensions réellement utilisées", audit?.effectiveSize||(flow.phase==="prepared"?"en attente":flow.inputs?.size)));
+      body.appendChild(row("Appels Images", String(audit?.imageGenerationCallCount??0)));
+      body.appendChild(row("Nombre d’images n", String(audit?.image?.n??1)));
+      body.appendChild(row("Sortie photo estimée", `${Number(audit?.outputImageEstimate??0).toFixed(2)} €`));
+      body.appendChild(row("Texte du prompt estimé", `${Number(audit?.promptTextEstimate?.min??0).toFixed(3)} à ${Number(audit?.promptTextEstimate?.max??0).toFixed(3)} €`));
+      body.appendChild(row("Vision estimée", `${Number(audit?.visionEstimate??0).toFixed(2)} €`));
+      body.appendChild(row("Total prudent", `${Number(audit?.estimatedTotalMin??0).toFixed(3)} à ${Number(audit?.estimatedTotalMax??0).toFixed(3)} € — confiance ${audit?.estimateConfidence||"inconnue"}, pas facture exacte`));
+      if(flow.v3Plan?.psioRequired){body.appendChild(row("Références PSiO® disponibles", `${flow.v3Plan.psioReferenceCount}/3 — ${flow.v3Plan.psioReferenceReady?"prêtes ✓":"incomplètes"}`));body.appendChild(row("Références effectivement envoyées", `${audit?.image?.referenceImageCount??0} — ${(audit?.image?.referenceRoles||[]).join(", ")}`));body.appendChild(row("Entrées références estimées", audit?.referenceImageInputEstimate?.message||"Coût inconnu — non inclus dans l’estimation de sortie"));}
       body.appendChild(row("Rédacteur DA", flow.daWriterUsed ? "Utilisé ✓ (prompt narratif)" : (flow.daWriterFallbackReason ? "Repli sur l'assemblage classique — "+flow.daWriterFallbackReason : "Désactivé")));
       if(flow.validatorReport){
         const vr = flow.validatorReport;
@@ -7203,8 +7452,14 @@ function buildPostTab(){
       }
       body.appendChild(el("p",{style:"font-weight:600;margin:8px 0 4px;"}, "Creative Brief (JSON)"));
       body.appendChild(el("pre",{style:"white-space:pre-wrap;font-size:11px;"}, jsonText));
-      body.appendChild(el("p",{style:"font-weight:600;margin:8px 0 4px;"}, "Prompt image compact (exactement celui qui sera/a été envoyé)"));
+      body.appendChild(el("p",{style:"font-weight:600;margin:8px 0 4px;"}, "PROMPT OPENAI — réellement transmis"));
       body.appendChild(el("pre",{style:"white-space:pre-wrap;font-size:11px;"}, promptText));
+      if(legacyPromptText){
+        const legacyDetails=el("details",{style:"margin-top:10px;"});
+        legacyDetails.appendChild(el("summary",{style:"cursor:pointer;color:var(--muted2);"},"Ancien prompt V2 — non transmis au générateur"));
+        legacyDetails.appendChild(el("pre",{style:"white-space:pre-wrap;font-size:11px;opacity:.75;"},legacyPromptText));
+        body.appendChild(legacyDetails);
+      }
       if(flow.content){
         body.appendChild(el("p",{style:"font-weight:600;margin:8px 0 4px;"}, "Texte final"));
         body.appendChild(el("pre",{style:"white-space:pre-wrap;font-size:11px;"}, JSON.stringify(flow.content, null, 2)));
@@ -7220,11 +7475,13 @@ function buildPostTab(){
       prepareBtn.disabled = true;
       imgApiStatus.textContent = "Préparation de la création (Creative Planner)...";
       try{
-        const prepared = await prepareCreativeBrief({ mission: state.mission, platform, prestation: state.prestationName, topic: state.topic, aspectKey: PLATFORM_ASPECT[platform], size: API_IMAGE_SIZE_BY_PLATFORM[platform]||"1024x1024", isCampaign:false, registres: Array.isArray(state.registres) ? [...state.registres] : [], userReferenceDataUrl: state.userReferenceUpload && state.userReferenceUpload.dataUrl, userReferenceImageId: state.userReferenceUpload && state.userReferenceUpload.id, aiLogoIntegration: !!state.aiLogoIntegration });
+        const prepared = await prepareAuthoritativeV3({ mission: state.mission, platform, prestation: state.prestationName, topic: state.topic, aspectKey: PLATFORM_ASPECT[platform], size: API_IMAGE_SIZE_BY_PLATFORM[platform]||"1024x1024", isCampaign:false, registres: Array.isArray(state.registres) ? [...state.registres] : [], userReferenceDataUrl: state.userReferenceUpload && state.userReferenceUpload.dataUrl, userReferenceImageId: state.userReferenceUpload && state.userReferenceUpload.id, aiLogoIntegration: !!state.aiLogoIntegration });
         state.lastCreativeFlow = prepared;
-        imgApiStatus.textContent = prepared.plannerError
-          ? `Brief préparé (avec repli local — voir Inspector) ✓ Relis le prompt avant de confirmer.`
-          : "Brief préparé ✓ — relis le Creative Brief et le prompt ci-dessous avant de confirmer (aucune image générée ; coût texte minime).";
+        prepared.clientRequestId=prepared.clientRequestId||uid();
+        if(prepared.content){const hashtags=(prepared.content.hashtags||[]).map(h=>h.startsWith("#")?h:"#"+h).slice(0,5).join(" ");state.textPasted=[prepared.content.caption||"",hashtags].filter(Boolean).join("\n\n");state.pendingAltText=prepared.content.altText||"";}
+        imgApiStatus.textContent = prepared.content
+          ? "Plan V3 et texte prêts ✓ — relis puis confirme l’unique génération d’image."
+          : `Plan V3 prêt ✓ — ${prepared.textError||"le texte pourra être relancé séparément"}.`;
         renderCreativeInspector();
       }catch(err){ imgApiStatus.textContent = `Échec de la préparation : ${err.message||err}`; }
       prepareBtn.disabled = false;
@@ -7234,8 +7491,15 @@ function buildPostTab(){
     confirmBtn.addEventListener("click", async ()=>{
       vfTrace("1-clic-confirmer", { hasFlow: !!state.lastCreativeFlow, phase: state.lastCreativeFlow && state.lastCreativeFlow.phase, blockingError: state.lastCreativeFlow && state.lastCreativeFlow.blockingError || null });
       if(!state.lastCreativeFlow || state.lastCreativeFlow.phase!=="prepared"){ imgApiStatus.textContent = "Aucune préparation en attente — relance \"Préparer la création\" d'abord."; vfTrace("1-STOP-garde-phase",{}); return; }
+      if(state.lastCreativeFlow.v3Plan?.psioRequired&&!state.lastCreativeFlow.v3Plan?.psioReferenceReady){imgApiStatus.textContent="Ajoutez les références officielles PSiO® avant de confirmer. Aucun crédit consommé.";return;}
       if(state.lastCreativeFlow.blockingError){ imgApiStatus.textContent = "Génération bloquée : "+state.lastCreativeFlow.blockingError; vfTrace("1-STOP-blockingError",{}); return; }
-      if(!confirm("Lancer la génération d'image via OpenAI ? Ceci consomme du crédit API.")){ vfTrace("1-STOP-annule-par-utilisateur",{}); return; }
+      const estimate=state.lastCreativeFlow.v3Plan?.preflightCostAudit;
+      if(!estimate){imgApiStatus.textContent="Audit de coût V3 absent : préparez de nouveau la création. Aucun crédit consommé.";return;}
+      const refCost=estimate.referenceImageInputEstimate?.status==="unknown"?"inconnues et non incluses dans les 0,18 €":`${Number(estimate.referenceImageInputEstimate?.max||0).toFixed(3)} €`;
+      const summary=`Mode : ${estimate.effectiveMode==="test"?"Test":"Production"}\nQualité effective : ${estimate.effectiveQuality}\nn = ${estimate.image?.n}\nNombre d’appels Images : ${estimate.imageGenerationCallCount}\nRéférences effectivement envoyées : ${estimate.image?.referenceImageCount}\nSortie photo estimée : ${estimate.outputImageEstimate.toFixed(2)} €\nEntrées références estimées : ${refCost}\nTexte du prompt : 0 à ${estimate.promptTextEstimate.max.toFixed(3)} €\nVision estimée : ${estimate.visionEstimate.toFixed(2)} €\nTotal estimé : ${estimate.estimatedTotalMin.toFixed(3)} € à ${estimate.estimatedTotalMax.toFixed(3)} € — estimation, pas facture exacte.`;
+      if(!confirm(`${summary}\n\nConfirmer cette génération unique ?`)){vfTrace("1-STOP-annule-par-utilisateur",{});return;}
+      if(estimate.estimatedTotalMax>.30&&!confirm(`CONFIRMATION SUPPLÉMENTAIRE — la borne haute prudente (${estimate.estimatedTotalMax.toFixed(3)} €) dépasse 0,30 €. Les entrées image PSiO® ne sont pas déterminables avant facturation. Continuer ?`)){vfTrace("1-STOP-plafond-cout",{});return;}
+      state.lastCreativeFlow.costCeilingConfirmed=estimate.estimatedTotalMax>.30;
       confirmBtn.disabled = true; imgCancelBtn.style.display = "inline-block";
       const t0 = Date.now();
       const cancelToken = { cancelled:false }; activeCancelToken = cancelToken;
@@ -7244,7 +7508,9 @@ function buildPostTab(){
         state.lastCreativeFlow = flow;
         if(!flow.ok){
           logToLab({ provider:"OpenAI", model:"gpt-image-2", type:"image", prompt: flow.imagePrompt, promptHash: hashPrompt(flow.imagePrompt||""), cost:null, durationMs: Date.now()-t0, status:"refused", reason: flow.error });
-          imgApiStatus.textContent = flow.error;
+          imgApiStatus.textContent = `${flow.error}${flow.content?" — Le texte préparé reste disponible ci-dessous.":""}`;
+          if(flow.content){const hashtags=(flow.content.hashtags||[]).map(h=>h.startsWith("#")?h:"#"+h).slice(0,5).join(" ");state.textPasted=[flow.content.caption||"",hashtags].filter(Boolean).join("\n\n");state.pendingAltText=flow.content.altText||"";}
+          recoverServerBtn.style.display=readRecoverableImageJobs().length?"inline-block":"none";
           renderCreativeInspector();
           confirmBtn.disabled = false; imgCancelBtn.style.display = "none"; activeCancelToken = null;
           return;
@@ -7280,6 +7546,7 @@ function buildPostTab(){
         imgApiStatus.textContent = cancelled ? "Suivi annulé (la génération continue peut-être côté serveur)." : `Erreur inattendue : ${err.message||err}`;
         if(!cancelled && state.lastCreativeFlow && state.lastCreativeFlow.dataUrl){
           state.lastCreativeFlow.finalizationError = String(err.message||err);
+          recoverServerBtn.style.display="inline-block";
           renderCreativeInspector();
         }
       }
@@ -7319,7 +7586,7 @@ function buildPostTab(){
           brandIntegrated: flow.serverBrandCompositionUsed===true && flow.brandComposited===true,
           brandReferenceDataUrl: flow.brandReferenceDataUrl || null,
           expectedHeadline: (PLATFORM_OVERLAY[flow.inputs?.platform]==="accroche" || PLATFORM_OVERLAY[flow.inputs?.platform]==="fort")
-            ? String(flow.brief?.texteImage||"").trim() : "",
+            ? [flow.v3Plan?.posterStrategy?.title,flow.v3Plan?.posterStrategy?.subtitle].filter(Boolean).join(" | ") : "",
         });
         flow.analysis = analysis; flow.analysisError = null;
         if(wasQuarantined){
@@ -7382,12 +7649,39 @@ function buildPostTab(){
       recoverRawInput.value="";
       recoverRawBtn.disabled=false;
     });
+    recoverServerBtn.addEventListener("click",async()=>{
+      const record=readRecoverableImageJobs()[0];
+      if(!record){imgApiStatus.textContent="Aucune photographie brute récupérable sur cet appareil.";return;}
+      recoverServerBtn.disabled=true;
+      try{
+        const flow=await recoverAndRecomposeImageJob(record,label=>{imgApiStatus.textContent=label;});
+        state.lastCreativeFlow=flow;
+        const finalized=await finalizeGeneratedImage(flow);
+        storeFinalizedCreativeFlow(flow,finalized);
+        imgApiStatus.textContent="Image récupérée et recomposée ✓ — aucun nouvel appel Images, texte conservé.";
+        renderMain();
+      }catch(error){imgApiStatus.textContent=`Récupération impossible : ${String(error.message||error)}`;}
+      recoverServerBtn.disabled=false;
+    });
 
+    const costModeSelect=el("select",{style:"margin:0 0 10px;"},[
+      el("option",{value:"test",selected:state.costMode!=="production"},"MODE TEST — qualité low effective, n = 1 (~0,18 € photo estimés)"),
+      el("option",{value:"production",selected:state.costMode==="production"},"MODE PRODUCTION — photographie finale haute qualité (~0,72 € estimés)"),
+    ]);
+    costModeSelect.addEventListener("change",e=>{state.costMode=e.target.value;LS.set("vf-cost-mode",state.costMode);});
+    frag.appendChild(el("div",{class:"card",style:"margin-bottom:10px;"},[el("strong",{},"Maîtrise du coût"),costModeSelect,el("p",{class:"hint"},"Estimations indicatives, pas une facture. n = 1, aucun retry automatique, confirmation obligatoire au-delà de 0,30 €.")]));
+    const psioPanel=el("div",{class:"card",style:"margin-bottom:10px;"});
+    const psioStatusHost=el("div",{class:"hint"},"Vérification du stockage persistant…");
+    const psioUpload=el("input",{type:"file",accept:"image/*",style:"display:none;"});let pendingPsioId=null;
+    async function refreshPsioPanel(){try{const status=await getPsioReferenceStatus();state.psioReferenceStatus=status;psioStatusHost.innerHTML="";(status.references||[]).forEach(ref=>{const line=el("div",{style:"display:flex;gap:8px;align-items:center;margin:6px 0;"});if(ref.previewUrl)line.appendChild(el("img",{src:ref.previewUrl,style:"width:42px;height:42px;object-fit:cover;border-radius:6px;"}));line.appendChild(el("span",{style:"flex:1;"},`${ref.label} : ${ref.available?"disponible ✓":"absente"}${ref.updatedAt?` — ${new Date(ref.updatedAt).toLocaleString("fr-FR")}`:""}`));line.appendChild(el("button",{class:"btn-small",onclick:()=>{pendingPsioId=ref.id;psioUpload.click();}},"Ajouter ou remplacer"));psioStatusHost.appendChild(line);});}catch(error){psioStatusHost.textContent=`Vérification impossible : ${error.message||error}`;}}
+    psioUpload.addEventListener("change",async()=>{const file=psioUpload.files?.[0];if(!file||!pendingPsioId)return;try{const dataUrl=await new Promise((resolve,reject)=>{const reader=new FileReader();reader.onload=()=>resolve(reader.result);reader.onerror=()=>reject(new Error("Lecture Android impossible"));reader.readAsDataURL(file);});const response=await fetch("/.netlify/functions/psio-references",{method:"POST",headers:{...syncHeaders(),"Content-Type":"application/json"},body:JSON.stringify({id:pendingPsioId,dataUrl})});const data=await fetchJsonOrThrowRaw(response,"enregistrement PSiO®");if(!response.ok||data.error)throw new Error(data.error||`Erreur ${response.status}`);_officialPsioReferencesCache=null;await refreshPsioPanel();}catch(error){psioStatusHost.textContent=`Ajout impossible : ${error.message||error}`;}finally{psioUpload.value="";pendingPsioId=null;}});
+    const verifyPsio=el("button",{class:"btn-small",onclick:refreshPsioPanel},"Vérifier les références");psioPanel.appendChild(el("strong",{},"Références officielles PSiO®"));psioPanel.appendChild(psioStatusHost);psioPanel.appendChild(verifyPsio);psioPanel.appendChild(psioUpload);frag.appendChild(psioPanel);refreshPsioPanel();
     frag.appendChild(prepareBtn);
     frag.appendChild(confirmBtn);
     frag.appendChild(imgCancelBtn);
     frag.appendChild(regenTextBtn);
     frag.appendChild(relaunchAnalysisBtn);
+    frag.appendChild(recoverServerBtn);
     frag.appendChild(recoverRawBtn);
     frag.appendChild(recoverRawInput);
     frag.appendChild(imgApiStatus);
@@ -7406,7 +7700,7 @@ function buildPostTab(){
        qu'enverrait "Confirmer et générer l'image". Deux sorties, un seul constructeur. */
     const btn = e.currentTarget; const oldLabel = btn.textContent; btn.disabled = true; btn.textContent = "Préparation via le moteur créatif...";
     try{
-      const prepared = await prepareCreativeBrief({ mission: state.mission, platform, prestation: state.prestationName, topic: state.topic, aspectKey: PLATFORM_ASPECT[platform], size: API_IMAGE_SIZE_BY_PLATFORM[platform]||"1024x1024", isCampaign:false, registres: Array.isArray(state.registres) ? [...state.registres] : [], userReferenceDataUrl: state.userReferenceUpload && state.userReferenceUpload.dataUrl, userReferenceImageId: state.userReferenceUpload && state.userReferenceUpload.id, aiLogoIntegration: !!state.aiLogoIntegration });
+      const prepared = await prepareAuthoritativeV3({ mission: state.mission, platform, prestation: state.prestationName, topic: state.topic, aspectKey: PLATFORM_ASPECT[platform], size: API_IMAGE_SIZE_BY_PLATFORM[platform]||"1024x1024", isCampaign:false, registres: Array.isArray(state.registres) ? [...state.registres] : [], userReferenceDataUrl: state.userReferenceUpload && state.userReferenceUpload.dataUrl, userReferenceImageId: state.userReferenceUpload && state.userReferenceUpload.id, aiLogoIntegration: !!state.aiLogoIntegration });
       state.lastCreativeFlow = prepared;
       state.imagePrompt = prepared.imagePrompt;
       state.textPrompt = (platform==="Story" || imageOnlyMode) ? null : buildTextPromptFull(platform, state.topic, state.mission);
@@ -7713,7 +8007,7 @@ function buildPostTab(){
         if(isNaN(scheduledAt)){ schedMsg.style.color="var(--coral)"; schedMsg.textContent="Date invalide, réessaie."; return; }
         const newPost = {
           id: uid(), platform, mission: state.mission, topic: state.topic,
-          textFinal: state.textPasted, altText: state.pendingAltText || null, imageDataUrl: previewImgForPost.dataUrl, schedulable: true,
+          textFinal: state.textPasted, validatedText:state.textPasted, altText: state.pendingAltText || null, validatedAltText:state.pendingAltText||"", imageDataUrl: previewImgForPost.dataUrl, schedulable: true,
           scheduledAt, status: "programmé", createdAt: Date.now(), sentAt: null, error: null,
         };
         state.scheduled.push(newPost);
@@ -7744,7 +8038,7 @@ function buildPostTab(){
       frag.appendChild(el("button",{class:"btn-ghost", style:"margin-bottom:10px;", onclick:()=>{
         state.scheduled.push({
           id: uid(), platform, mission: state.mission, topic: state.topic,
-          textFinal: state.textPasted, altText: state.pendingAltText || null, imageDataUrl: previewImgForPost.dataUrl, schedulable: true,
+          textFinal: state.textPasted, validatedText:state.textPasted, altText: state.pendingAltText || null, validatedAltText:state.pendingAltText||"", imageDataUrl: previewImgForPost.dataUrl, schedulable: true,
           scheduledAt: null, status: "brouillon", createdAt: Date.now(), sentAt: null, error: null,
         });
         LS.set("vf-scheduled", state.scheduled);
@@ -7769,7 +8063,7 @@ function buildPostTab(){
       frag.appendChild(el("button",{class:"btn-ghost", style:"margin:6px 0;display:block;", onclick:()=>{
         state.scheduled.push({
           id: uid(), platform, mission: state.mission, topic: state.topic,
-          textFinal: state.textPasted, altText: state.pendingAltText || null, imageDataUrl: previewImgForPost.dataUrl, schedulable: false,
+          textFinal: state.textPasted, validatedText:state.textPasted, altText: state.pendingAltText || null, validatedAltText:state.pendingAltText||"", imageDataUrl: previewImgForPost.dataUrl, schedulable: false,
           scheduledAt: null, status: "validé", createdAt: Date.now(), sentAt: null, error: null,
         });
         LS.set("vf-scheduled", state.scheduled);
@@ -7788,32 +8082,20 @@ function buildPostTab(){
    ONGLET CALENDRIER — programmation et archive des publications
 ============================================================ */
 const SCHEDULE_STATUS_LABEL = { "brouillon":"📝 Brouillon", "validé":"☑️ Validé", "programmé":"⏳ Programmé", "envoyé":"✅ Envoyé", "erreur":"⚠️ Erreur" };
-/* Génération d'image pour un post de campagne — extrait pour être appelé à la fois par le bouton
-   individuel et par le bouton "Générer les 5". Gère la réutilisation Facebook<-Instagram, aucun
-   chemin dupliqué. Retourne un message de statut, ou lève une erreur (jamais de génération payante
-   relancée automatiquement). */
+async function recomposeCampaignItemFromMaster(item,master,onStatus){
+  if(!master?.masterRawImageJobId)throw new Error("Photographie brute maîtresse indisponible.");
+  onStatus&&onStatus("Recomposition Sharp gratuite — 0 appel Images...");
+  const headline=(PLATFORM_OVERLAY[item.platform]==="accroche"||PLATFORM_OVERLAY[item.platform]==="fort")?[item.v3Plan?.posterStrategy?.title,item.v3Plan?.posterStrategy?.subtitle].filter(Boolean).join(" | "):"";
+  const res=await fetch("/.netlify/functions/recompose-image-job",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({sourceJobId:master.masterRawImageJobId,platform:item.platform,headline,zoneText:item.creativeBrief?.zoneTexte||""})});
+  const data=await fetchJsonOrThrowRaw(res,"recomposition gratuite");if(!res.ok||data.error)throw new Error(data.error||`Erreur ${res.status}`);
+  item.imageDataUrl=await fetchImageAsDataUrl(data.resultUrl);item.masterRawImageJobId=master.masterRawImageJobId;item.sourceImageJobId=data.jobId;item.v3Plan=master.v3Plan;item.artFingerprint=master.artFingerprint||null;item.v3Finalization={analysis:master.v3Finalization?.analysis,layout:data.layout,quality:data.quality};item.v3Quality=data.quality;item.platformCrop=data.layout?.cropPosition||null;item.platformLayout=data.layout;item.platformComposition={recomposedFrom:master.masterRawImageJobId,imageGenerationCalls:0};item.platformQualityReport=data.quality;item.costAudit=data.costAudit;item.logoApplied=true;item.headlineApplied=!!headline;LS.set("vf-scheduled",state.scheduled);return "Recomposition terminée ✓ — 0 appel de génération d’image";
+}
+/* Génération d'image pour un post de campagne — chaque plateforme suit son template V3 propre.
+   Retourne un message de statut, ou lève une erreur (jamais de génération payante relancée automatiquement). */
 async function generateImageForCampaignItem(item, onStatus, cancelToken){
   if(item.blockingError) throw new Error("Génération bloquée : " + item.blockingError);
   const t0 = Date.now();
   const size = API_IMAGE_SIZE_BY_PLATFORM[item.platform] || "1024x1024";
-  /* V1.0 — Facebook réutilise EXACTEMENT l'image Instagram de la même campagne : aucune seconde
-     génération, aucune seconde facturation. Même format (4:5), image identique. */
-  if(item.platform==="Facebook"){
-    const twin = getCampaignSiblingImage(item.campaignId, item.id, "Instagram");
-    if(!twin){
-      throw new Error("Génère d'abord l'image Instagram de cette campagne : Facebook réutilise exactement la même image.");
-    }
-    // L'image reprise porte déjà le logo/l'accroche appliqués par Instagram — copier ces indicateurs
-    // aussi, sinon le rapport de campagne signale à tort "logo non appliqué" sur une image qui l'a.
-    const twinItem = state.scheduled.find(p=> p.campaignId===item.campaignId && p.id!==item.id && p.platform==="Instagram" && p.imageDataUrl);
-    item.imageDataUrl = twin; item.usedReference = false; item.referenceFallbackReason = null;
-    item.logoApplied = twinItem ? !!twinItem.logoApplied : true;
-    item.headlineApplied = twinItem ? !!twinItem.headlineApplied : false;
-    item.reusedFrom = "Instagram";
-    const okSave = LS.set("vf-scheduled", state.scheduled);
-    return okSave ? "Image Instagram réutilisée à l'identique ✓ (aucun crédit consommé)"
-                  : "Image réutilisée, mais échec d'enregistrement (stockage plein ?).";
-  }
   const referenceSelections = await resolveReferenceSelectionsByIds(item.referenceSelectionIds||[]);
   let phaseB;
   try{
@@ -7821,7 +8103,7 @@ async function generateImageForCampaignItem(item, onStatus, cancelToken){
       phase:"prepared",
       inputs:{ mission:item.mission, platform:item.platform, prestation:state.prestationName,
         topic:item.topic, size, aspectKey:PLATFORM_ASPECT[item.platform], isCampaign:true },
-      brief:item.creativeBrief, imagePrompt:item.imagePrompt, referenceSelections,
+      brief:item.creativeBrief, imagePrompt:item.imagePrompt, referenceSelections,v3Plan:item.v3Plan||null,
       resumeJobId: item.pendingImageJobId || undefined,
       // Persisté en localStorage DÈS la création du job, avant même le premier sondage : si Android
       // tue l'app en arrière-plan pendant la génération, resumePendingCampaignJobs() (appelée au
@@ -7835,9 +8117,13 @@ async function generateImageForCampaignItem(item, onStatus, cancelToken){
   }
   if(!phaseB.ok) throw new Error(phaseB.error || "Échec de la génération");
   const { usedReference, referenceFallbackReason } = phaseB;
+  item.v3Plan=phaseB.v3Plan||null;
+  item.sourceImageJobId=phaseB.sourceImageJobId||null;item.masterRawImageJobId=phaseB.sourceImageJobId||null;item.costAudit=phaseB.costAudit||null;item.artFingerprint=phaseB.artFingerprint||null;
+  item.v3Finalization=phaseB.v3Finalization||null;
+  const v3Rejected=!!(item.v3Finalization&&item.v3Finalization.quality&&item.v3Finalization.quality.ok===false);
   /* Post-traitement : MÊME fonction que la génération unitaire (format officiel, accroche,
      logo) — aucun code dupliqué, aucun chemin parallèle. */
-  const finalizedItem = await finalizeGeneratedImage({
+  const finalizedItem = v3Rejected ? {dataUrl:phaseB.dataUrl,logoApplied:false,headlineApplied:false,layoutReport:item.v3Finalization.layout||null,overlayWarning:"Image V3 refusée par le contrôle qualité — photographie brute conservée."} : await finalizeGeneratedImage({
     inputs:{ platform:item.platform, prestation:state.prestationName }, dataUrl: phaseB.dataUrl,
     logoSentAsReference:false, usedReference, content: phaseB.content || item.contentData || null,
     brief:item.creativeBrief, analysis:phaseB.analysis||null,
@@ -7858,6 +8144,8 @@ async function generateImageForCampaignItem(item, onStatus, cancelToken){
   }
   item.headlineApplied = !!finalizedItem.headlineApplied; // texte déjà présent : accroche posée dès la génération
   item.overlayWarning = finalizedItem.overlayWarning || null;
+  item.v3Quality=item.v3Finalization&&item.v3Finalization.quality||null;
+  if(v3Rejected)item.status="refusé";
   const saved = LS.set("vf-scheduled", state.scheduled);
   logToLab({ provider:"OpenAI", model:"gpt-image-2", type:"image", prompt:item.imagePrompt, promptHash:hashPrompt(item.imagePrompt), cost:null, durationMs:Date.now()-t0, status:"accepted" });
   let referenceLabel;
@@ -7972,6 +8260,10 @@ function buildCalendarCard(item, inCampaign){
     card.appendChild(imgFileInput);
     card.appendChild(el("button",{class:"btn-secondary", style:"margin:6px 0;", onclick:()=>imgFileInput.click()}, [svgIcon(ICONS.upload,14), el("span",{},"Importer une image")]));
     card.appendChild(imgApiStatus);
+    if(item.masterRawImageJobId){
+      const freeBtn=el("button",{class:"btn-secondary",style:"margin:6px 0;"},"RECOMPOSER L’AFFICHE EXISTANTE — AUCUN COÛT IMAGE");
+      freeBtn.addEventListener("click",async()=>{freeBtn.disabled=true;try{imgApiStatus.textContent=await recomposeCampaignItemFromMaster(item,item,label=>{imgApiStatus.textContent=label;});renderMain();}catch(error){imgApiStatus.textContent=`Échec : ${error.message||error}`;}finally{freeBtn.disabled=false;}});card.appendChild(freeBtn);
+    }
 
     /* P1 — Le texte d'une campagne passe désormais par le MÊME appel structuré que la génération
        unitaire (generateContentFromBrief) : même schéma, même imageHeadline, même résultat visuel.
@@ -8008,6 +8300,7 @@ function buildCalendarCard(item, inCampaign){
         validateMsg.textContent = requiresText ? "Texte et image requis avant de valider." : "Image requise avant de valider.";
         return;
       }
+      if(item.v3Quality&&item.v3Quality.ok===false){validateMsg.textContent="Affiche refusée par le contrôle V3 : corrige gratuitement la composition avant validation.";return;}
       item.status = "validé";
       const ok = pushToServerSilentSafe();
       LS.set("vf-scheduled", state.scheduled);
@@ -8185,10 +8478,18 @@ function buildCalendarTab(){
       if(it.overlayWarning) issues.push(it.overlayWarning);
       if(it.imageDataUrl && logoRequiredFor(it.platform) && !it.logoApplied) issues.push("logo officiel non appliqué");
       if(it.imageDataUrl && it.creativeBrief && !it.headlineApplied && PLATFORM_OVERLAY[it.platform]!=="aucun") issues.push("accroche non incrustée sur l'image");
+      if(it.v3Quality){
+        if(!it.v3Quality.technical?.ok)issues.push(`conformité technique : ${(it.v3Quality.technical.errors||[]).join(", ")}`);
+        if(!it.v3Quality.business?.ok)issues.push(`conformité métier : ${(it.v3Quality.business.errors||[]).join(", ")}`);
+        if(!it.v3Quality.artistic?.ok)issues.push(`qualité artistique : ${(it.v3Quality.artistic.errors||[]).join(", ")}`);
+        for(const warning of (it.v3Quality.warnings||[]))issues.push(`avertissement artistique : ${warning}`);
+      }
+      if(!it.artFingerprint)issues.push("non-redondance : empreinte artistique absente");
       anomalies += issues.length;
       lines.push(`${it.platform} : ${issues.length ? "⚠ "+issues.join(" | ") : "OK ✓"}`);
+      if(it.v3Quality)lines.push(`  Technique=${it.v3Quality.technical?.ok?"OK":"REFUS"} · Métier=${it.v3Quality.business?.ok?"OK":"REFUS"} · Artistique=${it.v3Quality.artistic?.ok?"OK":"REFUS"} · Non-redondance=${it.artFingerprint?"OK":"À CONTRÔLER"} · Coût=${Number(it.costAudit?.estimatedTotalMin||0).toFixed(3)}–${Number(it.costAudit?.estimatedTotalMax||0).toFixed(3)} € estimés`);
     });
-    lines.push("", anomalies ? `${anomalies} anomalie(s) détectée(s) — vérifie les points ci-dessus avant publication.` : "Aucune anomalie détectée sur les 5 formats ✓");
+    lines.push("", anomalies ? `${anomalies} anomalie(s) détectée(s) — vérifie les points ci-dessus avant publication.` : "Aucune anomalie détectée sur les formats de la campagne ✓");
     return lines.join("\n");
   }
 
@@ -8207,14 +8508,14 @@ function buildCalendarTab(){
     frag.appendChild(header);
     if(!isExpanded) return; // repliée : rien n'est supprimé, juste masqué par défaut au-delà de la plus récente
 
-    const batchBtn = el("button",{class:"btn-secondary", style:"margin:4px 0 8px;"}, [svgIcon(ICONS.wand,14), el("span",{},"🚀 Générer les 5 (images + textes)")]);
+    const batchBtn = el("button",{class:"btn-secondary", style:"margin:4px 0 8px;"}, [svgIcon(ICONS.wand,14), el("span",{},"Générer la campagne mutualisée (1 photo maîtresse maximum)")]);
     const batchCancelBtn = el("button",{class:"btn-secondary", style:"margin:4px 0 8px 8px;display:none;"}, "Annuler");
     const statusLines = {};
     const batchStatusBox = el("div",{style:"font-size:12px;color:var(--muted2);margin:0 0 8px;"});
     let batchCancelToken = null;
     function renderBatchStatus(){
       batchStatusBox.innerHTML = "";
-      PLATFORMS.forEach(p=>{
+      items.map(item=>item.platform).forEach(p=>{
         if(statusLines[p]) batchStatusBox.appendChild(el("div",{}, `${p} : ${statusLines[p]}`));
       });
     }
@@ -8223,7 +8524,7 @@ function buildCalendarTab(){
       const needsWork = it => !it.imageDataUrl || (it.textPrompt && it.platform!=="Story" && (!it.textFinal||!it.textFinal.trim()));
       const missing = items.filter(needsWork);
       if(!missing.length){ statusLines._all = "Tout est déjà généré pour cette campagne ✓"; renderBatchStatus(); return; }
-      if(!confirm(`Lancer en parallèle la génération de ce qui manque pour les ${items.length} formats de cette campagne ? Ceci consomme du crédit API.`)) return;
+      if(!confirm(`Lancer la campagne mutualisée pour ${items.length} formats ? Une seule photographie maîtresse au maximum sera facturée ; toutes les adaptations seront réalisées gratuitement avec Sharp.`)) return;
       batchBtn.disabled = true; batchCancelBtn.style.display = "inline-block";
       const cancelToken = { cancelled:false };
       batchCancelToken = cancelToken;
@@ -8232,10 +8533,11 @@ function buildCalendarTab(){
 
       /* Traite un post : image (si besoin) puis texte (si besoin), MÊMES fonctions que le bouton
          individuel. Chaque post a sa propre ligne de statut, mise à jour en direct. */
-      async function processItem(it){
+      async function processItem(it,master){
         try{
           if(!it.imageDataUrl){
-            await generateImageForCampaignItem(it, (label)=>{ statusLines[it.platform] = label; renderBatchStatus(); }, cancelToken);
+            if(master&&it!==master)statusLines[it.platform]=await recomposeCampaignItemFromMaster(it,master,(label)=>{statusLines[it.platform]=label;renderBatchStatus();});
+            else await generateImageForCampaignItem(it, (label)=>{ statusLines[it.platform] = label; renderBatchStatus(); }, cancelToken);
           }
           if(it.textPrompt && it.platform!=="Story" && (!it.textFinal||!it.textFinal.trim())){
             statusLines[it.platform] = "génération du texte..."; renderBatchStatus();
@@ -8253,28 +8555,12 @@ function buildCalendarTab(){
         renderBatchStatus();
       }
 
-      const instagramItem = items.find(it=>it.platform==="Instagram");
-      const facebookItem = items.find(it=>it.platform==="Facebook");
-      const independentItems = items.filter(it=> it.platform!=="Instagram" && it.platform!=="Facebook" && needsWork(it));
-      const sleep = ms => new Promise(r=>setTimeout(r,ms));
-
-      /* Instagram + les 3 formats indépendants (Google Business, Story, Wix) partent quasi en même
-         temps, mais légèrement étalés (2s d'écart) plutôt que pile à la même milliseconde : un vrai
-         départ groupé sur 4-5 appels d'un coup déclenche très probablement la limite de requêtes
-         simultanées d'OpenAI (un seul passe, les autres sont rejetés). Cet étalement reste bien plus
-         rapide qu'un enchaînement séquentiel complet, sans provoquer la rafale. Facebook ne dépend
-         que d'Instagram — il démarre dès qu'Instagram est terminé, sans attendre les 3 autres. */
-      const independentTasks = independentItems.map((it,idx)=> sleep(idx*2000).then(()=>processItem(it)));
-      let instagramThenFacebook = Promise.resolve();
-      if(instagramItem && needsWork(instagramItem)){
-        instagramThenFacebook = processItem(instagramItem).then(async ()=>{
-          if(facebookItem && needsWork(facebookItem)) await processItem(facebookItem);
-        });
-      }else if(facebookItem && needsWork(facebookItem)){
-        instagramThenFacebook = processItem(facebookItem);
-      }
-
-      await Promise.allSettled([instagramThenFacebook, ...independentTasks]);
+      /* Une campagne compatible paie une photographie maîtresse au maximum. Toutes les autres
+         plateformes sont dérivées séquentiellement par Sharp, sans appel Images ni rafale API. */
+      let master=items.find(it=>it.masterRawImageJobId&&it.v3Finalization?.analysis)||items.find(it=>it.platform==="Instagram")||items[0];
+      if(!master.imageDataUrl)await processItem(master,null);
+      if(!master.masterRawImageJobId)throw new Error("Le job maître n'a pas exposé son raw-result ; aucune adaptation payante automatique n'est autorisée.");
+      for(const it of items){if(it!==master&&needsWork(it))await processItem(it,master);}
 
       batchBtn.disabled = false; batchCancelBtn.style.display = "none"; batchCancelToken = null;
       renderMain();
@@ -8294,7 +8580,7 @@ function buildCalendarTab(){
 
     const exportBtn = el("button",{class:"btn-secondary", style:"margin:0 0 8px 8px;"}, [svgIcon(ICONS.download,14), el("span",{},"📄 Exporter tous les prompts (.txt)")]);
     exportBtn.addEventListener("click", ()=>{
-      const order = ["Instagram","Facebook","Google Business","Story","Article Blog Wix"];
+      const order = ["Instagram Square","Instagram","Facebook","Google Business","Story","Article Blog Wix","Bannière"];
       const ordered = items.slice().sort((a,b)=>order.indexOf(a.platform)-order.indexOf(b.platform));
       const lines = [`Campagne — ${topic}`, `Exporté le ${new Date().toLocaleString("fr-FR")}`, ""];
       ordered.forEach(it=>{
@@ -8574,7 +8860,7 @@ function buildApiTab(){
 ============================================================ */
 
 /* ---- Versionnage ---- */
-const VF_VERSION = "2.5.0-scene-rotation-safe-lockup"; // cartouche bas protégé + rotation réelle des décors
+const VF_VERSION = "3.2.1-index-integrity";
 /* Hash déterministe de l'état des règles : deux runs au même hash = strictement les mêmes règles.
    Couvre : modules (contenu+état), UNIVERS_SDZ, charte condensée, garde-fou sécurité. */
 function computeModulesHash(){

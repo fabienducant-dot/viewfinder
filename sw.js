@@ -7,10 +7,11 @@
    au lieu de rester bloqué sur une version mise en cache. Seuls les fichiers statiques qui ne
    changent presque jamais (icônes) utilisent une stratégie cache-d'abord. */
 
-const CACHE_NAME = "viewfinder-cache-v25";
+const CACHE_NAME = "viewfinder-cache-v321-index-integrity";
 const APP_SHELL = [
   "./",
   "./index.html",
+  "./v3-service-menu.js",
   "./manifest.json",
   "./icons/favicon-32.png",
   "./icons/icon-180.png",
@@ -48,7 +49,7 @@ self.addEventListener("fetch", (event) => {
     // La référence produit PSiO® suit la même règle pour ne jamais rester figée sur
     // une ancienne photo. Le cache ne sert que si le téléphone est hors-ligne.
     event.respondWith(
-      fetch(event.request)
+      fetch(event.request, { cache: "no-store" })
         .then((response) => {
           if (response && response.ok) {
             const clone = response.clone();

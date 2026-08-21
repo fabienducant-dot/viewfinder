@@ -41,7 +41,7 @@ test("l'identité serveur exacte est obligatoire et contrôlée", () => {
   assert.match(index, /officialLogoConformity/);
   assert.match(index, /expectedTextExact/);
   assert.match(index, /model: "gpt-image-2"/);
-  assert.match(index, /quality: "high"/);
+  assert.match(index, /quality: \(state\.costMode\|\|"test"\)==="production" \? "high" : "low"/);
   assert.match(index, /SORTIE BRUTE OBLIGATOIRE/);
   assert.match(worker, /composeBrandPoster/);
   assert.match(worker, /brandComposition/);
@@ -61,7 +61,7 @@ test("le compositeur serveur produit un PNG final au bon format", async () => {
   });
   const meta = await sharp(finalBuffer).metadata();
   assert.equal(meta.format, "png");
-  assert.equal(meta.width, 1088);
+  assert.equal(meta.width, 1080);
   assert.equal(meta.height, 1920);
   assert.ok(finalBuffer.length > 20_000);
 });
@@ -95,13 +95,15 @@ test("un logo opaque sur fond noir est détouré avant composition", async () =>
 test("le contrôle final fait confiance au logo exact composé par le serveur et bloque encore l'OCR", () => {
   assert.match(index, /officialLogoConformity="exact"/);
   assert.match(index, /overlay\.rawOverlayDetected=overlay\.expectedTextExact!==true/);
-  assert.match(index, /2\.5\.0-scene-rotation-safe-lockup/);
+  assert.match(index, /3\.2\.1-index-integrity/);
 });
 
 test("le lock-up serveur protège le sujet et sépare accroche, logo et signature", () => {
   const compositor = fs.readFileSync(path.join(root, "netlify/functions/_shared/brand-compositor.js"), "utf8");
-  assert.match(compositor, /\["Instagram","Facebook","Story"\]\.includes\(platform\)/);
-  assert.match(compositor, /const dividerY = headlineEnd/);
+  assert.match(compositor, /function fitTypography/);
+  assert.match(compositor, /textArea:/);
+  assert.match(compositor, /logoArea/);
+  assert.match(compositor, /Collision entre la zone de texte et la zone du logo/);
   assert.match(index, /const brandSafePercent = platform === "Story" \? 32 : 38/);
   assert.match(index, /réserve les \$\{brandSafePercent\}% inférieurs du cadre comme champ éditorial/);
   assert.match(index, /fixed\.zoneTexte="inférieure"/);
@@ -122,7 +124,7 @@ test("la finalisation et le recontrôle reconnaissent toujours l'identité compo
 });
 
 test("les formats gpt-image-2 suivent les ratios de publication", () => {
-  assert.match(index, /"Story": "1088x1920"/);
+  assert.match(index, /"Story": "1008x1792"/);
   assert.match(index, /"Instagram": "1088x1360"/);
   assert.match(index, /"Article Blog Wix": "1920x1088"/);
 });
