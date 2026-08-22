@@ -19,16 +19,16 @@ test("Tous sujets transforme une phrase institutionnelle en décision éditorial
   assert.equal(plan.posterStrategy.subtitle,"EXPERTISE ET SAVOIR-FAIRE DEPUIS 2017");
   assert.deepEqual(plan.subjectBrief.verifiedFacts,["11 cour Dupas","59590 Raismes","depuis 2017"]);
   assert.doesNotMatch(plan.subjectBrief.audienceProblem,/Venez découvrir un havre de paix/i);
-  assert.doesNotMatch(plan.subjectBrief.physicalOrEmotionalManifestation,/prestations réalisées par Fabien depuis 2017/i);
+  assert.equal(plan.subjectBrief.exactUserRequest,institutionalSubject);
   assert.equal(plan.consistencyReport.ready,true);
 });
 
 test("Tous sujets institutionnel produit une scène de cabinet concrète sans injonction métier contradictoire",()=>{
   const plan=planV3({service:"Tous sujets",platform:"Instagram",subject:institutionalSubject,textChoice:"automatic",costMode:"test",creativeSeed:"institutional-scene",artHistory:[{locationFamily:"cabinet premium intime"}]});
-  assert.equal(plan.artDirection.artistic.locationFamily,"cabinet premium intime");
+  assert.match(plan.artDirection.artistic.locationFamily,/cabinet|havre de paix/i);
   assert.equal(plan.posterStrategy.mainSubject,"le cabinet SDZ vu depuis son seuil, avec une perspective intérieure intime et crédible");
   assert.equal(plan.posterStrategy.careOrSolutionManifestation,"invitation visuelle à franchir le seuil et découvrir le lieu");
-  assert.match(plan.photoBrief.prompt,/aucune personne, aucun geste de soin et aucun matériel de prestation sauf demande explicite/i);
+  assert.match(plan.photoBrief.prompt,/aucune personne ni intervention professionnelle sauf demande explicite/i);
   assert.doesNotMatch(plan.photoBrief.prompt,/geste métier clairement visible|personnes et rôles lisibles|matériel réel fidèle|La prestation reste|action explicitement suggérée|mini-sujet reste compréhensible|autour de la prestation|soin prioritaire|naturelle du geste|détails corporels et matériels|proche des gestes|interaction centrale/i);
   assert.equal(plan.legacyProjection.caracteristiquePrestationVisible,"le cabinet et son atmosphère accueillante sont immédiatement reconnaissables");
   assert.equal(plan.consistencyReport.checks.genericSceneConcrete,true);

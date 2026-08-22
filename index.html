@@ -13,7 +13,7 @@
 <meta name="apple-mobile-web-app-title" content="SDZ App" />
 <link rel="preconnect" href="https://fonts.googleapis.com" />
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-<link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@400;500;600;700&display=swap" rel="stylesheet" />
+<link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@600&family=Manrope:wght@500;600&display=swap" rel="stylesheet" />
 <style>
   :root{
     --bg:#0B0B0B; --card:rgba(255,255,255,0.05); --card2:rgba(255,255,255,0.08); --border:rgba(255,255,255,0.14);
@@ -200,7 +200,7 @@ PLATFORM_ASPECT["Instagram Square"]="1:1";PLATFORM_ASPECT["Bannière"]="3:1";
 // gpt-image-2 accepte les dimensions arbitraires multiples de 16. On génère au plus près du format
 // final afin d'éviter le recadrage destructeur qui vidait les Stories et coupait les compositions.
 const API_IMAGE_SIZE_BY_PLATFORM = {
-  "Story": "1088x1920",
+  "Story": "1008x1792",
   "Instagram": "1088x1360",
   "Facebook": "1088x1360",
   "Google Business": "1200x912",
@@ -1287,7 +1287,7 @@ function drawPremiumHeadline(ctx,headline,box,platform){
   const minTitle=Math.round(W*(isStory?.132:.105));
   let tracking=Math.max(1,Math.round(titleSize*.075)), lines=[];
   do{
-    ctx.font=`500 ${titleSize}px 'Cinzel', Georgia, 'Times New Roman', serif`;
+    ctx.font=`500 ${titleSize}px 'Cormorant Garamond', Georgia, 'Times New Roman', serif`;
     tracking=Math.max(1,Math.round(titleSize*.075));
     lines=wrapTrackedText(ctx,title,maxWidth,tracking,2);
     if(lines.every(line=>trackedTextWidth(ctx,line,tracking)<=maxWidth)) break;
@@ -1297,7 +1297,7 @@ function drawPremiumHeadline(ctx,headline,box,platform){
      mais pas infaillible), on continue de réduire sans plancher jusqu'à tenir réellement. */
   while(!lines.every(line=>trackedTextWidth(ctx,line,tracking)<=maxWidth) && titleSize>10){
     titleSize-=2;
-    ctx.font=`500 ${titleSize}px 'Cinzel', Georgia, 'Times New Roman', serif`;
+    ctx.font=`500 ${titleSize}px 'Cormorant Garamond', Georgia, 'Times New Roman', serif`;
     tracking=Math.max(1,Math.round(titleSize*.075));
     lines=wrapTrackedText(ctx,title,maxWidth,tracking,2);
   }
@@ -1306,7 +1306,7 @@ function drawPremiumHeadline(ctx,headline,box,platform){
   let total=lines.length*lineHeight+(subtitle?subtitleSize*2.05:0);
   while(titleSize>minTitle && total>box.h*H*.92){
     titleSize-=2;
-    ctx.font=`500 ${titleSize}px 'Cinzel', Georgia, 'Times New Roman', serif`;
+    ctx.font=`500 ${titleSize}px 'Cormorant Garamond', Georgia, 'Times New Roman', serif`;
     tracking=Math.max(1,Math.round(titleSize*.075));
     lines=wrapTrackedText(ctx,title,maxWidth,tracking,2);
     subtitleSize=Math.max(isStory?23:19,Math.round(titleSize*(isStory?.46:.43)));
@@ -1318,7 +1318,7 @@ function drawPremiumHeadline(ctx,headline,box,platform){
   ctx.textBaseline="middle";
   ctx.shadowColor="rgba(0,0,0,.92)"; ctx.shadowBlur=Math.round(W*(isStory?.012:.009));
   ctx.fillStyle=isStory?officialGoldGradient(ctx,y-titleSize,y+titleSize):"#F5F2E9";
-  ctx.font=`500 ${titleSize}px 'Cinzel', Georgia, 'Times New Roman', serif`;
+  ctx.font=`500 ${titleSize}px 'Cormorant Garamond', Georgia, 'Times New Roman', serif`;
   lines.forEach(line=>{ drawTrackedText(ctx,line,anchor,y,tracking,box.align); y+=lineHeight; });
   if(subtitle){
     const ruleW=Math.min(maxWidth*(isStory?.32:.24),W*(isStory?.19:.16)), ruleY=y+subtitleSize*.05;
@@ -1328,7 +1328,7 @@ function drawPremiumHeadline(ctx,headline,box,platform){
     ctx.beginPath(); ctx.moveTo(ruleStart,ruleY); ctx.lineTo(ruleEnd,ruleY); ctx.stroke();
     y+=subtitleSize*.88;
     ctx.fillStyle=isStory?"#F5F2E9":officialGoldGradient(ctx,y-subtitleSize,y+subtitleSize*1.8);
-    ctx.font=`500 ${subtitleSize}px 'Cinzel', Georgia, 'Times New Roman', serif`;
+    ctx.font=`500 ${subtitleSize}px 'Cormorant Garamond', Georgia, 'Times New Roman', serif`;
     const subTracking=Math.max(1,Math.round(subtitleSize*(isStory?.14:.13)));
     const subLines=wrapTrackedText(ctx,subtitle,maxWidth,subTracking,2);
     subLines.forEach(line=>{ drawTrackedText(ctx,line,anchor,y,subTracking,box.align); y+=subtitleSize*1.35; });
@@ -1358,18 +1358,18 @@ function drawOfficialSignature(ctx,logoImg,box,platform){
   let brandSize=Math.max(15,Math.round(W*(isStory?.0285:.0225)));
   let citySize=Math.max(11,Math.round(W*(isStory?.0158:.0135)));
   const brandTracking=()=>Math.max(1,brandSize*.08);
-  ctx.font=`500 ${brandSize}px 'Cinzel', Georgia, 'Times New Roman', serif`;
+  ctx.font=`500 ${brandSize}px 'Cormorant Garamond', Georgia, 'Times New Roman', serif`;
   while(brandSize>15 && trackedTextWidth(ctx,"LA SANTÉ DES ZÈBRES",brandTracking())>box.w*W*.98){
     brandSize--;
-    ctx.font=`500 ${brandSize}px 'Cinzel', Georgia, 'Times New Roman', serif`;
+    ctx.font=`500 ${brandSize}px 'Cormorant Garamond', Georgia, 'Times New Roman', serif`;
   }
   citySize=Math.min(citySize,Math.max(11,Math.round(brandSize*.56)));
   const brandY=top+logoH+Math.round(W*(isStory?.012:.010));
   ctx.textBaseline="top"; ctx.shadowColor="rgba(0,0,0,.88)"; ctx.shadowBlur=Math.round(W*.006);
-  ctx.fillStyle="#F5F2E9"; ctx.font=`500 ${brandSize}px 'Cinzel', Georgia, 'Times New Roman', serif`;
+  ctx.fillStyle="#F5F2E9"; ctx.font=`500 ${brandSize}px 'Cormorant Garamond', Georgia, 'Times New Roman', serif`;
   drawTrackedText(ctx,"LA SANTÉ DES ZÈBRES",blockCenterX,brandY,brandTracking(),"center");
   ctx.fillStyle=officialGoldGradient(ctx,brandY+brandSize,brandY+brandSize*2.4);
-  ctx.font=`500 ${citySize}px 'Cinzel', Georgia, 'Times New Roman', serif`;
+  ctx.font=`500 ${citySize}px 'Cormorant Garamond', Georgia, 'Times New Roman', serif`;
   drawTrackedText(ctx,"RAISMES",blockCenterX,brandY+brandSize*1.38,Math.max(1,citySize*.22),"center");
   ctx.shadowBlur=0;
   return {logoWidth:Math.round(maxLogoW),brandSize};
@@ -1395,9 +1395,9 @@ function drawPremiumBrandLockup(ctx,headline,logoImg,box,platform){
     const subtitleSize=Math.max(Math.round(W*(isStory?.096:.087)),Math.round(W*(isStory?.123:.114)*scale));
     const titleTracking=Math.max(1,Math.round(titleSize*.15));
     const subtitleTracking=Math.max(1,Math.round(subtitleSize*.13));
-    ctx.font=`500 ${titleSize}px 'Cinzel', Georgia, 'Times New Roman', serif`;
+    ctx.font=`500 ${titleSize}px 'Cormorant Garamond', Georgia, 'Times New Roman', serif`;
     const titleLines=wrapTrackedText(ctx,title,maxWidth,titleTracking,2);
-    ctx.font=`500 ${subtitleSize}px 'Cinzel', Georgia, 'Times New Roman', serif`;
+    ctx.font=`500 ${subtitleSize}px 'Cormorant Garamond', Georgia, 'Times New Roman', serif`;
     const subtitleLines=subtitle?wrapTrackedText(ctx,subtitle,maxWidth,subtitleTracking,2):[];
     const titleLineHeight=titleSize*1.18;
     const subtitleLineHeight=subtitleSize*1.34;
@@ -1406,9 +1406,9 @@ function drawPremiumBrandLockup(ctx,headline,logoImg,box,platform){
     const logoW=Math.min(box.w*W*.65,W*(isStory?.36:.36)*scale);
     const logoH=logoW*logoRatio;
     let brandSize=Math.max(16,Math.round(W*(isStory?.0245:.022)*scale));
-    ctx.font=`500 ${brandSize}px 'Cinzel', Georgia, 'Times New Roman', serif`;
+    ctx.font=`500 ${brandSize}px 'Cormorant Garamond', Georgia, 'Times New Roman', serif`;
     while(brandSize>16&&trackedTextWidth(ctx,"LA SANTÉ DES ZÈBRES",Math.max(1,brandSize*.09))>maxWidth*.64){
-      brandSize--; ctx.font=`500 ${brandSize}px 'Cinzel', Georgia, 'Times New Roman', serif`;
+      brandSize--; ctx.font=`500 ${brandSize}px 'Cormorant Garamond', Georgia, 'Times New Roman', serif`;
     }
     const citySize=Math.max(11,Math.round(brandSize*.55));
     const total=titleLines.length*titleLineHeight+
@@ -1438,9 +1438,9 @@ function drawPremiumBrandLockup(ctx,headline,logoImg,box,platform){
       guardTitleSize -= 2; guardSubtitleSize = Math.max(10, Math.round(guardSubtitleSize*.96));
       guardTitleTracking = Math.max(1,Math.round(guardTitleSize*.15));
       guardSubtitleTracking = Math.max(1,Math.round(guardSubtitleSize*.13));
-      ctx.font=`500 ${guardTitleSize}px 'Cinzel', Georgia, 'Times New Roman', serif`;
+      ctx.font=`500 ${guardTitleSize}px 'Cormorant Garamond', Georgia, 'Times New Roman', serif`;
       guardTitleLines = wrapTrackedText(ctx,title,maxWidth,guardTitleTracking,2);
-      ctx.font=`500 ${guardSubtitleSize}px 'Cinzel', Georgia, 'Times New Roman', serif`;
+      ctx.font=`500 ${guardSubtitleSize}px 'Cormorant Garamond', Georgia, 'Times New Roman', serif`;
       guardSubtitleLines = subtitle?wrapTrackedText(ctx,subtitle,maxWidth,guardSubtitleTracking,2):[];
       guardFits = guardTitleLines.every(line=>trackedTextWidth(ctx,line,guardTitleTracking)<=maxWidth)
         && guardSubtitleLines.every(line=>trackedTextWidth(ctx,line,guardSubtitleTracking)<=maxWidth);
@@ -1458,7 +1458,7 @@ function drawPremiumBrandLockup(ctx,headline,logoImg,box,platform){
   ctx.textAlign="left"; ctx.textBaseline="middle";
   ctx.shadowColor="rgba(0,0,0,.94)"; ctx.shadowBlur=Math.round(W*.012);
   ctx.fillStyle="#F5F2E9";
-  ctx.font=`500 ${l.titleSize}px 'Cinzel', Georgia, 'Times New Roman', serif`;
+  ctx.font=`500 ${l.titleSize}px 'Cormorant Garamond', Georgia, 'Times New Roman', serif`;
   l.titleLines.forEach((line,index)=>{
     /* Sans sous-ligne séparée, la seconde ligne devient naturellement le niveau or, comme dans
        les affiches SDZ de référence : une seule phrase, deux niveaux de lecture. */
@@ -1471,7 +1471,7 @@ function drawPremiumBrandLockup(ctx,headline,logoImg,box,platform){
   if(l.subtitleLines.length){
     y+=W*.010*l.scale;
     ctx.fillStyle=officialGoldGradient(ctx,y,y+l.subtitleLines.length*l.subtitleLineHeight);
-    ctx.font=`500 ${l.subtitleSize}px 'Cinzel', Georgia, 'Times New Roman', serif`;
+    ctx.font=`500 ${l.subtitleSize}px 'Cormorant Garamond', Georgia, 'Times New Roman', serif`;
     l.subtitleLines.forEach(line=>{
       drawTrackedText(ctx,line,centerX,y+l.subtitleSize*.54,l.subtitleTracking,"center");
       y+=l.subtitleLineHeight;
@@ -1499,11 +1499,11 @@ function drawPremiumBrandLockup(ctx,headline,logoImg,box,platform){
 
   ctx.textBaseline="top"; ctx.shadowColor="rgba(0,0,0,.90)"; ctx.shadowBlur=Math.round(W*.006);
   ctx.fillStyle="#F5F2E9";
-  ctx.font=`500 ${l.brandSize}px 'Cinzel', Georgia, 'Times New Roman', serif`;
+  ctx.font=`500 ${l.brandSize}px 'Cormorant Garamond', Georgia, 'Times New Roman', serif`;
   drawTrackedText(ctx,"LA SANTÉ DES ZÈBRES",centerX,y,Math.max(1,l.brandSize*.09),"center");
   y+=l.brandSize*1.18;
   ctx.fillStyle=officialGoldGradient(ctx,y,y+l.citySize*1.5);
-  ctx.font=`500 ${l.citySize}px 'Cinzel', Georgia, 'Times New Roman', serif`;
+  ctx.font=`500 ${l.citySize}px 'Cormorant Garamond', Georgia, 'Times New Roman', serif`;
   drawTrackedText(ctx,"RAISMES",centerX,y,Math.max(1,l.citySize*.24),"center");
   ctx.shadowBlur=0;
   return {
@@ -1520,9 +1520,9 @@ async function ensureBrandFontLoaded(){
   try{
     await Promise.race([
       Promise.all([
-        document.fonts.load("500 40px Cinzel"),
-        document.fonts.load("600 40px Cinzel"),
-        document.fonts.load("700 40px Cinzel"),
+        document.fonts.load("600 40px Cormorant Garamond"),
+        document.fonts.load("500 40px Manrope"),
+        document.fonts.load("600 40px Manrope"),
       ]),
       new Promise((_,rej)=>setTimeout(()=>rej(new Error("timeout police")),3000)),
     ]);

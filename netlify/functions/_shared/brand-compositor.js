@@ -15,26 +15,25 @@ const BRAND_CONTACTS = Object.freeze({
   address:"11 cour Dupas, 59590 Raismes", email:"fabien.ducant@gmail.com",
 });
 
-/* Netlify n'embarque pas les polices système utilisées par librsvg. Avec un simple <text>
-   SVG, les accents français devenaient donc des carrés. Les lettres sont maintenant converties
-   en tracés vectoriels à partir d'une police Cinzel embarquée : le rendu est identique sur tous
-   les environnements et l'OCR reçoit de vraies lettres lisibles. */
-function loadFont(relativeFile){
-  const file = require.resolve(`@fontsource/cinzel/files/${relativeFile}`);
+/* Netlify ne fournit aucune police système fiable à librsvg. Chaque graisse serveur est donc
+   résolue depuis son package et convertie en tracés : accents, mesures et rendu restent identiques. */
+function loadFont(packageName, relativeFile){
+  const file = require.resolve(`@fontsource/${packageName}/files/${relativeFile}`);
   const buffer = fs.readFileSync(file);
   const arrayBuffer = buffer.buffer.slice(buffer.byteOffset, buffer.byteOffset + buffer.byteLength);
   return opentype.parse(arrayBuffer);
 }
 
-function loadFontSet(weight){
+function loadFontSet(packageName, family, weight){
   return {
-    latin: loadFont(`cinzel-latin-${weight}-normal.woff`),
-    extended: loadFont(`cinzel-latin-ext-${weight}-normal.woff`),
+    latin: loadFont(packageName, `${family}-latin-${weight}-normal.woff`),
+    extended: loadFont(packageName, `${family}-latin-ext-${weight}-normal.woff`),
   };
 }
 
-const DISPLAY_FONT = loadFontSet(600);
-const TEXT_FONT = loadFontSet(400);
+const DISPLAY_FONT = loadFontSet("cormorant-garamond", "cormorant-garamond", 600);
+const TEXT_FONT = loadFontSet("manrope", "manrope", 500);
+const BRAND_FONT = loadFontSet("manrope", "manrope", 600);
 const TRANSPARENT_LOGO_CACHE = new Map();
 
 function dataUrlToBuffer(dataUrl){
@@ -120,6 +119,10 @@ function fitTypography({titleLines,subtitleLines,safeWidth,safeHeight,preferredT
   }
   return {titleSize,subtitleSize,usedHeight:usedHeight()};
 }
+function validateSemanticLines(lines, maximum){
+  const weak=new Set(["À","AU","AUX","DE","DES","DU","ET","LE","LA","LES","OU","UN","UNE"]);
+  return lines.length<=maximum&&lines.every(line=>String(line).trim()&&!weak.has(String(line).trim().toUpperCase()));
+}
 async function hasOpaqueLogoRectangle(buffer){const {data,info}=await sharp(buffer).ensureAlpha().raw().toBuffer({resolveWithObject:true});const inset=Math.max(0,Math.round(Math.min(info.width,info.height)*.02));return [[inset,inset],[info.width-1-inset,inset],[inset,info.height-1-inset],[info.width-1-inset,info.height-1-inset]].every(([x,y])=>{const o=(y*info.width+x)*info.channels;return data[o+3]>245&&Math.max(data[o],data[o+1],data[o+2])<=55;});}
 
 function layoutFor(width, height, platform, requestedZone, hasHeadline, selectedLayout, posterStrategy){
@@ -186,7 +189,6 @@ function buildOverlaySvg(width, height, layout, platform, headline, posterStrate
   const brandY = Math.min(height-layout.margin-Math.round(citySize*1.8),layout.logoArea.bottom+Math.round(brandSize*1.05));
   const scrimTop = Math.max(0, layout.y - Math.round(height * 0.025));
   const scrimBottom = Math.min(height, layout.y + layout.height + Math.round(height * 0.025));
-  const border = Math.max(2, Math.round(width * 0.0017));
   const contactFields=(layout.template&&layout.template.contactFields)||[];
   const contactText=contactFields.map(key=>BRAND_CONTACTS[key]).filter(Boolean).join(" · ");
   const contactY=Math.min(height-layout.margin,brandY+brandSize*1.38+citySize*1.55);
@@ -194,10 +196,10 @@ function buildOverlaySvg(width, height, layout, platform, headline, posterStrate
     <svg width="${width}" height="${height}" viewBox="0 0 ${width} ${height}" xmlns="http://www.w3.org/2000/svg">
       <defs>
         <linearGradient id="scrim" x1="0" y1="0" x2="0" y2="1">
-          <stop offset="0" stop-color="#050505" stop-opacity="0.08"/>
-          <stop offset="0.24" stop-color="#050505" stop-opacity="0.48"/>
-          <stop offset="0.76" stop-color="#050505" stop-opacity="0.58"/>
-          <stop offset="1" stop-color="#050505" stop-opacity="0.10"/>
+          <stop offset="0" stop-color="#050505" stop-opacity="0"/>
+          <stop offset="0.28" stop-color="#050505" stop-opacity="0.22"/>
+          <stop offset="0.72" stop-color="#050505" stop-opacity="0.34"/>
+          <stop offset="1" stop-color="#050505" stop-opacity="0"/>
         </linearGradient>
         <filter id="shadow"><feGaussianBlur stdDeviation="5"/></filter>
         <style>
@@ -210,10 +212,9 @@ function buildOverlaySvg(width, height, layout, platform, headline, posterStrate
         </style>
       </defs>
       <rect x="0" y="${scrimTop}" width="${width}" height="${scrimBottom-scrimTop}" fill="url(#scrim)"/>
-      <rect x="${Math.round(width*.018)}" y="${Math.round(height*.012)}" width="${Math.round(width*.964)}" height="${Math.round(height*.976)}" rx="${Math.round(width*.004)}" fill="none" stroke="${GOLD}" stroke-opacity=".68" stroke-width="${border}"/>
-      <line x1="${layout.x + layout.width*.30}" y1="${dividerY}" x2="${layout.x + layout.width*.70}" y2="${dividerY}" stroke="${GOLD}" stroke-width="${border}" stroke-opacity=".82"/>
-      ${vectorText(DISPLAY_FONT, "LA SANTÉ DES ZÈBRES", logoCenterX, brandY, brandSize, "brand")}
-      ${vectorText(DISPLAY_FONT, "RAISMES", logoCenterX, brandY + brandSize*1.38, citySize, "city")}
+      <line x1="${layout.x + layout.width*.38}" y1="${dividerY}" x2="${layout.x + layout.width*.62}" y2="${dividerY}" stroke="${GOLD}" stroke-width="1" stroke-opacity=".46"/>
+      ${vectorText(BRAND_FONT, "LA SANTÉ DES ZÈBRES", logoCenterX, brandY, brandSize, "brand")}
+      ${vectorText(BRAND_FONT, "RAISMES", logoCenterX, brandY + brandSize*1.38, citySize, "city")}
       ${vectorText(TEXT_FONT, contactText, logoCenterX, contactY, Math.max(13,Math.round(citySize*.82)), "contact")}
       ${titleNodes}${subtitleNodes}
     </svg>`);
@@ -260,6 +261,7 @@ async function composeBrandPoster({ imageBuffer, logoDataUrl, platform, headline
   const safeWidth=Math.min(layout.width,width-Math.max(layout.margin,Math.round(width*.06))*2);
   const type=fitTypography({titleLines,subtitleLines,safeWidth,safeHeight:Math.max(1,layout.textArea.bottom-layout.textArea.top-Math.round(height*.018)),preferredTitle:Math.round((story?48:(layout.portrait?67:62))*scale),preferredSubtitle:Math.round((story?32:(layout.portrait?42:38))*scale),minimumTitle:Math.round(24*scale),minimumSubtitle:Math.round(18*scale)});
   const titleSize=type.titleSize,subtitleSize=type.subtitleSize;
+  const centerX=layout.x+layout.width/2;
   const textTop = layout.textArea.top + Math.round((layout.textArea.bottom-layout.textArea.top) * 0.08);
   const textY = textTop + titleSize + titleLines.length * titleSize * 1.05 + subtitleSize * 0.45;
   const headlineEnd = textY + Math.max(1, subtitleLines.length) * subtitleSize * 1.10;
@@ -286,10 +288,16 @@ async function composeBrandPoster({ imageBuffer, logoDataUrl, platform, headline
   const resizedLogo = await sharp(cleanLogo, { failOn: "none" })
     .resize({ width: logoWidth, withoutEnlargement: false, fit: "inside" })
     .png().toBuffer();
+  const resizedLogoMeta=await sharp(resizedLogo).metadata();
+  const finalLogoWidth=resizedLogoMeta.width||logoWidth,finalLogoHeight=resizedLogoMeta.height||estimatedLogoHeight;
   if(await hasOpaqueLogoRectangle(resizedLogo))throw new Error("Rectangle opaque détecté autour du logo officiel.");
   const normalizedText=value=>String(value||"").trim().replace(/\s+/g," ");
   const titleWidths=titleLines.map(line=>measureVectorText(DISPLAY_FONT,line,titleSize));
   const subtitleWidths=subtitleLines.map(line=>measureVectorText(TEXT_FONT,line,subtitleSize));
+  const titleTop=textTop,titleBottom=textTop+titleLines.length*titleSize*1.05;
+  const subtitleTop=subtitleLines.length?textY-subtitleSize:0;
+  const subtitleBottom=subtitleLines.length?textY+(subtitleLines.length-1)*subtitleSize*1.10:0;
+  const semanticLinesValid=validateSemanticLines(titleLines,story?4:3)&&validateSemanticLines(subtitleLines,2);
   const compositionManifest=Object.freeze({
     version:COMPOSITOR_VERSION,
     platform:normalizePlatform(platform),
@@ -298,6 +306,9 @@ async function composeBrandPoster({ imageBuffer, logoDataUrl, platform, headline
     titleLines:[...titleLines],subtitleLines:[...subtitleLines],
     titleSize,subtitleSize,
     titleWidths,subtitleWidths,
+    textSafeArea:{left:layout.x,top:layout.textArea.top,right:layout.x+layout.width,bottom:layout.textArea.bottom},
+    titleBounds:{left:centerX-Math.max(0,...titleWidths)/2,top:titleTop,right:centerX+Math.max(0,...titleWidths)/2,bottom:titleBottom},
+    subtitleBounds:subtitleLines.length?{left:centerX-Math.max(...subtitleWidths)/2,top:subtitleTop,right:centerX+Math.max(...subtitleWidths)/2,bottom:subtitleBottom}:null,
     safeWidth,safeHeight:layout.textArea.bottom-layout.textArea.top,
     usedHeight:type.usedHeight,
     titleExact:normalizedText(titleLines.join(" "))===normalizedText(title),
@@ -306,13 +317,15 @@ async function composeBrandPoster({ imageBuffer, logoDataUrl, platform, headline
     marginsValid:layout.x>=Math.round(width*.04)&&layout.x+layout.width<=width-Math.round(width*.04),
     hierarchyValid:!subtitleLines.length||titleSize>subtitleSize,
     zonesDisjoint:layout.textArea.bottom<=layout.logoArea.top,
-    logoBounds:{left:logoLeft,top:logoTop,width:logoWidth,height:estimatedLogoHeight},
-    logoWithinCanvas:logoLeft>=0&&logoTop>=0&&logoLeft+logoWidth<=width&&logoTop+estimatedLogoHeight<=height-minimumBottomMargin,
+    semanticLinesValid,
+    logoBounds:{left:logoLeft,top:logoTop,width:finalLogoWidth,height:finalLogoHeight,right:logoLeft+finalLogoWidth,bottom:logoTop+finalLogoHeight},
+    logoWithinCanvas:logoLeft>=0&&logoTop>=0&&logoLeft+finalLogoWidth<=width&&logoTop+finalLogoHeight<=height-minimumBottomMargin,
     logoRectangleOpaque:false,
     completeText:[title,subtitle].filter(Boolean).join(" | "),
   });
   if(!compositionManifest.titleExact||!compositionManifest.subtitleExact)throw new Error("Texte validé tronqué ou remplacé pendant la composition.");
   if(!compositionManifest.hierarchyValid)throw new Error("Hiérarchie typographique invalide : le sous-titre domine le titre.");
+  if(!compositionManifest.semanticLinesValid)throw new Error("Coupure sémantique invalide dans le bloc typographique.");
   const overlaySvg = buildOverlaySvg(width, height, layout, platform, headline, posterStrategy);
   const output=await image
     .composite([
@@ -325,4 +338,4 @@ async function composeBrandPoster({ imageBuffer, logoDataUrl, platform, headline
   return output;
 }
 
-module.exports = { BRAND_TOKENS, COMPOSITOR_VERSION, composeBrandPoster, dataUrlToBuffer, escapeXml, wrapWords, normalizedZone, prepareLogoOverlay, hasOpaqueLogoRectangle,vectorText, measureVectorText,fitFontSize,fitTypography,layoutFor, BRAND_CONTACTS };
+module.exports = { BRAND_TOKENS, COMPOSITOR_VERSION, composeBrandPoster, dataUrlToBuffer, escapeXml, wrapWords, normalizedZone, prepareLogoOverlay, hasOpaqueLogoRectangle,vectorText, measureVectorText,fitFontSize,fitTypography,validateSemanticLines,layoutFor, BRAND_CONTACTS };
