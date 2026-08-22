@@ -124,7 +124,7 @@ test("la finalisation et le recontrôle reconnaissent toujours l'identité compo
 });
 
 test("les formats gpt-image-2 suivent les ratios de publication", () => {
-  assert.match(index, /"Story": "1088x1920"/);
+  assert.match(index, /"Story": "1008x1792"/);
   assert.match(index, /"Instagram": "1088x1360"/);
   assert.match(index, /"Article Blog Wix": "1920x1088"/);
 });
