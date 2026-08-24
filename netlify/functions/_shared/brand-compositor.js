@@ -9,31 +9,39 @@ const BRAND_TOKENS=require("./v3-brand-tokens");
 const {semanticLines}=require("./v3-creative-strategy");
 
 const GOLD=BRAND_TOKENS.brandGold, PALE_GOLD=BRAND_TOKENS.brandPaleGold, IVORY=BRAND_TOKENS.brandIvory;
-const COMPOSITOR_VERSION="2.0.0-safe-lockup";
+const COMPOSITOR_VERSION="2.1.0-static-font-bundle";
 const BRAND_CONTACTS = Object.freeze({
   domain:"la-sante-des-zebres.com", phone:"06.84.40.69.54",
   address:"11 cour Dupas, 59590 Raismes", email:"fabien.ducant@gmail.com",
 });
 
-/* Netlify ne fournit aucune police système fiable à librsvg. Chaque graisse serveur est donc
-   résolue depuis son package et convertie en tracés : accents, mesures et rendu restent identiques. */
-function loadFont(packageName, relativeFile){
-  const file = require.resolve(`@fontsource/${packageName}/files/${relativeFile}`);
+/* Ces six chemins doivent rester statiques : esbuild peut ainsi tracer chaque WOFF jusque dans
+   l'archive Lambda, sans police système ni résolution de package construite à l'exécution. */
+const DISPLAY_LATIN_PATH=require.resolve("@fontsource/cormorant-garamond/files/cormorant-garamond-latin-600-normal.woff");
+const DISPLAY_EXTENDED_PATH=require.resolve("@fontsource/cormorant-garamond/files/cormorant-garamond-latin-ext-600-normal.woff");
+const TEXT_LATIN_PATH=require.resolve("@fontsource/manrope/files/manrope-latin-500-normal.woff");
+const TEXT_EXTENDED_PATH=require.resolve("@fontsource/manrope/files/manrope-latin-ext-500-normal.woff");
+const BRAND_LATIN_PATH=require.resolve("@fontsource/manrope/files/manrope-latin-600-normal.woff");
+const BRAND_EXTENDED_PATH=require.resolve("@fontsource/manrope/files/manrope-latin-ext-600-normal.woff");
+const FONT_PATHS=Object.freeze({
+  displayLatin:DISPLAY_LATIN_PATH,displayExtended:DISPLAY_EXTENDED_PATH,
+  textLatin:TEXT_LATIN_PATH,textExtended:TEXT_EXTENDED_PATH,
+  brandLatin:BRAND_LATIN_PATH,brandExtended:BRAND_EXTENDED_PATH,
+});
+
+function loadFont(file){
   const buffer = fs.readFileSync(file);
   const arrayBuffer = buffer.buffer.slice(buffer.byteOffset, buffer.byteOffset + buffer.byteLength);
   return opentype.parse(arrayBuffer);
 }
 
-function loadFontSet(packageName, family, weight){
-  return {
-    latin: loadFont(packageName, `${family}-latin-${weight}-normal.woff`),
-    extended: loadFont(packageName, `${family}-latin-ext-${weight}-normal.woff`),
-  };
+function loadFontSet(latinPath, extendedPath){
+  return {latin:loadFont(latinPath),extended:loadFont(extendedPath)};
 }
 
-const DISPLAY_FONT = loadFontSet("cormorant-garamond", "cormorant-garamond", 600);
-const TEXT_FONT = loadFontSet("manrope", "manrope", 500);
-const BRAND_FONT = loadFontSet("manrope", "manrope", 600);
+const DISPLAY_FONT=loadFontSet(DISPLAY_LATIN_PATH,DISPLAY_EXTENDED_PATH);
+const TEXT_FONT=loadFontSet(TEXT_LATIN_PATH,TEXT_EXTENDED_PATH);
+const BRAND_FONT=loadFontSet(BRAND_LATIN_PATH,BRAND_EXTENDED_PATH);
 const TRANSPARENT_LOGO_CACHE = new Map();
 
 function dataUrlToBuffer(dataUrl){
@@ -338,4 +346,4 @@ async function composeBrandPoster({ imageBuffer, logoDataUrl, platform, headline
   return output;
 }
 
-module.exports = { BRAND_TOKENS, COMPOSITOR_VERSION, composeBrandPoster, dataUrlToBuffer, escapeXml, wrapWords, normalizedZone, prepareLogoOverlay, hasOpaqueLogoRectangle,vectorText, measureVectorText,fitFontSize,fitTypography,validateSemanticLines,layoutFor, BRAND_CONTACTS };
+module.exports = { BRAND_TOKENS, COMPOSITOR_VERSION, FONT_PATHS, composeBrandPoster, dataUrlToBuffer, escapeXml, wrapWords, normalizedZone, prepareLogoOverlay, hasOpaqueLogoRectangle,vectorText, measureVectorText,fitFontSize,fitTypography,validateSemanticLines,layoutFor, BRAND_CONTACTS };

@@ -24,12 +24,31 @@ test("les deux fonctions Netlify embarquent explicitement toutes les dépendance
     const block=config.match(new RegExp(`\\[functions\\."${fn}"\\]([\\s\\S]*?)(?=\\n\\[|$)`));
     assert.ok(block,fn);
     for(const dependency of ["sharp","opentype.js","@fontsource/cormorant-garamond","@fontsource/manrope"])assert.match(block[1],new RegExp(dependency.replace(".","\\.")),`${fn}: ${dependency}`);
+    assert.equal((block[1].match(/\.woff"/g)||[]).length,6,`${fn}: six WOFF explicites`);
   }
 });
 
 test("le compositor et la recomposition sont importables dans un runtime serveur",()=>{
-  assert.doesNotThrow(()=>require("../netlify/functions/_shared/brand-compositor"));
+  const compositor=require("../netlify/functions/_shared/brand-compositor");
+  assert.equal(Object.keys(compositor.FONT_PATHS).length,6);
+  for(const file of Object.values(compositor.FONT_PATHS))assert.equal(fs.statSync(file).isFile(),true,file);
+  const source=fs.readFileSync(path.join(root,"netlify/functions/_shared/brand-compositor.js"),"utf8");
+  assert.equal((source.match(/require\.resolve\("@fontsource\//g)||[]).length,6);
+  assert.doesNotMatch(source,/require\.resolve\(`@fontsource/);
   assert.doesNotThrow(()=>require("../netlify/functions/recompose-image-job"));
+});
+
+test("le healthcheck gratuit prouve le bundle sans lire de job ni générer d'image",async()=>{
+  const recompose=require("../netlify/functions/recompose-image-job");
+  const response=await recompose.handler({httpMethod:"GET",queryStringParameters:{health:"1"}});
+  const body=JSON.parse(response.body);
+  assert.equal(response.statusCode,200);
+  assert.equal(body.ok,true);
+  assert.equal(body.recomposeVersion,"2.1.0-font-bundle-diagnostic");
+  assert.equal(body.compositorVersion,"2.1.0-static-font-bundle");
+  assert.deepEqual(body.fonts,{cormorant600:true,manrope500:true,manrope600:true});
+  assert.equal(body[["cin","zel"].join("")],false);
+  assert.equal(body.imageGenerationCalls,0);
 });
 
 test("Story compose UNE HISTOIRE À PARTAGER sans troncature, collision ni fond opaque",async()=>{
