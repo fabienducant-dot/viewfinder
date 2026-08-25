@@ -66,6 +66,40 @@ function store(name){
   return getStore({name,...opts});
 }
 
+function isRecoverableOriginal(job){
+  return job?.status==="completed"&&Boolean(job.rawResultKey)&&Boolean(job.v3Plan)&&Boolean(job.v3Finalization?.analysis)&&!job.recomposedFrom;
+}
+
+async function findLatestRecoverableJob(jobs){
+  const listing=await jobs.list({prefix:"jobs/"});
+  const blobs=Array.isArray(listing)?listing:(listing?.blobs||[]);
+  const rootKeys=blobs.map(item=>typeof item==="string"?item:item?.key).filter(key=>/^jobs\/[^/]+$/.test(String(key||"")));
+  const candidates=[];
+  for(const key of rootKeys){
+    try{
+      const raw=await jobs.get(key);
+      if(!raw)continue;
+      const job=typeof raw==="string"?JSON.parse(raw):raw;
+      if(isRecoverableOriginal(job))candidates.push(job);
+    }catch(error){
+      // Une entrée illisible ne doit pas masquer les autres images payées conservées.
+    }
+  }
+  const paid=candidates.filter(job=>Number(job.imageGenerationCallCount)>=1);
+  const eligible=paid.length?paid:candidates;
+  return eligible.sort((a,b)=>Number(b.createdAt||0)-Number(a.createdAt||0))[0]||null;
+}
+
+async function latestRecoverableJob(jobs=store("viewfinder-image-jobs")){
+  try{
+    const job=await findLatestRecoverableJob(jobs);
+    if(!job)return json(200,{ok:true,found:false,imageGenerationCalls:0});
+    return json(200,{ok:true,found:true,jobId:job.jobId,createdAt:job.createdAt,status:job.status,platform:job.v3Plan?.artDirection?.platform||null,rawResultAvailable:true,imageGenerationCalls:0});
+  }catch(error){
+    return json(500,{ok:false,found:false,error:String(error.message||error),imageGenerationCalls:0});
+  }
+}
+
 async function rawBuffer(record){
   if(record.b64)return Buffer.from(record.b64,"base64");
   if(!record.url)throw new Error("Photographie brute indisponible.");
@@ -76,6 +110,7 @@ async function rawBuffer(record){
 
 exports.handler=async event=>{
   if(event.httpMethod==="GET"&&event.queryStringParameters?.health==="1")return healthcheck();
+  if(event.httpMethod==="GET"&&event.queryStringParameters?.latest==="1")return latestRecoverableJob();
   if(event.httpMethod!=="POST")return json(405,{error:"Method Not Allowed",imageGenerationCalls:0});
   let composeBrandPoster;
   try{
@@ -122,3 +157,6 @@ exports.rawBuffer=rawBuffer;
 exports.healthcheck=healthcheck;
 exports.loadCompositorRuntime=loadCompositorRuntime;
 exports.RECOMPOSE_VERSION=RECOMPOSE_VERSION;
+exports.isRecoverableOriginal=isRecoverableOriginal;
+exports.findLatestRecoverableJob=findLatestRecoverableJob;
+exports.latestRecoverableJob=latestRecoverableJob;

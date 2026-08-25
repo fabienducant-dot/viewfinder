@@ -5183,6 +5183,12 @@ async function applyHeadlineToItem(item){
 
 const RECOVERABLE_IMAGE_JOB_KEY="vf-recoverable-image-jobs-v1";
 function readRecoverableImageJobs(){try{const value=JSON.parse(localStorage.getItem(RECOVERABLE_IMAGE_JOB_KEY)||"[]");return Array.isArray(value)?value:[];}catch(error){return [];}}
+async function readLatestRecoverableImageJobFromServer(){
+  const response=await fetch("/.netlify/functions/recompose-image-job?latest=1",{headers:syncHeaders()});
+  const data=await fetchJsonOrThrowRaw(response,"recherche du dernier travail image");
+  if(!response.ok||data.error)throw new Error(data.error||`Erreur ${response.status}`);
+  return data.found?{jobId:data.jobId,createdAt:data.createdAt,status:data.status,platform:data.platform,serverDiscovered:true}:null;
+}
 function rememberRecoverableImageJob(flow,jobId,status){
   if(!jobId)return;
   const existing=readRecoverableImageJobs().filter(item=>item.jobId!==jobId);
@@ -5208,7 +5214,7 @@ function analysisFromServer(flow){
     dominantColorCast:Number(actual.paletteDrift||0)>.45?"other":"black_gold",productGeometryConformity:"not_applicable",productGeometryMismatch:""};
 }
 async function recoverAndRecomposeImageJob(record,onStatus){
-  if(!record?.jobId||!record?.v3Plan||!record?.inputs)throw new Error("Dossier de récupération incomplet.");
+  if(!record?.jobId)throw new Error("Dossier de récupération incomplet.");
   onStatus&&onStatus("Vérification de l'image brute conservée...");
   let sourceResult=null;
   const statusResponse=await fetch(`/.netlify/functions/get-image-job?jobId=${encodeURIComponent(record.jobId)}`);
@@ -5218,22 +5224,26 @@ async function recoverAndRecomposeImageJob(record,onStatus){
   else sourceResult=await pollImageJob(record.jobId,onStatus,null);
   const sourceFinalization=sourceResult.v3Finalization||null;
   if(!sourceFinalization?.analysis)throw new Error("L'analyse serveur de la photographie brute n'est pas disponible.");
+  const sourcePlan=record.v3Plan||sourceResult.v3Plan;
+  if(!sourcePlan)throw new Error("Le plan V3 du travail source n'est pas disponible.");
+  const sourceInputs=record.inputs||{platform:record.platform||sourcePlan.artDirection?.platform,prestation:sourcePlan.contract?.name||"Tous sujets",mission:"Récupération d'une image existante"};
   onStatus&&onStatus("Recomposition gratuite depuis la photographie brute...");
-  const poster=record.v3Plan.posterStrategy||{};
+  const poster=sourcePlan.posterStrategy||{};
   const response=await fetch("/.netlify/functions/recompose-image-job",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({
-    sourceJobId:record.jobId,platform:record.inputs.platform==="Article Blog Wix"?"Blog":record.inputs.platform,
-    headline:[poster.title,poster.subtitle].filter(Boolean).join(" | "),zoneText:String(record.brief?.zoneTexte||"")
+    sourceJobId:record.jobId,platform:sourceInputs.platform==="Article Blog Wix"?"Blog":sourceInputs.platform,
+    headline:[poster.title,poster.subtitle].filter(Boolean).join(" | "),zoneText:String(record.brief?.zoneTexte||sourcePlan.legacyProjection?.zoneTexte||"")
   })});
   const data=await fetchJsonOrThrowRaw(response,"recomposition gratuite");
   if(!response.ok||data.error)throw new Error(data.error||"Recomposition impossible.");
-  const flow={phase:"completed",ok:true,inputs:record.inputs,brief:record.brief||record.v3Plan.legacyProjection||{},content:record.content||null,
-    v3Plan:record.v3Plan,v3Finalization:{analysis:sourceFinalization.analysis,layout:data.layout,quality:data.quality},
+  const flow={phase:"completed",ok:true,inputs:sourceInputs,brief:record.brief||sourcePlan.legacyProjection||{},content:record.content||null,
+    v3Plan:sourcePlan,v3Finalization:{analysis:sourceFinalization.analysis,layout:data.layout,quality:data.quality},
     dataUrl:await fetchImageAsDataUrl(data.resultUrl),usedReference:false,referenceFallbackReason:null,serverBrandCompositionUsed:true,
     brandComposited:true,sourceImageJobId:data.jobId,costAudit:data.costAudit||null,imageUsage:null,artFingerprint:null};
   flow.analysis=analysisFromServer(flow);
   if(flow.content)flow.content={...flow.content,altText:flow.analysis?.altText||flow.content.altText};
-  else try{flow.content=await generateContentFromBrief(flow.brief,flow.analysis,flow.inputs.platform,flow.inputs.mission);}
+  else if(!record.serverDiscovered)try{flow.content=await generateContentFromBrief(flow.brief,flow.analysis,flow.inputs.platform,flow.inputs.mission);}
   catch(error){flow.textError=`Texte non récupéré : ${String(error.message||error)}`;}
+  else flow.textError="Texte local indisponible ; aucune nouvelle opération payante lancée.";
   rememberRecoverableImageJob(flow,data.jobId,"completed");
   return flow;
 }
@@ -7245,6 +7255,13 @@ function buildPostTab(){
     const recoverRawInput = el("input",{type:"file",accept:"image/png,image/jpeg,image/webp",style:"display:none;"});
     const inspectorHost = el("div",{});
     let activeCancelToken = null;
+    let serverRecoverableRecord=null;
+    if(!readRecoverableImageJobs().length){
+      readLatestRecoverableImageJobFromServer().then(record=>{
+        serverRecoverableRecord=record;
+        recoverServerBtn.style.display=record?"inline-block":"none";
+      }).catch(error=>{serverRecoverableRecord=null;});
+    }
 
     // Helper clipboard réutilisé par les 4 boutons de l'inspecteur (Tout copier / Copier le Prompt /
     // Copier le JSON) — factorisation pure de l'UI, aucun impact sur le pipeline ou l'état métier.
@@ -7650,8 +7667,8 @@ function buildPostTab(){
       recoverRawBtn.disabled=false;
     });
     recoverServerBtn.addEventListener("click",async()=>{
-      const record=readRecoverableImageJobs()[0];
-      if(!record){imgApiStatus.textContent="Aucune photographie brute récupérable sur cet appareil.";return;}
+      const record=readRecoverableImageJobs()[0]||serverRecoverableRecord;
+      if(!record){imgApiStatus.textContent="Aucune photographie brute récupérable localement ou sur le serveur.";return;}
       recoverServerBtn.disabled=true;
       try{
         const flow=await recoverAndRecomposeImageJob(record,label=>{imgApiStatus.textContent=label;});

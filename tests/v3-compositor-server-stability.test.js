@@ -51,6 +51,39 @@ test("le healthcheck gratuit prouve le bundle sans lire de job ni générer d'im
   assert.equal(body.imageGenerationCalls,0);
 });
 
+test("latest ignore sous-clés, échecs, dérivés et jobs incomplets puis choisit l'original payé le plus récent",async()=>{
+  const {findLatestRecoverableJob,latestRecoverableJob}=require("../netlify/functions/recompose-image-job");
+  const valid=(jobId,createdAt,extra={})=>({jobId,createdAt,status:"completed",rawResultKey:`jobs/${jobId}/raw-result`,v3Plan:{artDirection:{platform:"Story"}},v3Finalization:{analysis:{}},imageGenerationCallCount:1,...extra});
+  const records={
+    "jobs/old":valid("old",100),
+    "jobs/new":valid("new",300),
+    "jobs/derived":valid("derived",500,{recomposedFrom:"old",imageGenerationCallCount:0}),
+    "jobs/failed":{...valid("failed",600),status:"failed"},
+    "jobs/no-raw":{...valid("no-raw",700),rawResultKey:null},
+    "jobs/new/result":JSON.stringify({b64:"ne doit jamais être lu"}),
+  };
+  const readKeys=[];
+  const jobs={list:async options=>{assert.deepEqual(options,{prefix:"jobs/"});return {blobs:Object.keys(records).map(key=>({key}))};},get:async key=>{readKeys.push(key);return typeof records[key]==="string"?records[key]:JSON.stringify(records[key]);}};
+  assert.equal((await findLatestRecoverableJob(jobs)).jobId,"new");
+  assert.equal(readKeys.includes("jobs/new/result"),false);
+  const response=await latestRecoverableJob(jobs),body=JSON.parse(response.body);
+  assert.equal(response.statusCode,200);
+  assert.deepEqual(body,{ok:true,found:true,jobId:"new",createdAt:300,status:"completed",platform:"Story",rawResultAvailable:true,imageGenerationCalls:0});
+});
+
+test("latest retourne found false gratuitement quand aucun original n'est récupérable",async()=>{
+  const {latestRecoverableJob}=require("../netlify/functions/recompose-image-job");
+  const response=await latestRecoverableJob({list:async()=>({blobs:[{key:"jobs/x/result"}]}),get:async()=>{throw new Error("sous-clé lue");}});
+  assert.deepEqual(JSON.parse(response.body),{ok:true,found:false,imageGenerationCalls:0});
+});
+
+test("l'interface affiche et utilise la récupération serveur quand le stockage local est vide",()=>{
+  const html=fs.readFileSync(path.join(root,"index.html"),"utf8");
+  assert.match(html,/if\(!readRecoverableImageJobs\(\)\.length\)\{[\s\S]*readLatestRecoverableImageJobFromServer\(\)[\s\S]*recoverServerBtn\.style\.display=record\?"inline-block":"none"/);
+  assert.match(html,/readRecoverableImageJobs\(\)\[0\]\|\|serverRecoverableRecord/);
+  assert.match(html,/recompose-image-job\?latest=1/);
+});
+
 test("Story compose UNE HISTOIRE À PARTAGER sans troncature, collision ni fond opaque",async()=>{
   const {composeBrandPoster}=require("../netlify/functions/_shared/brand-compositor");
   const imageBuffer=await sharp({create:{width:1080,height:1920,channels:4,background:"#5b5148"}}).png().toBuffer();
