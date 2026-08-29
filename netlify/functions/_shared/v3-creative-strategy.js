@@ -37,7 +37,7 @@ function classifySubject(raw,contract){
  if(contract.generic&&(/\b(porte ouverte|evenement|atelier|salon|journee|date|rendez-vous)\b/.test(value)))return "event";
  if(/\b(offre|promotion|promo|cadeau|bon cadeau|nouveaute|lancement)\b/.test(value))return "offer";
  if(contract.generic&&(/\b(decouvr|univers|cabinet|adresse|raisimes|raismes|havre|lieu|expertise|savoir-faire|depuis)\b/.test(value)))return "institutional";
- if(/\b(lourd|bloqu|tension|stress|agit|fatigu|epuis|elan|ferme|repli|douleur)\b/.test(value))return "transformation";
+ if(/\b(?:lourd|bloqu|tension|stress|agit|fatigu|epuis|elan|ferme|repli|douleur)/.test(value))return "transformation";
  return contract.generic?"editorial":"service";
 }
 function conciseTheme(raw,contract,kind,facts){
@@ -69,7 +69,7 @@ function editorialInterpretation(raw,contract){
    audienceIntent="personnes à la recherche d’une attention ou d’une offre clairement expliquée";initialState="une intention à préciser";desiredShift="une proposition concrète et désirable";
  }else if(kind==="transformation"){
    title=/elan|fatigu|epuis/i.test(normalize(raw))?"RETROUVER DE L’ÉLAN":/stress|agit|tension/i.test(normalize(raw))?"RETROUVER UN RYTHME PLUS CALME":"VERS PLUS DE LÉGÈRETÉ";
-   subtitle=contract.generic?"UNE EXPÉRIENCE SIGNÉE SDZ":contract.name.toUpperCase();
+   subtitle=contract.generic?"":contract.name.toUpperCase();
    visualSubject=`manifestation visible de « ${theme} », exprimée par la posture, le geste et l’espace`;
    audienceIntent=`personnes qui se reconnaissent dans « ${theme} »`;initialState=`la sensation initiale liée à « ${theme} »`;desiredShift="une évolution sensible, crédible et sans promesse médicale";
  }else{

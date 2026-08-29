@@ -9,7 +9,7 @@ const BRAND_TOKENS=require("./v3-brand-tokens");
 const {semanticLines}=require("./v3-creative-strategy");
 
 const GOLD=BRAND_TOKENS.brandGold, PALE_GOLD=BRAND_TOKENS.brandPaleGold, IVORY=BRAND_TOKENS.brandIvory;
-const COMPOSITOR_VERSION="2.1.0-static-font-bundle";
+const COMPOSITOR_VERSION="2.2.0-medallion-lockup";
 const BRAND_CONTACTS = Object.freeze({
   domain:"la-sante-des-zebres.com", phone:"06.84.40.69.54",
   address:"11 cour Dupas, 59590 Raismes", email:"fabien.ducant@gmail.com",
@@ -131,6 +131,7 @@ function validateSemanticLines(lines, maximum){
   const weak=new Set(["À","AU","AUX","DE","DES","DU","ET","LE","LA","LES","OU","UN","UNE"]);
   return lines.length<=maximum&&lines.every(line=>String(line).trim()&&!weak.has(String(line).trim().toUpperCase()));
 }
+function targetStoryLogoWidth(width){return Math.round(Number(width)*.33);}
 async function hasOpaqueLogoRectangle(buffer){const {data,info}=await sharp(buffer).ensureAlpha().raw().toBuffer({resolveWithObject:true});const inset=Math.max(0,Math.round(Math.min(info.width,info.height)*.02));return [[inset,inset],[info.width-1-inset,inset],[inset,info.height-1-inset],[info.width-1-inset,info.height-1-inset]].every(([x,y])=>{const o=(y*info.width+x)*info.channels;return data[o+3]>245&&Math.max(data[o],data[o+1],data[o+2])<=55;});}
 
 function layoutFor(width, height, platform, requestedZone, hasHeadline, selectedLayout, posterStrategy){
@@ -142,10 +143,16 @@ function layoutFor(width, height, platform, requestedZone, hasHeadline, selected
     const textSafe=posterStrategy?.textSafeArea;
     const logoSafe=posterStrategy?.logoSafeArea;
     const x=textSafe?Math.max(margin,Math.round(width*textSafe.left)):Math.max(margin,Math.round(width*spec.x));
-    const y=textSafe?Math.max(margin,Math.round(height*textSafe.top)):Math.max(margin,Math.round(height*spec.y));
+    let y=textSafe?Math.max(margin,Math.round(height*textSafe.top)):Math.max(margin,Math.round(height*spec.y));
     const boxWidth=textSafe?Math.min(Math.round(width*(textSafe.right-textSafe.left)),width-x-margin):Math.min(Math.round(width*spec.width),width-x-margin);
-    const textBottom=textSafe?Math.round(height*textSafe.bottom):Math.min(height-margin,y+Math.round(height*(hasHeadline?.18:.04)));
+    let textBottom=textSafe?Math.round(height*textSafe.bottom):Math.min(height-margin,y+Math.round(height*(hasHeadline?.18:.04)));
+    if(normalized==="Story"&&!textSafe){y=Math.round(height*.60);textBottom=Math.round(height*.70);}
     const logoArea=logoSafe?{left:Math.round(width*logoSafe.left),right:Math.round(width*logoSafe.right),top:Math.round(height*logoSafe.top),bottom:Math.round(height*logoSafe.bottom)}:{left:x,right:x+boxWidth,top:textBottom,bottom:Math.min(height-margin,textBottom+Math.round(height*(height>width?.12:.18)))};
+    if(normalized==="Story"){
+      logoArea.left=Math.round(width*.18);logoArea.right=Math.round(width*.82);
+      logoArea.top=textBottom+Math.round(height*.006);
+      logoArea.bottom=Math.min(height-margin,height-Math.max(24,Math.round(height*.035)));
+    }
     const result={x,y,width:boxWidth,height:Math.max(1,textBottom-y),margin,portrait:height>width*1.35,landscape:width>height*1.35,template,align:spec.align,textArea:{top:y,bottom:textBottom},logoArea};
     return result;
   }
@@ -167,22 +174,22 @@ function layoutFor(width, height, platform, requestedZone, hasHeadline, selected
   return { x, y, width: boxW, height: boxH, margin, portrait, landscape };
 }
 
-function buildOverlaySvg(width, height, layout, platform, headline, posterStrategy){
+function buildOverlaySvg(width, height, layout, platform, headline, posterStrategy, brandLockup){
   const { title, subtitle } = headlineParts(headline);
   const story=normalizePlatform(platform)==="Story";
   const scale = Math.max(0.78, Math.min(1.55, width / 1088));
   const safeWidth=Math.min(layout.width,width-Math.max(layout.margin,Math.round(width*.06))*2);
   const preferredTitle=Math.round((story?48:(layout.portrait ? 67 : 62))*scale);
   const preferredSubtitle=Math.round((story?32:(layout.portrait ? 42 : 38))*scale);
-  const brandSize = Math.round((layout.portrait ? 29 : 27) * scale);
-  const citySize = Math.round(15 * scale);
+  const brandSize=brandLockup.brandSize;
+  const citySize=brandLockup.citySize;
   const textMode=posterStrategy?.textMode||"TEXT_MODE_EDITORIAL";
   const titleLines=posterStrategy?.titleLines||semanticLines(title,story?4:3,story?18:22);
   const subtitleLines=textMode==="TEXT_MODE_MINIMAL"?[]:(posterStrategy?.subtitleLines||semanticLines(subtitle,2,28));
   const type=fitTypography({titleLines,subtitleLines,safeWidth,safeHeight:Math.max(1,layout.textArea.bottom-layout.textArea.top-Math.round(height*.018)),preferredTitle,preferredSubtitle,minimumTitle:Math.round(24*scale),minimumSubtitle:Math.round(18*scale)});
   const titleSize=type.titleSize,subtitleSize=type.subtitleSize;
   const centerX = layout.x + layout.width / 2;
-  const logoCenterX=layout.logoArea?.left!==undefined?(layout.logoArea.left+layout.logoArea.right)/2:centerX;
+  const logoCenterX=brandLockup.centerX;
   const textTop = layout.textArea.top + Math.round((layout.textArea.bottom-layout.textArea.top) * 0.08);
   let textY = textTop + titleSize;
   const titleNodes = titleLines.map((line, index)=>
@@ -194,12 +201,9 @@ function buildOverlaySvg(width, height, layout, platform, headline, posterStrate
   ).join("");
   const headlineEnd = subtitleLines.length?textY+subtitleLines.length*subtitleSize*1.10:textY;
   const dividerY = Math.min(layout.textArea.bottom-Math.round(height*.008),headlineEnd+Math.round(height*.012));
-  const brandY = Math.min(height-layout.margin-Math.round(citySize*1.8),layout.logoArea.bottom+Math.round(brandSize*1.05));
+  const brandY=brandLockup.brandBaseline;
   const scrimTop = Math.max(0, layout.y - Math.round(height * 0.025));
   const scrimBottom = Math.min(height, layout.y + layout.height + Math.round(height * 0.025));
-  const contactFields=(layout.template&&layout.template.contactFields)||[];
-  const contactText=contactFields.map(key=>BRAND_CONTACTS[key]).filter(Boolean).join(" · ");
-  const contactY=Math.min(height-layout.margin,brandY+brandSize*1.38+citySize*1.55);
   return Buffer.from(`
     <svg width="${width}" height="${height}" viewBox="0 0 ${width} ${height}" xmlns="http://www.w3.org/2000/svg">
       <defs>
@@ -212,18 +216,16 @@ function buildOverlaySvg(width, height, layout, platform, headline, posterStrate
         <filter id="shadow"><feGaussianBlur stdDeviation="5"/></filter>
         <style>
           .brand,.city,.title,.subtitle { paint-order:stroke fill; stroke:#050505; stroke-opacity:.72; }
-          .brand { fill:${IVORY}; stroke-width:2px; }
+          .brand { fill:${GOLD}; stroke-width:2px; }
           .city { fill:${GOLD}; stroke-width:1px; }
           .title { fill:${IVORY}; stroke-width:3px; }
           .subtitle { fill:${PALE_GOLD}; stroke-width:2px; }
-          .contact { fill:${IVORY}; stroke-width:1px; }
         </style>
       </defs>
       <rect x="0" y="${scrimTop}" width="${width}" height="${scrimBottom-scrimTop}" fill="url(#scrim)"/>
       <line x1="${layout.x + layout.width*.38}" y1="${dividerY}" x2="${layout.x + layout.width*.62}" y2="${dividerY}" stroke="${GOLD}" stroke-width="1" stroke-opacity=".46"/>
       ${vectorText(BRAND_FONT, "LA SANTÉ DES ZÈBRES", logoCenterX, brandY, brandSize, "brand")}
-      ${vectorText(BRAND_FONT, "RAISMES", logoCenterX, brandY + brandSize*1.38, citySize, "city")}
-      ${vectorText(TEXT_FONT, contactText, logoCenterX, contactY, Math.max(13,Math.round(citySize*.82)), "contact")}
+      ${vectorText(TEXT_FONT, "RAISMES", logoCenterX, brandLockup.cityBaseline, citySize, "city")}
       ${titleNodes}${subtitleNodes}
     </svg>`);
 }
@@ -232,15 +234,16 @@ async function prepareLogoOverlay(logoBuffer){
   const cacheKey=crypto.createHash("sha256").update(logoBuffer).digest("hex");
   if(TRANSPARENT_LOGO_CACHE.has(cacheKey))return Buffer.from(TRANSPARENT_LOGO_CACHE.get(cacheKey));
   const source = sharp(logoBuffer, { failOn: "none" }).rotate().ensureAlpha();
-  const { data, info } = await source.raw().toBuffer({ resolveWithObject: true });
-  const px = Buffer.from(data);
-  /* Détourage conservateur par composante connexe : seuls les pixels quasi noirs accessibles
-     depuis un bord deviennent transparents. Les noirs internes fermés du zèbre restent intacts. */
-  const seen=new Uint8Array(info.width*info.height);const queue=[];const dark=(x,y)=>{const o=(y*info.width+x)*info.channels;return px[o+3]>0&&Math.max(px[o],px[o+1],px[o+2])<=55;};
-  const seed=(x,y)=>{const i=y*info.width+x;if(!seen[i]&&dark(x,y)){seen[i]=1;queue.push([x,y]);}};
-  for(let x=0;x<info.width;x++){seed(x,0);seed(x,info.height-1);}for(let y=0;y<info.height;y++){seed(0,y);seed(info.width-1,y);}
-  for(let q=0;q<queue.length;q++){const [x,y]=queue[q];const o=(y*info.width+x)*info.channels;px[o+3]=0;for(const [nx,ny] of [[x-1,y],[x+1,y],[x,y-1],[x,y+1]])if(nx>=0&&ny>=0&&nx<info.width&&ny<info.height)seed(nx,ny);}
-  const output=await sharp(px, { raw: info })
+  const info=await source.metadata();
+  if(!info.width||!info.height)throw new Error("Dimensions du logo officiel introuvables.");
+  /* Masque purement géométrique : l'ellipse suit le médaillon et le polygone conserve son
+     triangle supérieur. Aucune couleur du fichier source n'est inspectée ni modifiée. */
+  const mask=Buffer.from(`<svg width="${info.width}" height="${info.height}" viewBox="0 0 ${info.width} ${info.height}" xmlns="http://www.w3.org/2000/svg">
+    <ellipse cx="${info.width*.5}" cy="${info.height*.53}" rx="${info.width*.49}" ry="${info.height*.46}" fill="white"/>
+    <path d="M ${info.width*.27} 0 L ${info.width*.73} 0 L ${info.width*.82} ${info.height*.13} L ${info.width*.18} ${info.height*.13} Z" fill="white"/>
+  </svg>`);
+  const output=await source
+    .composite([{input:mask,blend:"dest-in"}])
     .trim({ background: { r:0, g:0, b:0, alpha:0 } })
     .png()
     .toBuffer();
@@ -278,10 +281,14 @@ async function composeBrandPoster({ imageBuffer, logoDataUrl, platform, headline
   const logoMeta = await sharp(cleanLogo).metadata();
   const logoFraction=posterStrategy?.logoScale==="discreet"?.12:posterStrategy?.logoScale==="standard"?.16:.21;
   const logoAreaWidth=(layout.logoArea?.right-layout.logoArea?.left)||layout.width;
-  const desiredLogoWidth = Math.round(logoAreaWidth * logoFraction/.21);
+  const desiredLogoWidth=story?targetStoryLogoWidth(width):Math.round(logoAreaWidth*logoFraction/.21);
+  const brandSize=Math.round((story?34:(layout.portrait?29:27))*scale);
+  const citySize=Math.round((story?20:15)*scale);
+  const logoBrandGap=Math.max(8,Math.round(height*.006));
+  const brandReserve=logoBrandGap+brandSize+Math.round(brandSize*.38)+citySize;
   const minimumBottomMargin = Math.max(Math.round(height*.035), 24);
   const logoZoneTop=layout.logoArea?.top??Math.round(dividerY + layout.height*.055);
-  const logoZoneBottom=layout.logoArea?.bottom??(height-minimumBottomMargin);
+  const logoZoneBottom=(layout.logoArea?.bottom??(height-minimumBottomMargin))-brandReserve;
   const availableHeight = Math.max(24, logoZoneBottom-logoZoneTop);
   const sourceRatio = (logoMeta.width||1)/(logoMeta.height||1);
   const logoWidth = Math.max(24, Math.min(desiredLogoWidth, Math.floor(availableHeight*sourceRatio)));
@@ -299,6 +306,12 @@ async function composeBrandPoster({ imageBuffer, logoDataUrl, platform, headline
   const resizedLogoMeta=await sharp(resizedLogo).metadata();
   const finalLogoWidth=resizedLogoMeta.width||logoWidth,finalLogoHeight=resizedLogoMeta.height||estimatedLogoHeight;
   if(await hasOpaqueLogoRectangle(resizedLogo))throw new Error("Rectangle opaque détecté autour du logo officiel.");
+  const brandCenterX=logoLeft+finalLogoWidth/2;
+  const brandBaseline=logoTop+finalLogoHeight+logoBrandGap+brandSize;
+  const cityBaseline=brandBaseline+brandSize*1.38;
+  const brandBottom=cityBaseline+Math.round(citySize*.18);
+  if(brandBottom>height-minimumBottomMargin)throw new Error("Lock-up de marque hors cadre.");
+  const brandLockup={centerX:brandCenterX,brandSize,citySize,brandBaseline,cityBaseline};
   const normalizedText=value=>String(value||"").trim().replace(/\s+/g," ");
   const titleWidths=titleLines.map(line=>measureVectorText(DISPLAY_FONT,line,titleSize));
   const subtitleWidths=subtitleLines.map(line=>measureVectorText(TEXT_FONT,line,subtitleSize));
@@ -327,6 +340,8 @@ async function composeBrandPoster({ imageBuffer, logoDataUrl, platform, headline
     zonesDisjoint:layout.textArea.bottom<=layout.logoArea.top,
     semanticLinesValid,
     logoBounds:{left:logoLeft,top:logoTop,width:finalLogoWidth,height:finalLogoHeight,right:logoLeft+finalLogoWidth,bottom:logoTop+finalLogoHeight},
+    logoWidthRatio:finalLogoWidth/width,
+    brandLockup:{lines:["LA SANTÉ DES ZÈBRES","RAISMES"],contactLines:[],name:"LA SANTÉ DES ZÈBRES",city:"RAISMES",brandSize,citySize,top:logoTop+finalLogoHeight+logoBrandGap,bottom:brandBottom,centerX:brandCenterX},
     logoWithinCanvas:logoLeft>=0&&logoTop>=0&&logoLeft+finalLogoWidth<=width&&logoTop+finalLogoHeight<=height-minimumBottomMargin,
     logoRectangleOpaque:false,
     completeText:[title,subtitle].filter(Boolean).join(" | "),
@@ -334,7 +349,7 @@ async function composeBrandPoster({ imageBuffer, logoDataUrl, platform, headline
   if(!compositionManifest.titleExact||!compositionManifest.subtitleExact)throw new Error("Texte validé tronqué ou remplacé pendant la composition.");
   if(!compositionManifest.hierarchyValid)throw new Error("Hiérarchie typographique invalide : le sous-titre domine le titre.");
   if(!compositionManifest.semanticLinesValid)throw new Error("Coupure sémantique invalide dans le bloc typographique.");
-  const overlaySvg = buildOverlaySvg(width, height, layout, platform, headline, posterStrategy);
+  const overlaySvg = buildOverlaySvg(width, height, layout, platform, headline, posterStrategy,brandLockup);
   const output=await image
     .composite([
       { input: overlaySvg, left: 0, top: 0 },
@@ -346,4 +361,4 @@ async function composeBrandPoster({ imageBuffer, logoDataUrl, platform, headline
   return output;
 }
 
-module.exports = { BRAND_TOKENS, COMPOSITOR_VERSION, FONT_PATHS, composeBrandPoster, dataUrlToBuffer, escapeXml, wrapWords, normalizedZone, prepareLogoOverlay, hasOpaqueLogoRectangle,vectorText, measureVectorText,fitFontSize,fitTypography,validateSemanticLines,layoutFor, BRAND_CONTACTS };
+module.exports = { BRAND_TOKENS, COMPOSITOR_VERSION, FONT_PATHS, composeBrandPoster, dataUrlToBuffer, escapeXml, wrapWords, normalizedZone, prepareLogoOverlay, hasOpaqueLogoRectangle,vectorText, measureVectorText,fitFontSize,fitTypography,validateSemanticLines,targetStoryLogoWidth,layoutFor, BRAND_CONTACTS };

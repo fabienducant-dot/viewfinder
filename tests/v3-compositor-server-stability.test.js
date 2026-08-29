@@ -45,7 +45,7 @@ test("le healthcheck gratuit prouve le bundle sans lire de job ni générer d'im
   assert.equal(response.statusCode,200);
   assert.equal(body.ok,true);
   assert.equal(body.recomposeVersion,"2.1.0-font-bundle-diagnostic");
-  assert.equal(body.compositorVersion,"2.1.0-static-font-bundle");
+  assert.equal(body.compositorVersion,"2.2.0-medallion-lockup");
   assert.deepEqual(body.fonts,{cormorant600:true,manrope500:true,manrope600:true});
   assert.equal(body[["cin","zel"].join("")],false);
   assert.equal(body.imageGenerationCalls,0);
@@ -148,4 +148,38 @@ test("Story compose UNE HISTOIRE À PARTAGER sans troncature, collision ni fond 
   assert.ok(manifest.logoBounds.left>=0&&manifest.logoBounds.right<=manifest.width);
   assert.ok(manifest.logoBounds.top>=manifest.textSafeArea.bottom);
   assert.ok(manifest.logoBounds.bottom<manifest.height);
+});
+
+test("Story conserve le logo noir et or sous masque géométrique et dimensionne le lock-up à un tiers",async()=>{
+  const {composeBrandPoster,prepareLogoOverlay,targetStoryLogoWidth}=require("../netlify/functions/_shared/brand-compositor");
+  const logoBuffer=fs.readFileSync(path.join(root,"icons/icon-512.png"));
+  const clean=await prepareLogoOverlay(logoBuffer);
+  const [source,masked]=await Promise.all([sharp(logoBuffer).raw().toBuffer({resolveWithObject:true}),sharp(clean).ensureAlpha().raw().toBuffer({resolveWithObject:true})]);
+  assert.equal(masked.info.width/source.info.width,masked.info.height/source.info.height);
+  const pixel=(data,info,x,y)=>Array.from(data.subarray((y*info.width+x)*info.channels,(y*info.width+x)*info.channels+info.channels));
+  for(const [x,y] of [[256,16],[256,256],[128,256]])assert.deepEqual(pixel(masked.data,masked.info,x,y).slice(0,3),pixel(source.data,source.info,x,y).slice(0,3));
+  assert.equal(pixel(masked.data,masked.info,0,0)[3],0);
+  assert.ok(pixel(masked.data,masked.info,256,16)[3]>245);
+  assert.equal(targetStoryLogoWidth(1008),333);
+  const image=await sharp({create:{width:1008,height:1792,channels:4,background:"#514a43"}}).png().toBuffer();
+  const output=await composeBrandPoster({imageBuffer:image,logoDataUrl:`data:image/png;base64,${logoBuffer.toString("base64")}`,platform:"Story",posterStrategy:{textMode:"TEXT_MODE_EDITORIAL",title:"VERS PLUS DE LÉGÈRETÉ",subtitle:"",titleLines:["VERS PLUS DE","LÉGÈRETÉ"],subtitleLines:[],textSafeArea:{top:.56,bottom:.68,left:.07,right:.93},logoSafeArea:{top:.70,bottom:.96,left:.18,right:.82},protectedSceneAreas:["visage","mains actives","dos"]}});
+  const manifest=output.compositionManifest;
+  assert.equal(manifest.logoBounds.width,356);
+  assert.ok(manifest.logoWidthRatio>=.31&&manifest.logoWidthRatio<=.35);
+  assert.deepEqual(manifest.brandLockup.lines,["LA SANTÉ DES ZÈBRES","RAISMES"]);
+  assert.deepEqual(manifest.brandLockup.contactLines,[]);
+  assert.ok(manifest.brandLockup.brandSize>=34&&manifest.brandLockup.citySize>=20);
+  assert.ok(manifest.brandLockup.top>manifest.logoBounds.bottom);
+  assert.ok(manifest.brandLockup.bottom<manifest.height);
+  assert.equal(manifest.zonesDisjoint,true);
+  assert.equal(manifest.logoRectangleOpaque,false);
+});
+
+test("le titre automatique connu reste lié au sujet et exclut les formules passe-partout",()=>{
+  const {planV3}=require("../netlify/functions/_shared/v3-pipeline");
+  const plan=planV3({service:"Tous sujets",platform:"Story",subject:"Douleurs dorsales, blocage, sensations de lourdeur."});
+  const text=`${plan.posterStrategy.title} ${plan.posterStrategy.subtitle}`;
+  for(const generic of ["UNE HISTOIRE À PARTAGER","L’UNIVERS SDZ","UN MOMENT POUR VOUS","PRENEZ SOIN DE VOUS","RETROUVEZ VOTRE ÉQUILIBRE","BESOIN DE SOUFFLER"])assert.doesNotMatch(text,new RegExp(generic,"i"));
+  assert.match(`${plan.subjectBrief.exactUserRequest} ${plan.posterStrategy.coreTheme}`,/douleurs dorsales|blocage|lourdeur/i);
+  assert.ok(plan.posterStrategy.titleLines.length>=1&&plan.posterStrategy.titleLines.length<=4);
 });
