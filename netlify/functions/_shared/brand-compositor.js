@@ -9,7 +9,7 @@ const BRAND_TOKENS=require("./v3-brand-tokens");
 const {semanticLines}=require("./v3-creative-strategy");
 
 const GOLD=BRAND_TOKENS.brandGold, PALE_GOLD=BRAND_TOKENS.brandPaleGold, IVORY=BRAND_TOKENS.brandIvory;
-const COMPOSITOR_VERSION="2.2.0-medallion-lockup";
+const COMPOSITOR_VERSION="2.2.1-complete-emblem-lockup";
 const BRAND_CONTACTS = Object.freeze({
   domain:"la-sante-des-zebres.com", phone:"06.84.40.69.54",
   address:"11 cour Dupas, 59590 Raismes", email:"fabien.ducant@gmail.com",
@@ -146,7 +146,10 @@ function layoutFor(width, height, platform, requestedZone, hasHeadline, selected
     let y=textSafe?Math.max(margin,Math.round(height*textSafe.top)):Math.max(margin,Math.round(height*spec.y));
     const boxWidth=textSafe?Math.min(Math.round(width*(textSafe.right-textSafe.left)),width-x-margin):Math.min(Math.round(width*spec.width),width-x-margin);
     let textBottom=textSafe?Math.round(height*textSafe.bottom):Math.min(height-margin,y+Math.round(height*(hasHeadline?.18:.04)));
-    if(normalized==="Story"&&!textSafe){y=Math.round(height*.60);textBottom=Math.round(height*.70);}
+    if(normalized==="Story"){
+      if(!textSafe)y=Math.round(height*.60);
+      textBottom=Math.min(textBottom,Math.round(height*.70));
+    }
     const logoArea=logoSafe?{left:Math.round(width*logoSafe.left),right:Math.round(width*logoSafe.right),top:Math.round(height*logoSafe.top),bottom:Math.round(height*logoSafe.bottom)}:{left:x,right:x+boxWidth,top:textBottom,bottom:Math.min(height-margin,textBottom+Math.round(height*(height>width?.12:.18)))};
     if(normalized==="Story"){
       logoArea.left=Math.round(width*.18);logoArea.right=Math.round(width*.82);
@@ -174,7 +177,7 @@ function layoutFor(width, height, platform, requestedZone, hasHeadline, selected
   return { x, y, width: boxW, height: boxH, margin, portrait, landscape };
 }
 
-function buildOverlaySvg(width, height, layout, platform, headline, posterStrategy, brandLockup){
+function buildOverlaySvg(width, height, layout, platform, headline, posterStrategy,brandLockup){
   const { title, subtitle } = headlineParts(headline);
   const story=normalizePlatform(platform)==="Story";
   const scale = Math.max(0.78, Math.min(1.55, width / 1088));
@@ -236,11 +239,12 @@ async function prepareLogoOverlay(logoBuffer){
   const source = sharp(logoBuffer, { failOn: "none" }).rotate().ensureAlpha();
   const info=await source.metadata();
   if(!info.width||!info.height)throw new Error("Dimensions du logo officiel introuvables.");
-  /* Masque purement géométrique : l'ellipse suit le médaillon et le polygone conserve son
-     triangle supérieur. Aucune couleur du fichier source n'est inspectée ni modifiée. */
+  /* Silhouette géométrique complète, indépendante des couleurs : médaillon, triangle
+     supérieur et volute dorée qui s'échappe vers le bas/droite. */
   const mask=Buffer.from(`<svg width="${info.width}" height="${info.height}" viewBox="0 0 ${info.width} ${info.height}" xmlns="http://www.w3.org/2000/svg">
     <ellipse cx="${info.width*.5}" cy="${info.height*.53}" rx="${info.width*.49}" ry="${info.height*.46}" fill="white"/>
     <path d="M ${info.width*.27} 0 L ${info.width*.73} 0 L ${info.width*.82} ${info.height*.13} L ${info.width*.18} ${info.height*.13} Z" fill="white"/>
+    <path d="M ${info.width*.66} ${info.height*.73} C ${info.width*.79} ${info.height*.72}, ${info.width*.92} ${info.height*.77}, ${info.width*.97} ${info.height*.86} C ${info.width*.91} ${info.height*.88}, ${info.width*.87} ${info.height*.94}, ${info.width*.84} ${info.height*.995} C ${info.width*.76} ${info.height*.96}, ${info.width*.68} ${info.height*.91}, ${info.width*.60} ${info.height*.83} Z" fill="white"/>
   </svg>`);
   const output=await source
     .composite([{input:mask,blend:"dest-in"}])
@@ -282,10 +286,10 @@ async function composeBrandPoster({ imageBuffer, logoDataUrl, platform, headline
   const logoFraction=posterStrategy?.logoScale==="discreet"?.12:posterStrategy?.logoScale==="standard"?.16:.21;
   const logoAreaWidth=(layout.logoArea?.right-layout.logoArea?.left)||layout.width;
   const desiredLogoWidth=story?targetStoryLogoWidth(width):Math.round(logoAreaWidth*logoFraction/.21);
-  const brandSize=Math.round((story?34:(layout.portrait?29:27))*scale);
-  const citySize=Math.round((story?20:15)*scale);
+  const brandSize=Math.round((story?50:(layout.portrait?29:27))*scale);
+  const citySize=Math.round((story?30:15)*scale);
   const logoBrandGap=Math.max(8,Math.round(height*.006));
-  const brandReserve=logoBrandGap+brandSize+Math.round(brandSize*.38)+citySize;
+  const brandReserve=logoBrandGap+brandSize+Math.round(brandSize*.28)+citySize;
   const minimumBottomMargin = Math.max(Math.round(height*.035), 24);
   const logoZoneTop=layout.logoArea?.top??Math.round(dividerY + layout.height*.055);
   const logoZoneBottom=(layout.logoArea?.bottom??(height-minimumBottomMargin))-brandReserve;
@@ -308,7 +312,7 @@ async function composeBrandPoster({ imageBuffer, logoDataUrl, platform, headline
   if(await hasOpaqueLogoRectangle(resizedLogo))throw new Error("Rectangle opaque détecté autour du logo officiel.");
   const brandCenterX=logoLeft+finalLogoWidth/2;
   const brandBaseline=logoTop+finalLogoHeight+logoBrandGap+brandSize;
-  const cityBaseline=brandBaseline+brandSize*1.38;
+  const cityBaseline=brandBaseline+brandSize*1.28;
   const brandBottom=cityBaseline+Math.round(citySize*.18);
   if(brandBottom>height-minimumBottomMargin)throw new Error("Lock-up de marque hors cadre.");
   const brandLockup={centerX:brandCenterX,brandSize,citySize,brandBaseline,cityBaseline};

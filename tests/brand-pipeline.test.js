@@ -82,18 +82,18 @@ test("les textes de marque sont rendus en tracés vectoriels, accents compris", 
   assert.doesNotMatch(fs.readFileSync(path.join(root, "netlify/functions/_shared/brand-compositor.js"), "utf8"), /<text /);
 });
 
-test("le masque géométrique conserve les noirs du médaillon et libère ses coins", async () => {
+test("le masque conserve médaillon, triangle et volute sans rectangle", async () => {
   const opaqueLogo = await sharp({
     create: { width:120, height:120, channels:4, background:{ r:0, g:0, b:0, alpha:1 } },
-  }).composite([{ input:Buffer.from('<svg width="120" height="120"><circle cx="60" cy="60" r="34" fill="#D9AD3B"/></svg>') }]).png().toBuffer();
+  }).composite([{ input:Buffer.from('<svg width="120" height="120"><circle cx="60" cy="60" r="34" fill="#D9AD3B"/><path d="M78 88 C96 86 111 94 116 103 C108 106 104 113 101 119 C91 114 82 104 72 98 Z" fill="#D9AD3B"/></svg>') }]).png().toBuffer();
   const clean = await prepareLogoOverlay(opaqueLogo);
   const { data, info } = await sharp(clean).ensureAlpha().raw().toBuffer({ resolveWithObject:true });
-  const alpha=(x,y)=>data[(y*info.width+x)*info.channels+3];
-  const rgb=(x,y)=>Array.from(data.subarray((y*info.width+x)*info.channels,(y*info.width+x)*info.channels+3));
-  assert.equal(alpha(0,0),0);
-  assert.ok(alpha(Math.floor(info.width/2),20)>245);
-  assert.deepEqual(rgb(Math.floor(info.width/2),20),[0,0,0]);
-  assert.ok(alpha(Math.floor(info.width/2),1)>245);
+  const pixel=(x,y)=>Array.from(data.subarray((y*info.width+x)*info.channels,(y*info.width+x)*info.channels+4));
+  assert.equal(pixel(0,0)[3],0);
+  assert.deepEqual(pixel(60,20).slice(0,3),[0,0,0]);
+  assert.ok(pixel(60,1)[3]>245);
+  assert.ok(pixel(108,103)[3]>245);
+  assert.ok(pixel(108,103)[0]>150&&pixel(108,103)[1]>80);
 });
 
 test("le contrôle final fait confiance au logo exact composé par le serveur et bloque encore l'OCR", () => {
