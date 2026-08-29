@@ -5183,6 +5183,9 @@ async function applyHeadlineToItem(item){
 
 const RECOVERABLE_IMAGE_JOB_KEY="vf-recoverable-image-jobs-v1";
 function readRecoverableImageJobs(){try{const value=JSON.parse(localStorage.getItem(RECOVERABLE_IMAGE_JOB_KEY)||"[]");return Array.isArray(value)?value:[];}catch(error){return [];}}
+function forgetRecoverableImageJob(jobId){
+  try{localStorage.setItem(RECOVERABLE_IMAGE_JOB_KEY,JSON.stringify(readRecoverableImageJobs().filter(item=>item.jobId!==jobId)));}catch(error){}
+}
 async function readLatestRecoverableImageJobFromServer(){
   const response=await fetch("/.netlify/functions/recompose-image-job?latest=1",{headers:syncHeaders()});
   const data=await fetchJsonOrThrowRaw(response,"recherche du dernier travail image");
@@ -5215,7 +5218,7 @@ function analysisFromServer(flow){
 }
 async function recoverAndRecomposeImageJob(record,onStatus){
   if(!record?.jobId)throw new Error("Dossier de récupération incomplet.");
-  onStatus&&onStatus("Vérification de l'image brute conservée...");
+  onStatus&&onStatus("Recherche de l'image originale…");
   let sourceResult=null;
   const statusResponse=await fetch(`/.netlify/functions/get-image-job?jobId=${encodeURIComponent(record.jobId)}`);
   const status=await fetchJsonOrThrowRaw(statusResponse,"récupération du travail");
@@ -5227,14 +5230,15 @@ async function recoverAndRecomposeImageJob(record,onStatus){
   const sourcePlan=record.v3Plan||sourceResult.v3Plan;
   if(!sourcePlan)throw new Error("Le plan V3 du travail source n'est pas disponible.");
   const sourceInputs=record.inputs||{platform:record.platform||sourcePlan.artDirection?.platform,prestation:sourcePlan.contract?.name||"Tous sujets",mission:"Récupération d'une image existante"};
-  onStatus&&onStatus("Recomposition gratuite depuis la photographie brute...");
+  onStatus&&onStatus("Photographie retrouvée…");
   const poster=sourcePlan.posterStrategy||{};
+  onStatus&&onStatus("Recomposition gratuite…");
   const response=await fetch("/.netlify/functions/recompose-image-job",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({
     sourceJobId:record.jobId,platform:sourceInputs.platform==="Article Blog Wix"?"Blog":sourceInputs.platform,
     headline:[poster.title,poster.subtitle].filter(Boolean).join(" | "),zoneText:String(record.brief?.zoneTexte||sourcePlan.legacyProjection?.zoneTexte||"")
   })});
   const data=await fetchJsonOrThrowRaw(response,"recomposition gratuite");
-  if(!response.ok||data.error)throw new Error(data.error||"Recomposition impossible.");
+  if(!response.ok||data.error){const error=new Error(data.error||"Recomposition impossible.");error.code=data.errorCode||null;throw error;}
   const flow={phase:"completed",ok:true,inputs:sourceInputs,brief:record.brief||sourcePlan.legacyProjection||{},content:record.content||null,
     v3Plan:sourcePlan,v3Finalization:{analysis:sourceFinalization.analysis,layout:data.layout,quality:data.quality},
     dataUrl:await fetchImageAsDataUrl(data.resultUrl),usedReference:false,referenceFallbackReason:null,serverBrandCompositionUsed:true,
@@ -5244,7 +5248,9 @@ async function recoverAndRecomposeImageJob(record,onStatus){
   else if(!record.serverDiscovered)try{flow.content=await generateContentFromBrief(flow.brief,flow.analysis,flow.inputs.platform,flow.inputs.mission);}
   catch(error){flow.textError=`Texte non récupéré : ${String(error.message||error)}`;}
   else flow.textError="Texte local indisponible ; aucune nouvelle opération payante lancée.";
-  rememberRecoverableImageJob(flow,data.jobId,"completed");
+  flow.recoverySourceJobId=data.recoverySourceJobId||record.recoverySourceJobId||record.jobId;
+  rememberRecoverableImageJob(flow,flow.recoverySourceJobId,"completed");
+  onStatus&&onStatus("Terminé.");
   return flow;
 }
 
@@ -7667,11 +7673,21 @@ function buildPostTab(){
       recoverRawBtn.disabled=false;
     });
     recoverServerBtn.addEventListener("click",async()=>{
-      const record=readRecoverableImageJobs()[0]||serverRecoverableRecord;
+      const localRecord=readRecoverableImageJobs()[0]||null;
+      let record=localRecord||serverRecoverableRecord;
       if(!record){imgApiStatus.textContent="Aucune photographie brute récupérable localement ou sur le serveur.";return;}
       recoverServerBtn.disabled=true;
       try{
-        const flow=await recoverAndRecomposeImageJob(record,label=>{imgApiStatus.textContent=label;});
+        let flow;
+        try{flow=await recoverAndRecomposeImageJob(record,label=>{imgApiStatus.textContent=label;});}
+        catch(localError){
+          if(!localRecord)throw localError;
+          forgetRecoverableImageJob(localRecord.jobId);
+          imgApiStatus.textContent="Recherche de l'image originale sur le serveur…";
+          serverRecoverableRecord=await readLatestRecoverableImageJobFromServer();
+          if(!serverRecoverableRecord)throw new Error("La photographie originale n'est plus disponible sur le serveur. Aucune nouvelle génération n'a été lancée.");
+          flow=await recoverAndRecomposeImageJob(serverRecoverableRecord,label=>{imgApiStatus.textContent=label;});
+        }
         state.lastCreativeFlow=flow;
         const finalized=await finalizeGeneratedImage(flow);
         storeFinalizedCreativeFlow(flow,finalized);

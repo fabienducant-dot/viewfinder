@@ -71,8 +71,14 @@ function isRecoverableOriginal(job){
 }
 
 async function findLatestRecoverableJob(jobs){
-  const listing=await jobs.list({prefix:"jobs/"});
-  const blobs=Array.isArray(listing)?listing:(listing?.blobs||[]);
+  const listing=jobs.list({prefix:"jobs/",paginate:true});
+  const blobs=[];
+  if(listing&&typeof listing[Symbol.asyncIterator]==="function"){
+    for await(const page of listing)blobs.push(...(page?.blobs||[]));
+  }else{
+    const page=await listing;
+    blobs.push(...(Array.isArray(page)?page:(page?.blobs||[])));
+  }
   const rootKeys=blobs.map(item=>typeof item==="string"?item:item?.key).filter(key=>/^jobs\/[^/]+$/.test(String(key||"")));
   const candidates=[];
   for(const key of rootKeys){
@@ -87,7 +93,12 @@ async function findLatestRecoverableJob(jobs){
   }
   const paid=candidates.filter(job=>Number(job.imageGenerationCallCount)>=1);
   const eligible=paid.length?paid:candidates;
-  return eligible.sort((a,b)=>Number(b.createdAt||0)-Number(a.createdAt||0))[0]||null;
+  eligible.sort((a,b)=>Number(b.createdAt||0)-Number(a.createdAt||0));
+  if(typeof jobs.getMetadata!=="function")return eligible[0]||null;
+  for(const job of eligible){
+    if(await jobs.getMetadata(job.rawResultKey))return job;
+  }
+  return null;
 }
 
 async function latestRecoverableJob(jobs=store("viewfinder-image-jobs")){
@@ -108,6 +119,25 @@ async function rawBuffer(record){
   return Buffer.from(await res.arrayBuffer());
 }
 
+function recoveryFailure(statusCode,errorCode,error){
+  return json(statusCode,{ok:false,recoverable:false,errorCode,error,imageGenerationCalls:0});
+}
+
+async function resolveOriginalSource(jobs,sourceJobId){
+  let jobId=sourceJobId;
+  const visited=new Set();
+  for(let depth=0;depth<8;depth++){
+    if(visited.has(jobId))throw new Error("Chaîne de recomposition cyclique.");
+    visited.add(jobId);
+    const raw=await jobs.get(`jobs/${jobId}`);
+    if(!raw)return {jobId,source:null};
+    const source=typeof raw==="string"?JSON.parse(raw):raw;
+    if(!source.recomposedFrom)return {jobId,source};
+    jobId=source.recomposedFrom;
+  }
+  throw new Error("Chaîne de recomposition trop profonde.");
+}
+
 exports.handler=async event=>{
   if(event.httpMethod==="GET"&&event.queryStringParameters?.health==="1")return healthcheck();
   if(event.httpMethod==="GET"&&event.queryStringParameters?.latest==="1")return latestRecoverableJob();
@@ -122,10 +152,12 @@ exports.handler=async event=>{
     const body=JSON.parse(event.body||"{}");
     if(!body.sourceJobId||!body.platform)return json(400,{error:"sourceJobId et platform requis",imageGenerationCalls:0});
     const jobs=store("viewfinder-image-jobs"),brand=store("viewfinder-data");
-    const statusRaw=await jobs.get(`jobs/${body.sourceJobId}`);
-    if(!statusRaw)return json(404,{error:"Job source introuvable",imageGenerationCalls:0});
-    const source=JSON.parse(statusRaw);
-    if(!source.rawResultKey||!source.v3Plan||!source.v3Finalization?.analysis)return json(409,{error:"Raw-result ou analyse V3 indisponible",imageGenerationCalls:0});
+    const resolved=await resolveOriginalSource(jobs,body.sourceJobId);
+    if(!resolved.source)return recoveryFailure(404,"SOURCE_JOB_MISSING","Le travail image original est introuvable.");
+    const source=resolved.source,recoverySourceJobId=resolved.jobId;
+    if(!source.rawResultKey)return recoveryFailure(409,"RAW_SOURCE_MISSING","La photographie originale n'est plus disponible sur le serveur. Aucune nouvelle génération n'a été lancée.");
+    if(!source.v3Plan)return recoveryFailure(409,"V3_PLAN_MISSING","Le plan V3 original n'est plus disponible.");
+    if(!source.v3Finalization?.analysis)return recoveryFailure(409,"V3_ANALYSIS_MISSING","L'analyse V3 originale n'est plus disponible.");
     const matrix=compatibilityMatrix(source.v3Finalization.analysis);
     const platform=normalizePlatform(body.platform);
     const compatibility=matrix[platform];
@@ -133,8 +165,11 @@ exports.handler=async event=>{
       return json(409,{error:compatibility?.reason||"Format incompatible",platformAdaptationPossible:false,estimatedAdditionalPhotoEur:body.estimatedAdditionalPhotoEur||null,requiresExplicitConfirmation:true,imageGenerationCalls:0});
     }
     const [rawRecord,logoRecord]=await Promise.all([jobs.get(source.rawResultKey),brand.get("vf-logo-asset")]);
-    if(!rawRecord||!logoRecord)throw new Error("Photographie brute ou logo officiel absent.");
-    const image=await rawBuffer(JSON.parse(rawRecord));
+    if(!rawRecord)return recoveryFailure(410,"RAW_SOURCE_MISSING","La photographie originale n'est plus disponible sur le serveur. Aucune nouvelle génération n'a été lancée.");
+    if(!logoRecord)return recoveryFailure(503,"BRAND_ASSET_MISSING","Le logo officiel est temporairement indisponible.");
+    let image;
+    try{image=await rawBuffer(typeof rawRecord==="string"?JSON.parse(rawRecord):rawRecord);}
+    catch(error){return recoveryFailure(410,"RAW_SOURCE_MISSING","La photographie originale n'est plus disponible sur le serveur. Aucune nouvelle génération n'a été lancée.");}
     const logo=JSON.parse(logoRecord);
     const analysis=analyzeActualImage(source.v3Finalization.analysis);
     const layout=chooseLayout({platform,contract:source.v3Plan.contract,analysis});
@@ -143,11 +178,11 @@ exports.handler=async event=>{
     const compositionManifest=final.compositionManifest||null;
     const quality=assessQuality({contract:source.v3Plan.contract,analysis,composition:{imageExists:true,logoIntegrity:compositionManifest?.logoWithinCanvas!==false,marginsValid:compositionManifest?.marginsValid!==false,textWithinCanvas:compositionManifest?.textWithinCanvas!==false&&compositionManifest?.titleExact!==false&&compositionManifest?.subtitleExact!==false,protectedCollision:compositionManifest?.zonesDisjoint===false,logoRectangleOpaque:compositionManifest?.logoRectangleOpaque===true,contrastValid:true,gazeHierarchyValid:compositionManifest?.hierarchyValid!==false,thumbnailImpact:true}});
     const derivedJobId=crypto.randomUUID(),resultKey=`jobs/${derivedJobId}/result`;
-    await jobs.set(resultKey,JSON.stringify({b64:final.toString("base64"),url:null,brandComposited:true,recomposedFrom:body.sourceJobId,compositionManifest}));
-    await jobs.set(`jobs/${derivedJobId}`,JSON.stringify({jobId:derivedJobId,status:"completed",createdAt:Date.now(),updatedAt:Date.now(),resultKey,rawResultKey:source.rawResultKey,v3Plan:source.v3Plan,v3Finalization:{analysis,layout,quality,compositionManifest},recomposedFrom:body.sourceJobId,costAudit:buildCostAudit({mode:"recompose",visionUsage:false,imageCalls:0})}));
+    await jobs.set(resultKey,JSON.stringify({b64:final.toString("base64"),url:null,brandComposited:true,recomposedFrom:recoverySourceJobId,compositionManifest}));
+    await jobs.set(`jobs/${derivedJobId}`,JSON.stringify({jobId:derivedJobId,status:"completed",createdAt:Date.now(),updatedAt:Date.now(),resultKey,rawResultKey:source.rawResultKey,v3Plan:source.v3Plan,v3Finalization:{analysis,layout,quality,compositionManifest},recomposedFrom:recoverySourceJobId,costAudit:buildCostAudit({mode:"recompose",visionUsage:false,imageCalls:0})}));
     const versions=[...(source.derivedVersions||[]),derivedJobId];
-    await jobs.set(`jobs/${body.sourceJobId}`,JSON.stringify({...source,derivedVersions:versions,updatedAt:Date.now()}));
-    return json(200,{ok:true,jobId:derivedJobId,resultUrl:`/.netlify/functions/get-image-result?jobId=${derivedJobId}`,platform,layout,quality,compositionManifest,costAudit:buildCostAudit({mode:"recompose",visionUsage:false,imageCalls:0}),imageGenerationCalls:0});
+    await jobs.set(`jobs/${recoverySourceJobId}`,JSON.stringify({...source,derivedVersions:versions,updatedAt:Date.now()}));
+    return json(200,{ok:true,jobId:derivedJobId,recoverySourceJobId,resultUrl:`/.netlify/functions/get-image-result?jobId=${derivedJobId}`,platform,layout,quality,compositionManifest,costAudit:buildCostAudit({mode:"recompose",visionUsage:false,imageCalls:0}),imageGenerationCalls:0});
   }catch(error){
     return json(500,{error:String(error.message||error),recomposeVersion:RECOMPOSE_VERSION,imageGenerationCalls:0});
   }
@@ -160,3 +195,4 @@ exports.RECOMPOSE_VERSION=RECOMPOSE_VERSION;
 exports.isRecoverableOriginal=isRecoverableOriginal;
 exports.findLatestRecoverableJob=findLatestRecoverableJob;
 exports.latestRecoverableJob=latestRecoverableJob;
+exports.resolveOriginalSource=resolveOriginalSource;

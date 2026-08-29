@@ -57,13 +57,14 @@ test("latest ignore sous-clés, échecs, dérivés et jobs incomplets puis chois
   const records={
     "jobs/old":valid("old",100),
     "jobs/new":valid("new",300),
+    "jobs/dead":valid("dead",400),
     "jobs/derived":valid("derived",500,{recomposedFrom:"old",imageGenerationCallCount:0}),
     "jobs/failed":{...valid("failed",600),status:"failed"},
     "jobs/no-raw":{...valid("no-raw",700),rawResultKey:null},
     "jobs/new/result":JSON.stringify({b64:"ne doit jamais être lu"}),
   };
   const readKeys=[];
-  const jobs={list:async options=>{assert.deepEqual(options,{prefix:"jobs/"});return {blobs:Object.keys(records).map(key=>({key}))};},get:async key=>{readKeys.push(key);return typeof records[key]==="string"?records[key]:JSON.stringify(records[key]);}};
+  const jobs={list:options=>{assert.deepEqual(options,{prefix:"jobs/",paginate:true});return (async function*(){const keys=Object.keys(records);yield {blobs:keys.slice(0,3).map(key=>({key}))};yield {blobs:keys.slice(3).map(key=>({key}))};})();},get:async key=>{readKeys.push(key);return typeof records[key]==="string"?records[key]:JSON.stringify(records[key]);},getMetadata:async key=>key!=="jobs/dead/raw-result"?{etag:"ok",metadata:{}}:null};
   assert.equal((await findLatestRecoverableJob(jobs)).jobId,"new");
   assert.equal(readKeys.includes("jobs/new/result"),false);
   const response=await latestRecoverableJob(jobs),body=JSON.parse(response.body);
@@ -77,11 +78,41 @@ test("latest retourne found false gratuitement quand aucun original n'est récup
   assert.deepEqual(JSON.parse(response.body),{ok:true,found:false,imageGenerationCalls:0});
 });
 
-test("l'interface affiche et utilise la récupération serveur quand le stockage local est vide",()=>{
+test("get-image-job accepte completed ancien, expire queued, temporise processing et conserve failed",async()=>{
+  const {createHandler,JOB_MAX_AGE_MS,PROCESSING_TIMEOUT_MS}=require("../netlify/functions/get-image-job");
+  const now=Date.now(),records=new Map(),writes=[];
+  const handler=createHandler(()=>({get:async key=>records.get(key)||null,set:async(key,value)=>{writes.push([key,JSON.parse(value)]);}}));
+  const request=jobId=>handler({httpMethod:"GET",queryStringParameters:{jobId}});
+  const put=(jobId,job)=>records.set(`jobs/${jobId}`,JSON.stringify({jobId,createdAt:now,...job}));
+  put("completed-25h",{createdAt:now-JOB_MAX_AGE_MS-3600000,status:"completed",resultKey:"jobs/completed-25h/result",rawResultKey:"jobs/completed-25h/raw",v3Plan:{},v3Finalization:{analysis:{}}});
+  put("completed-30d",{createdAt:now-30*24*3600000,status:"completed",resultKey:"jobs/completed-30d/result"});
+  put("queued-old",{createdAt:now-JOB_MAX_AGE_MS-1,status:"queued"});
+  put("processing-old",{createdAt:now-PROCESSING_TIMEOUT_MS-1,updatedAt:now-PROCESSING_TIMEOUT_MS-1,status:"processing"});
+  put("failed",{status:"failed",error:{message:"source"},costAudit:{total:1},imageGenerationCallCount:1});
+  for(const id of ["completed-25h","completed-30d"]){const response=await request(id),body=JSON.parse(response.body);assert.equal(response.statusCode,200,id);assert.equal(body.status,"completed",id);}
+  assert.equal((await request("queued-old")).statusCode,404);
+  const processing=JSON.parse((await request("processing-old")).body);assert.equal(processing.status,"failed");assert.equal(writes.length,1);
+  const failed=JSON.parse((await request("failed")).body);assert.equal(failed.status,"failed");assert.deepEqual(failed.costAudit,{total:1});
+});
+
+test("une chaîne dérivée revient toujours à la source OpenAI originale",async()=>{
+  const {resolveOriginalSource}=require("../netlify/functions/recompose-image-job");
+  const records={"jobs/derived-2":{jobId:"derived-2",recomposedFrom:"derived-1"},"jobs/derived-1":{jobId:"derived-1",recomposedFrom:"original"},"jobs/original":{jobId:"original",status:"completed",imageGenerationCallCount:1}};
+  const resolved=await resolveOriginalSource({get:async key=>records[key]?JSON.stringify(records[key]):null},"derived-2");
+  assert.equal(resolved.jobId,"original");
+  assert.equal(resolved.source.imageGenerationCallCount,1);
+});
+
+test("l'interface affiche le serveur et effectue un seul fallback si le job local est invalide",()=>{
   const html=fs.readFileSync(path.join(root,"index.html"),"utf8");
   assert.match(html,/if\(!readRecoverableImageJobs\(\)\.length\)\{[\s\S]*readLatestRecoverableImageJobFromServer\(\)[\s\S]*recoverServerBtn\.style\.display=record\?"inline-block":"none"/);
-  assert.match(html,/readRecoverableImageJobs\(\)\[0\]\|\|serverRecoverableRecord/);
+  assert.match(html,/const localRecord=readRecoverableImageJobs\(\)\[0\]\|\|null/);
+  assert.match(html,/forgetRecoverableImageJob\(localRecord\.jobId\)[\s\S]*serverRecoverableRecord=await readLatestRecoverableImageJobFromServer\(\)[\s\S]*recoverAndRecomposeImageJob\(serverRecoverableRecord/);
+  assert.equal((html.slice(html.indexOf('recoverServerBtn.addEventListener("click"'),html.indexOf("const costModeSelect")).match(/readLatestRecoverableImageJobFromServer\(\)/g)||[]).length,1);
+  assert.match(html,/recoverySourceJobId=data\.recoverySourceJobId\|\|record\.recoverySourceJobId\|\|record\.jobId[\s\S]*rememberRecoverableImageJob\(flow,flow\.recoverySourceJobId/);
   assert.match(html,/recompose-image-job\?latest=1/);
+  const server=fs.readFileSync(path.join(root,"netlify/functions/recompose-image-job.js"),"utf8");
+  assert.doesNotMatch(server,/api\.openai\.com|images\/generations|images\/edits/);
 });
 
 test("Story compose UNE HISTOIRE À PARTAGER sans troncature, collision ni fond opaque",async()=>{
