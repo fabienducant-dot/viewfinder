@@ -6,7 +6,7 @@ const fs = require("node:fs");
 const path = require("node:path");
 const sharp = require("sharp");
 const { applyImageEditOptions, normalizeImageModel } = require("../netlify/functions/_shared/openai-image-edit-options");
-const { composeBrandPoster, prepareLogoOverlay, vectorText } = require("../netlify/functions/_shared/brand-compositor");
+const { composeBrandPoster, prepareLogoOverlay, normalizeLogoRaster, buildLogoSilhouetteMask, vectorText } = require("../netlify/functions/_shared/brand-compositor");
 
 const root = path.resolve(__dirname, "..");
 const index = fs.readFileSync(path.join(root, "index.html"), "utf8");
@@ -94,6 +94,21 @@ test("le masque conserve médaillon, triangle et volute sans rectangle", async (
   assert.ok(pixel(60,1)[3]>245);
   assert.ok(pixel(108,103)[3]>245);
   assert.ok(pixel(108,103)[0]>150&&pixel(108,103)[1]>80);
+});
+
+test("un logo non carré auto-orienté utilise exactement les dimensions du raster normalisé",async()=>{
+  const orientedLogo=await sharp({create:{width:80,height:140,channels:3,background:"#050505"}})
+    .composite([{input:Buffer.from('<svg width="80" height="140"><circle cx="40" cy="72" r="34" fill="#D9AD3B"/></svg>')}])
+    .jpeg().withMetadata({orientation:6}).toBuffer();
+  const normalized=await normalizeLogoRaster(orientedLogo);
+  const normalizedMeta=await sharp(normalized).metadata();
+  assert.deepEqual([normalizedMeta.width,normalizedMeta.height],[140,80]);
+  const mask=buildLogoSilhouetteMask(normalizedMeta.width,normalizedMeta.height);
+  const maskMeta=await sharp(mask).metadata();
+  assert.deepEqual([maskMeta.width,maskMeta.height],[normalizedMeta.width,normalizedMeta.height]);
+  await assert.doesNotReject(()=>prepareLogoOverlay(orientedLogo));
+  const imageBuffer=await sharp({create:{width:1080,height:1920,channels:4,background:"#17120b"}}).png().toBuffer();
+  await assert.doesNotReject(()=>composeBrandPoster({imageBuffer,logoDataUrl:`data:image/jpeg;base64,${orientedLogo.toString("base64")}`,platform:"Story",headline:"TEST ORIENTATION | MASQUE NORMALISÉ"}));
 });
 
 test("le contrôle final fait confiance au logo exact composé par le serveur et bloque encore l'OCR", () => {

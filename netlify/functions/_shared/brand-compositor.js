@@ -233,20 +233,28 @@ function buildOverlaySvg(width, height, layout, platform, headline, posterStrate
     </svg>`);
 }
 
+async function normalizeLogoRaster(logoBuffer){
+  return sharp(logoBuffer,{failOn:"none"}).rotate().ensureAlpha().png().toBuffer();
+}
+
+function buildLogoSilhouetteMask(width,height){
+  /* Silhouette géométrique complète, indépendante des couleurs : médaillon, triangle
+     supérieur et volute dorée qui s'échappe vers le bas/droite. */
+  return Buffer.from(`<svg width="${width}" height="${height}" viewBox="0 0 ${width} ${height}" xmlns="http://www.w3.org/2000/svg">
+    <ellipse cx="${width*.5}" cy="${height*.53}" rx="${width*.49}" ry="${height*.46}" fill="white"/>
+    <path d="M ${width*.27} 0 L ${width*.73} 0 L ${width*.82} ${height*.13} L ${width*.18} ${height*.13} Z" fill="white"/>
+    <path d="M ${width*.66} ${height*.73} C ${width*.79} ${height*.72}, ${width*.92} ${height*.77}, ${width*.97} ${height*.86} C ${width*.91} ${height*.88}, ${width*.87} ${height*.94}, ${width*.84} ${height*.995} C ${width*.76} ${height*.96}, ${width*.68} ${height*.91}, ${width*.60} ${height*.83} Z" fill="white"/>
+  </svg>`);
+}
+
 async function prepareLogoOverlay(logoBuffer){
   const cacheKey=crypto.createHash("sha256").update(logoBuffer).digest("hex");
   if(TRANSPARENT_LOGO_CACHE.has(cacheKey))return Buffer.from(TRANSPARENT_LOGO_CACHE.get(cacheKey));
-  const source = sharp(logoBuffer, { failOn: "none" }).rotate().ensureAlpha();
-  const info=await source.metadata();
+  const normalizedLogo=await normalizeLogoRaster(logoBuffer);
+  const info=await sharp(normalizedLogo).metadata();
   if(!info.width||!info.height)throw new Error("Dimensions du logo officiel introuvables.");
-  /* Silhouette géométrique complète, indépendante des couleurs : médaillon, triangle
-     supérieur et volute dorée qui s'échappe vers le bas/droite. */
-  const mask=Buffer.from(`<svg width="${info.width}" height="${info.height}" viewBox="0 0 ${info.width} ${info.height}" xmlns="http://www.w3.org/2000/svg">
-    <ellipse cx="${info.width*.5}" cy="${info.height*.53}" rx="${info.width*.49}" ry="${info.height*.46}" fill="white"/>
-    <path d="M ${info.width*.27} 0 L ${info.width*.73} 0 L ${info.width*.82} ${info.height*.13} L ${info.width*.18} ${info.height*.13} Z" fill="white"/>
-    <path d="M ${info.width*.66} ${info.height*.73} C ${info.width*.79} ${info.height*.72}, ${info.width*.92} ${info.height*.77}, ${info.width*.97} ${info.height*.86} C ${info.width*.91} ${info.height*.88}, ${info.width*.87} ${info.height*.94}, ${info.width*.84} ${info.height*.995} C ${info.width*.76} ${info.height*.96}, ${info.width*.68} ${info.height*.91}, ${info.width*.60} ${info.height*.83} Z" fill="white"/>
-  </svg>`);
-  const output=await source
+  const mask=buildLogoSilhouetteMask(info.width,info.height);
+  const output=await sharp(normalizedLogo)
     .composite([{input:mask,blend:"dest-in"}])
     .trim({ background: { r:0, g:0, b:0, alpha:0 } })
     .png()
@@ -365,4 +373,4 @@ async function composeBrandPoster({ imageBuffer, logoDataUrl, platform, headline
   return output;
 }
 
-module.exports = { BRAND_TOKENS, COMPOSITOR_VERSION, FONT_PATHS, composeBrandPoster, dataUrlToBuffer, escapeXml, wrapWords, normalizedZone, prepareLogoOverlay, hasOpaqueLogoRectangle,vectorText, measureVectorText,fitFontSize,fitTypography,validateSemanticLines,targetStoryLogoWidth,layoutFor, BRAND_CONTACTS };
+module.exports = { BRAND_TOKENS, COMPOSITOR_VERSION, FONT_PATHS, composeBrandPoster, dataUrlToBuffer, escapeXml, wrapWords, normalizedZone, normalizeLogoRaster,buildLogoSilhouetteMask,prepareLogoOverlay,hasOpaqueLogoRectangle,vectorText,measureVectorText,fitFontSize,fitTypography,validateSemanticLines,targetStoryLogoWidth,layoutFor,BRAND_CONTACTS };
