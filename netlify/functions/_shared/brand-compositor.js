@@ -42,8 +42,7 @@ function loadFontSet(latinPath, extendedPath){
 const DISPLAY_FONT=loadFontSet(DISPLAY_LATIN_PATH,DISPLAY_EXTENDED_PATH);
 const TEXT_FONT=loadFontSet(TEXT_LATIN_PATH,TEXT_EXTENDED_PATH);
 const BRAND_FONT=loadFontSet(BRAND_LATIN_PATH,BRAND_EXTENDED_PATH);
-// Le trim se cale sur les bords horizontaux de l'ellipse : la largeur finale
-// du raster détouré est donc le diamètre visuel du médaillon.
+// Le raster nettoyé est ajusté sur l'œuvre réellement visible, sans inventer de silhouette.
 const MEDALLION_DIAMETER_RATIO=1;
 const TRANSPARENT_LOGO_CACHE = new Map();
 
@@ -247,28 +246,63 @@ async function normalizeLogoRaster(logoBuffer){
 }
 
 function buildLogoSilhouetteMask(width,height){
-  /* Silhouette géométrique complète, indépendante des couleurs : médaillon, triangle
-     supérieur et volute dorée qui s'échappe vers le bas/droite. */
-  const ribbonStroke=Math.max(1,Math.min(width,height)*.045);
-  return Buffer.from(`<svg width="${width}" height="${height}" viewBox="0 0 ${width} ${height}" xmlns="http://www.w3.org/2000/svg">
-    <ellipse cx="${width*.5}" cy="${height*.53}" rx="${width*.49}" ry="${height*.46}" fill="white"/>
-    <path d="M ${width*.32} ${height*.12} L ${width*.5} 0 L ${width*.68} ${height*.12} Z" fill="white"/>
-    <path d="M ${width*.70} ${height*.76} C ${width*.82} ${height*.77}, ${width*.94} ${height*.84}, ${width*.96} ${height*.90} C ${width*.91} ${height*.91}, ${width*.86} ${height*.96}, ${width*.84} ${height*.995}" fill="none" stroke="white" stroke-width="${ribbonStroke}" stroke-linecap="round" stroke-linejoin="round"/>
-  </svg>`);
+  /* Compatibilité de test uniquement. Le détourage de production n'utilise plus de silhouette
+     géométrique inventée : il suit les pixels réels du logo officiel. */
+  return Buffer.from(`<svg width="${width}" height="${height}" viewBox="0 0 ${width} ${height}" xmlns="http://www.w3.org/2000/svg"><rect width="${width}" height="${height}" fill="white"/></svg>`);
+}
+
+async function removeBorderConnectedDarkBackground(normalizedLogo){
+  const {data,info}=await sharp(normalizedLogo,{failOn:"none"}).ensureAlpha().raw().toBuffer({resolveWithObject:true});
+  const width=info.width,height=info.height,channels=info.channels;
+  if(!width||!height||channels<4)throw new Error("Raster RGBA du logo officiel invalide.");
+  const pixelCount=width*height;
+  const visited=new Uint8Array(pixelCount);
+  const queue=new Int32Array(pixelCount);
+  let head=0,tail=0;
+  const isBackgroundCandidate=index=>{
+    const offset=index*channels;
+    const alpha=data[offset+3];
+    if(alpha===0)return true;
+    const r=data[offset],g=data[offset+1],b=data[offset+2];
+    const max=Math.max(r,g,b),min=Math.min(r,g,b);
+    return max<=96&&(max-min)<=28;
+  };
+  const enqueue=(x,y)=>{
+    if(x<0||y<0||x>=width||y>=height)return;
+    const index=y*width+x;
+    if(visited[index]||!isBackgroundCandidate(index))return;
+    visited[index]=1;
+    queue[tail++]=index;
+  };
+  for(let x=0;x<width;x++){enqueue(x,0);enqueue(x,height-1);}
+  for(let y=1;y<height-1;y++){enqueue(0,y);enqueue(width-1,y);}
+  while(head<tail){
+    const index=queue[head++];
+    const x=index%width,y=Math.floor(index/width);
+    enqueue(x-1,y);enqueue(x+1,y);enqueue(x,y-1);enqueue(x,y+1);
+  }
+  let minX=width,minY=height,maxX=-1,maxY=-1;
+  for(let index=0;index<pixelCount;index++){
+    const offset=index*channels;
+    if(visited[index])data[offset+3]=0;
+    if(data[offset+3]>8){
+      const x=index%width,y=Math.floor(index/width);
+      if(x<minX)minX=x;if(x>maxX)maxX=x;
+      if(y<minY)minY=y;if(y>maxY)maxY=y;
+    }
+  }
+  if(maxX<minX||maxY<minY)throw new Error("Détourage du logo officiel vide après suppression du fond extérieur.");
+  return sharp(data,{raw:{width,height,channels}})
+    .extract({left:minX,top:minY,width:maxX-minX+1,height:maxY-minY+1})
+    .png()
+    .toBuffer();
 }
 
 async function prepareLogoOverlay(logoBuffer){
   const cacheKey=crypto.createHash("sha256").update(logoBuffer).digest("hex");
   if(TRANSPARENT_LOGO_CACHE.has(cacheKey))return Buffer.from(TRANSPARENT_LOGO_CACHE.get(cacheKey));
   const normalizedLogo=await normalizeLogoRaster(logoBuffer);
-  const info=await sharp(normalizedLogo).metadata();
-  if(!info.width||!info.height)throw new Error("Dimensions du logo officiel introuvables.");
-  const mask=buildLogoSilhouetteMask(info.width,info.height);
-  const output=await sharp(normalizedLogo)
-    .composite([{input:mask,blend:"dest-in"}])
-    .trim({ background: { r:0, g:0, b:0, alpha:0 } })
-    .png()
-    .toBuffer();
+  const output=await removeBorderConnectedDarkBackground(normalizedLogo);
   TRANSPARENT_LOGO_CACHE.set(cacheKey,Buffer.from(output));return output;
 }
 
@@ -387,4 +421,4 @@ async function composeBrandPoster({ imageBuffer, logoDataUrl, platform, headline
   return output;
 }
 
-module.exports = { BRAND_TOKENS, COMPOSITOR_VERSION, FONT_PATHS, composeBrandPoster, dataUrlToBuffer, escapeXml, wrapWords, normalizedZone, normalizeLogoRaster,buildLogoSilhouetteMask,prepareLogoOverlay,hasOpaqueLogoRectangle,vectorText,measureVectorText,fitFontSize,fitTypography,validateSemanticLines,targetStoryLogoWidth,computeBrandTailGeometry,layoutFor,BRAND_CONTACTS };
+module.exports = { BRAND_TOKENS, COMPOSITOR_VERSION, FONT_PATHS, composeBrandPoster, dataUrlToBuffer, escapeXml, wrapWords, normalizedZone, normalizeLogoRaster,buildLogoSilhouetteMask,removeBorderConnectedDarkBackground,prepareLogoOverlay,hasOpaqueLogoRectangle,vectorText,measureVectorText,fitFontSize,fitTypography,validateSemanticLines,targetStoryLogoWidth,computeBrandTailGeometry,layoutFor,BRAND_CONTACTS };
