@@ -90,10 +90,12 @@ test("le masque conserve médaillon, triangle et volute sans rectangle", async (
   const { data, info } = await sharp(clean).ensureAlpha().raw().toBuffer({ resolveWithObject:true });
   const pixel=(x,y)=>Array.from(data.subarray((y*info.width+x)*info.channels,(y*info.width+x)*info.channels+4));
   assert.equal(pixel(0,0)[3],0);
+  assert.equal(pixel(20,5)[3],0);
+  assert.equal(pixel(119,80)[3],0);
   assert.deepEqual(pixel(60,20).slice(0,3),[0,0,0]);
   assert.ok(pixel(60,1)[3]>245);
-  assert.ok(pixel(108,103)[3]>245);
-  assert.ok(pixel(108,103)[0]>150&&pixel(108,103)[1]>80);
+  assert.ok(pixel(108,102)[3]>245);
+  assert.ok(pixel(108,102)[0]>150&&pixel(108,102)[1]>80);
 });
 
 test("un logo non carré auto-orienté utilise exactement les dimensions du raster normalisé",async()=>{

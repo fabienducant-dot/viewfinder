@@ -45,7 +45,7 @@ test("le healthcheck gratuit prouve le bundle sans lire de job ni générer d'im
   assert.equal(response.statusCode,200);
   assert.equal(body.ok,true);
   assert.equal(body.recomposeVersion,"2.1.0-font-bundle-diagnostic");
-  assert.equal(body.compositorVersion,"2.2.1-complete-emblem-lockup");
+  assert.equal(body.compositorVersion,"2.2.2-precise-emblem-silhouette");
   assert.deepEqual(body.fonts,{cormorant600:true,manrope500:true,manrope600:true});
   assert.equal(body[["cin","zel"].join("")],false);
   assert.equal(body.imageGenerationCalls,0);
@@ -150,6 +150,9 @@ test("Story compose UNE HISTOIRE À PARTAGER sans troncature, collision ni fond 
   assert.ok(manifest.logoBounds.bottom<manifest.height);
   assert.equal(manifest.logoBounds.width,356);
   assert.ok(manifest.logoWidthRatio>=.31&&manifest.logoWidthRatio<=.35);
+  assert.ok(manifest.logoMedallionWidthRatio>=.31&&manifest.logoMedallionWidthRatio<=.35);
+  assert.equal(manifest.completeLogoBounds.left,manifest.logoBounds.left);
+  assert.equal(manifest.completeLogoBounds.right,manifest.logoBounds.right);
   assert.deepEqual(manifest.brandLockup.lines,["LA SANTÉ DES ZÈBRES","RAISMES"]);
   assert.deepEqual(manifest.brandLockup.contactLines,[]);
   assert.ok(manifest.brandLockup.brandSize>=48);

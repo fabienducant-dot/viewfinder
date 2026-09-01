@@ -9,7 +9,7 @@ const BRAND_TOKENS=require("./v3-brand-tokens");
 const {semanticLines}=require("./v3-creative-strategy");
 
 const GOLD=BRAND_TOKENS.brandGold, PALE_GOLD=BRAND_TOKENS.brandPaleGold, IVORY=BRAND_TOKENS.brandIvory;
-const COMPOSITOR_VERSION="2.2.1-complete-emblem-lockup";
+const COMPOSITOR_VERSION="2.2.2-precise-emblem-silhouette";
 const BRAND_CONTACTS = Object.freeze({
   domain:"la-sante-des-zebres.com", phone:"06.84.40.69.54",
   address:"11 cour Dupas, 59590 Raismes", email:"fabien.ducant@gmail.com",
@@ -42,6 +42,9 @@ function loadFontSet(latinPath, extendedPath){
 const DISPLAY_FONT=loadFontSet(DISPLAY_LATIN_PATH,DISPLAY_EXTENDED_PATH);
 const TEXT_FONT=loadFontSet(TEXT_LATIN_PATH,TEXT_EXTENDED_PATH);
 const BRAND_FONT=loadFontSet(BRAND_LATIN_PATH,BRAND_EXTENDED_PATH);
+// Le trim se cale sur les bords horizontaux de l'ellipse : la largeur finale
+// du raster détouré est donc le diamètre visuel du médaillon.
+const MEDALLION_DIAMETER_RATIO=1;
 const TRANSPARENT_LOGO_CACHE = new Map();
 
 function dataUrlToBuffer(dataUrl){
@@ -246,10 +249,11 @@ async function normalizeLogoRaster(logoBuffer){
 function buildLogoSilhouetteMask(width,height){
   /* Silhouette géométrique complète, indépendante des couleurs : médaillon, triangle
      supérieur et volute dorée qui s'échappe vers le bas/droite. */
+  const ribbonStroke=Math.max(1,Math.min(width,height)*.045);
   return Buffer.from(`<svg width="${width}" height="${height}" viewBox="0 0 ${width} ${height}" xmlns="http://www.w3.org/2000/svg">
     <ellipse cx="${width*.5}" cy="${height*.53}" rx="${width*.49}" ry="${height*.46}" fill="white"/>
-    <path d="M ${width*.27} 0 L ${width*.73} 0 L ${width*.82} ${height*.13} L ${width*.18} ${height*.13} Z" fill="white"/>
-    <path d="M ${width*.66} ${height*.73} C ${width*.79} ${height*.72}, ${width*.92} ${height*.77}, ${width*.97} ${height*.86} C ${width*.91} ${height*.88}, ${width*.87} ${height*.94}, ${width*.84} ${height*.995} C ${width*.76} ${height*.96}, ${width*.68} ${height*.91}, ${width*.60} ${height*.83} Z" fill="white"/>
+    <path d="M ${width*.32} ${height*.12} L ${width*.5} 0 L ${width*.68} ${height*.12} Z" fill="white"/>
+    <path d="M ${width*.70} ${height*.76} C ${width*.82} ${height*.77}, ${width*.94} ${height*.84}, ${width*.96} ${height*.90} C ${width*.91} ${height*.91}, ${width*.86} ${height*.96}, ${width*.84} ${height*.995}" fill="none" stroke="white" stroke-width="${ribbonStroke}" stroke-linecap="round" stroke-linejoin="round"/>
   </svg>`);
 }
 
@@ -325,6 +329,7 @@ async function composeBrandPoster({ imageBuffer, logoDataUrl, platform, headline
   const finalLogoWidth=resizedLogoMeta.width||logoWidth,finalLogoHeight=resizedLogoMeta.height||estimatedLogoHeight;
   if(await hasOpaqueLogoRectangle(resizedLogo))throw new Error("Rectangle opaque détecté autour du logo officiel.");
   const brandCenterX=logoLeft+finalLogoWidth/2;
+  const logoMedallionWidth=finalLogoWidth*MEDALLION_DIAMETER_RATIO;
   const logoBottom=logoTop+finalLogoHeight;
   const brandBaseline=logoBottom+brandTail.brandBaselineOffset;
   const cityBaseline=logoBottom+brandTail.cityBaselineOffset;
@@ -359,7 +364,9 @@ async function composeBrandPoster({ imageBuffer, logoDataUrl, platform, headline
     zonesDisjoint:layout.textArea.bottom<=layout.logoArea.top,
     semanticLinesValid,
     logoBounds:{left:logoLeft,top:logoTop,width:finalLogoWidth,height:finalLogoHeight,right:logoLeft+finalLogoWidth,bottom:logoTop+finalLogoHeight},
+    completeLogoBounds:{left:logoLeft,top:logoTop,width:finalLogoWidth,height:finalLogoHeight,right:logoLeft+finalLogoWidth,bottom:logoTop+finalLogoHeight},
     logoWidthRatio:finalLogoWidth/width,
+    logoMedallionWidth,logoMedallionWidthRatio:logoMedallionWidth/width,
     brandLockup:{lines:["LA SANTÉ DES ZÈBRES","RAISMES"],contactLines:[],name:"LA SANTÉ DES ZÈBRES",city:"RAISMES",brandSize,citySize,tailHeight:brandTail.tailHeight,top:logoBottom+logoBrandGap,bottom:brandBottom,bottomMargin:height-brandBottom,minimumBottomMargin,centerX:brandCenterX},
     logoWithinCanvas:logoLeft>=0&&logoTop>=0&&logoLeft+finalLogoWidth<=width&&logoTop+finalLogoHeight<=height-minimumBottomMargin,
     logoRectangleOpaque:false,
