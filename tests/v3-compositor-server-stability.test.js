@@ -155,6 +155,8 @@ test("Story compose UNE HISTOIRE À PARTAGER sans troncature, collision ni fond 
   assert.ok(manifest.brandLockup.brandSize>=48);
   assert.ok(manifest.brandLockup.citySize>=28);
   assert.ok(manifest.brandLockup.top>manifest.logoBounds.bottom);
-  assert.ok(manifest.brandLockup.bottom<manifest.height);
+  assert.equal(manifest.brandLockup.tailHeight,manifest.brandLockup.bottom-manifest.logoBounds.bottom);
+  assert.ok(manifest.brandLockup.bottom<=manifest.height-manifest.brandLockup.minimumBottomMargin);
+  assert.equal(manifest.brandLockup.bottomMargin,manifest.height-manifest.brandLockup.bottom);
   assert.equal(manifest.logoRectangleOpaque,false);
 });

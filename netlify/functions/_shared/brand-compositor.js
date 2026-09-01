@@ -132,6 +132,12 @@ function validateSemanticLines(lines, maximum){
   return lines.length<=maximum&&lines.every(line=>String(line).trim()&&!weak.has(String(line).trim().toUpperCase()));
 }
 function targetStoryLogoWidth(width){return Math.round(Number(width)*.33);}
+function computeBrandTailGeometry({logoBrandGap,brandSize,citySize}){
+  const brandBaselineOffset=logoBrandGap+brandSize;
+  const cityBaselineOffset=brandBaselineOffset+brandSize*1.28;
+  const tailHeight=cityBaselineOffset+Math.round(citySize*.18);
+  return Object.freeze({brandBaselineOffset,cityBaselineOffset,tailHeight});
+}
 async function hasOpaqueLogoRectangle(buffer){const {data,info}=await sharp(buffer).ensureAlpha().raw().toBuffer({resolveWithObject:true});const inset=Math.max(0,Math.round(Math.min(info.width,info.height)*.02));return [[inset,inset],[info.width-1-inset,inset],[inset,info.height-1-inset],[info.width-1-inset,info.height-1-inset]].every(([x,y])=>{const o=(y*info.width+x)*info.channels;return data[o+3]>245&&Math.max(data[o],data[o+1],data[o+2])<=55;});}
 
 function layoutFor(width, height, platform, requestedZone, hasHeadline, selectedLayout, posterStrategy){
@@ -297,10 +303,10 @@ async function composeBrandPoster({ imageBuffer, logoDataUrl, platform, headline
   const brandSize=Math.round((story?50:(layout.portrait?29:27))*scale);
   const citySize=Math.round((story?30:15)*scale);
   const logoBrandGap=Math.max(8,Math.round(height*.006));
-  const brandReserve=logoBrandGap+brandSize+Math.round(brandSize*.28)+citySize;
+  const brandTail=computeBrandTailGeometry({logoBrandGap,brandSize,citySize});
   const minimumBottomMargin = Math.max(Math.round(height*.035), 24);
   const logoZoneTop=layout.logoArea?.top??Math.round(dividerY + layout.height*.055);
-  const logoZoneBottom=(layout.logoArea?.bottom??(height-minimumBottomMargin))-brandReserve;
+  const logoZoneBottom=(layout.logoArea?.bottom??(height-minimumBottomMargin))-brandTail.tailHeight;
   const availableHeight = Math.max(24, logoZoneBottom-logoZoneTop);
   const sourceRatio = (logoMeta.width||1)/(logoMeta.height||1);
   const logoWidth = Math.max(24, Math.min(desiredLogoWidth, Math.floor(availableHeight*sourceRatio)));
@@ -319,9 +325,10 @@ async function composeBrandPoster({ imageBuffer, logoDataUrl, platform, headline
   const finalLogoWidth=resizedLogoMeta.width||logoWidth,finalLogoHeight=resizedLogoMeta.height||estimatedLogoHeight;
   if(await hasOpaqueLogoRectangle(resizedLogo))throw new Error("Rectangle opaque détecté autour du logo officiel.");
   const brandCenterX=logoLeft+finalLogoWidth/2;
-  const brandBaseline=logoTop+finalLogoHeight+logoBrandGap+brandSize;
-  const cityBaseline=brandBaseline+brandSize*1.28;
-  const brandBottom=cityBaseline+Math.round(citySize*.18);
+  const logoBottom=logoTop+finalLogoHeight;
+  const brandBaseline=logoBottom+brandTail.brandBaselineOffset;
+  const cityBaseline=logoBottom+brandTail.cityBaselineOffset;
+  const brandBottom=logoBottom+brandTail.tailHeight;
   if(brandBottom>height-minimumBottomMargin)throw new Error("Lock-up de marque hors cadre.");
   const brandLockup={centerX:brandCenterX,brandSize,citySize,brandBaseline,cityBaseline};
   const normalizedText=value=>String(value||"").trim().replace(/\s+/g," ");
@@ -353,7 +360,7 @@ async function composeBrandPoster({ imageBuffer, logoDataUrl, platform, headline
     semanticLinesValid,
     logoBounds:{left:logoLeft,top:logoTop,width:finalLogoWidth,height:finalLogoHeight,right:logoLeft+finalLogoWidth,bottom:logoTop+finalLogoHeight},
     logoWidthRatio:finalLogoWidth/width,
-    brandLockup:{lines:["LA SANTÉ DES ZÈBRES","RAISMES"],contactLines:[],name:"LA SANTÉ DES ZÈBRES",city:"RAISMES",brandSize,citySize,top:logoTop+finalLogoHeight+logoBrandGap,bottom:brandBottom,centerX:brandCenterX},
+    brandLockup:{lines:["LA SANTÉ DES ZÈBRES","RAISMES"],contactLines:[],name:"LA SANTÉ DES ZÈBRES",city:"RAISMES",brandSize,citySize,tailHeight:brandTail.tailHeight,top:logoBottom+logoBrandGap,bottom:brandBottom,bottomMargin:height-brandBottom,minimumBottomMargin,centerX:brandCenterX},
     logoWithinCanvas:logoLeft>=0&&logoTop>=0&&logoLeft+finalLogoWidth<=width&&logoTop+finalLogoHeight<=height-minimumBottomMargin,
     logoRectangleOpaque:false,
     completeText:[title,subtitle].filter(Boolean).join(" | "),
@@ -373,4 +380,4 @@ async function composeBrandPoster({ imageBuffer, logoDataUrl, platform, headline
   return output;
 }
 
-module.exports = { BRAND_TOKENS, COMPOSITOR_VERSION, FONT_PATHS, composeBrandPoster, dataUrlToBuffer, escapeXml, wrapWords, normalizedZone, normalizeLogoRaster,buildLogoSilhouetteMask,prepareLogoOverlay,hasOpaqueLogoRectangle,vectorText,measureVectorText,fitFontSize,fitTypography,validateSemanticLines,targetStoryLogoWidth,layoutFor,BRAND_CONTACTS };
+module.exports = { BRAND_TOKENS, COMPOSITOR_VERSION, FONT_PATHS, composeBrandPoster, dataUrlToBuffer, escapeXml, wrapWords, normalizedZone, normalizeLogoRaster,buildLogoSilhouetteMask,prepareLogoOverlay,hasOpaqueLogoRectangle,vectorText,measureVectorText,fitFontSize,fitTypography,validateSemanticLines,targetStoryLogoWidth,computeBrandTailGeometry,layoutFor,BRAND_CONTACTS };
