@@ -1,0 +1,59 @@
+name: Apply compositor stabilization once
+
+on:
+  push:
+    branches:
+      - fix/stabilize-sharp-compositor
+    paths:
+      - .github/workflows/apply-compositor-fix.yml
+
+permissions:
+  contents: write
+
+jobs:
+  apply-and-validate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Checkout branch
+        uses: actions/checkout@v4
+        with:
+          ref: fix/stabilize-sharp-compositor
+          fetch-depth: 0
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: Install locked dependencies
+        run: npm ci
+
+      - name: Apply static official-logo compositor fix
+        run: node scripts/apply-compositor-fix.js
+
+      - name: Run complete test suite
+        run: npm test
+
+      - name: Verify no secrets or dependency drift
+        shell: bash
+        run: |
+          git diff -- package.json package-lock.json
+          if ! git diff --quiet -- package.json package-lock.json; then
+            echo "Dependency files changed unexpectedly" >&2
+            exit 1
+          fi
+          if git grep -I -n -E '(sk-[A-Za-z0-9_-]{20,}|gh[pousr]_[A-Za-z0-9_]{20,}|AKIA[0-9A-Z]{16}|PRIVATE KEY)' -- ':!package-lock.json'; then
+            echo "Potential secret detected" >&2
+            exit 1
+          fi
+
+      - name: Commit validated fix to branch
+        shell: bash
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add assets/sdz-logo-compositor.png artifacts/compositor-logo-golden-story.png netlify/functions/_shared/brand-compositor.js netlify.toml tests/brand-pipeline.test.js tests/v3-compositor-server-stability.test.js
+          git commit -m "Stabilize Sharp compositor with official transparent SDZ logo"
+          git push origin HEAD:fix/stabilize-sharp-compositor
