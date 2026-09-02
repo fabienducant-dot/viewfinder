@@ -30,6 +30,20 @@ jobs:
       - name: Install locked dependencies
         run: npm ci
 
+      - name: Repair helper quoting
+        shell: bash
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          p = Path('scripts/apply-compositor-fix.js')
+          s = p.read_text()
+          old = 'assert.ok(ratio >= .33 && ratio <= .36, `logo ratio ${ratio}`);'
+          new = 'assert.ok(ratio >= .33 && ratio <= .36, "logo ratio " + ratio);'
+          if old not in s:
+              raise SystemExit('Expected helper line not found')
+          p.write_text(s.replace(old, new))
+          PY
+
       - name: Apply static official-logo compositor fix
         run: node scripts/apply-compositor-fix.js
 
