@@ -1,0 +1,180 @@
+name: Apply premium SDZ lockup to all formats except Google
+
+on:
+  push:
+    branches:
+      - codex/stabiliser-le-compositor-sharp
+    paths:
+      - .github/workflows/apply-all-formats-brand-lockup.yml
+
+permissions:
+  contents: write
+
+jobs:
+  apply-and-validate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Checkout V3 compositor branch
+        uses: actions/checkout@v4
+        with:
+          ref: codex/stabiliser-le-compositor-sharp
+          fetch-depth: 0
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: Install locked dependencies
+        run: npm ci
+
+      - name: Extend premium lockup to every non-Google format
+        shell: bash
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+
+          p = Path('netlify/functions/_shared/brand-compositor.js')
+          s = p.read_text()
+
+          s = s.replace(
+              'const COMPOSITOR_VERSION="2.2.2-precise-emblem-silhouette";',
+              'const COMPOSITOR_VERSION="2.3.0-premium-lockup-all-non-google";'
+          )
+
+          old = 'function targetStoryLogoWidth(width){return Math.round(Number(width)*.33);}'
+          new = '''const PREMIUM_LOCKUP_BY_PLATFORM=Object.freeze({
+            "Instagram Square":Object.freeze({family:"premium-square",textTop:.42,textBottom:.60,logoLeft:.26,logoRight:.74,logoWidthRatio:.26,brandSize:38,citySize:22}),
+            "Instagram Portrait":Object.freeze({family:"premium-portrait",textTop:.46,textBottom:.62,logoLeft:.22,logoRight:.78,logoWidthRatio:.26,brandSize:42,citySize:24}),
+            Facebook:Object.freeze({family:"premium-social",textTop:.46,textBottom:.62,logoLeft:.24,logoRight:.76,logoWidthRatio:.26,brandSize:42,citySize:24}),
+            Story:Object.freeze({family:"premium-story",textTop:.60,textBottom:.70,logoLeft:.18,logoRight:.82,logoWidthRatio:.33,brandSize:50,citySize:30}),
+            Blog:Object.freeze({family:"premium-editorial",textTop:.42,textBottom:.60,logoLeft:.34,logoRight:.66,logoWidthRatio:.13,brandSize:32,citySize:18}),
+            "Bannière":Object.freeze({family:"premium-banner",textTop:.12,textBottom:.44,logoLeft:.40,logoRight:.60,logoWidthRatio:.10,brandSize:24,citySize:14}),
+          });
+          function premiumBrandLockupFor(platform){
+            const normalized=normalizePlatform(platform);
+            return normalized==="Google Business"?null:(PREMIUM_LOCKUP_BY_PLATFORM[normalized]||null);
+          }
+          function targetPremiumLogoWidth(width,lockup){return Math.round(Number(width)*Number(lockup?.logoWidthRatio||0));}'''
+          if old not in s:
+              raise SystemExit('targetStoryLogoWidth marker not found')
+          s = s.replace(old, new)
+
+          old = '''    const logoSafe=posterStrategy?.logoSafeArea;
+              const x=textSafe?Math.max(margin,Math.round(width*textSafe.left)):Math.max(margin,Math.round(width*spec.x));'''.replace('              ', '')
+          new = '''    const logoSafe=posterStrategy?.logoSafeArea;
+              const premiumLockup=premiumBrandLockupFor(normalized);
+              const x=textSafe?Math.max(margin,Math.round(width*textSafe.left)):Math.max(margin,Math.round(width*spec.x));'''.replace('              ', '')
+          if old not in s:
+              raise SystemExit('layout premium marker not found')
+          s = s.replace(old, new)
+
+          old = '''    if(normalized==="Story"){
+              if(!textSafe)y=Math.round(height*.60);
+              textBottom=Math.min(textBottom,Math.round(height*.70));
+            }'''.replace('            ', '')
+          new = '''    if(premiumLockup){
+              if(!textSafe)y=Math.round(height*premiumLockup.textTop);
+              textBottom=Math.min(textBottom,Math.round(height*premiumLockup.textBottom));
+            }'''.replace('            ', '')
+          if old not in s:
+              raise SystemExit('Story text-zone marker not found')
+          s = s.replace(old, new)
+
+          old = '''    if(normalized==="Story"){
+              logoArea.left=Math.round(width*.18);logoArea.right=Math.round(width*.82);
+              logoArea.top=textBottom+Math.round(height*.006);
+              logoArea.bottom=Math.min(height-margin,height-Math.max(24,Math.round(height*.035)));
+            }'''.replace('            ', '')
+          new = '''    if(premiumLockup){
+              logoArea.left=Math.round(width*premiumLockup.logoLeft);logoArea.right=Math.round(width*premiumLockup.logoRight);
+              logoArea.top=textBottom+Math.round(height*.006);
+              logoArea.bottom=Math.min(height-margin,height-Math.max(24,Math.round(height*.035)));
+            }'''.replace('            ', '')
+          if old not in s:
+              raise SystemExit('Story logo-zone marker not found')
+          s = s.replace(old, new)
+
+          old = '  const story=normalizePlatform(platform)==="Story";\n  const scale = Math.max(0.78, Math.min(1.55, width / 1088));'
+          new = '  const normalizedPlatform=normalizePlatform(platform);\n  const story=normalizedPlatform==="Story";\n  const premiumLockup=premiumBrandLockupFor(normalizedPlatform);\n  const scale = Math.max(0.78, Math.min(1.55, width / 1088));'
+          if old not in s:
+              raise SystemExit('compose platform marker not found')
+          s = s.replace(old, new, 1)
+
+          old = '  const desiredLogoWidth=story?targetStoryLogoWidth(width):Math.round(logoAreaWidth*logoFraction/.21);\n  const brandSize=Math.round((story?50:(layout.portrait?29:27))*scale);\n  const citySize=Math.round((story?30:15)*scale);'
+          new = '  const desiredLogoWidth=premiumLockup?targetPremiumLogoWidth(width,premiumLockup):Math.round(logoAreaWidth*logoFraction/.21);\n  const brandSize=Math.round((premiumLockup?premiumLockup.brandSize:(layout.portrait?29:27))*scale);\n  const citySize=Math.round((premiumLockup?premiumLockup.citySize:15)*scale);'
+          if old not in s:
+              raise SystemExit('logo sizing marker not found')
+          s = s.replace(old, new)
+
+          old = '    version:COMPOSITOR_VERSION,\n    platform:normalizePlatform(platform),'
+          new = '    version:COMPOSITOR_VERSION,\n    platform:normalizedPlatform,\n    premiumBrandLockup:Boolean(premiumLockup),\n    premiumBrandLockupFamily:premiumLockup?.family||"google-legacy",'
+          if old not in s:
+              raise SystemExit('manifest platform marker not found')
+          s = s.replace(old, new)
+
+          old = 'module.exports = { BRAND_TOKENS, COMPOSITOR_VERSION, FONT_PATHS,'
+          new = 'module.exports = { BRAND_TOKENS, COMPOSITOR_VERSION, FONT_PATHS, PREMIUM_LOCKUP_BY_PLATFORM, premiumBrandLockupFor, targetPremiumLogoWidth,'
+          if old not in s:
+              raise SystemExit('exports marker not found')
+          s = s.replace(old, new)
+
+          p.write_text(s)
+
+          t = Path('tests/v3-compositor-server-stability.test.js')
+          ts = t.read_text().replace('2.2.2-precise-emblem-silhouette','2.3.0-premium-lockup-all-non-google')
+          ts += r'''
+
+test("le lock-up premium s'applique à tous les formats sauf Google Business",()=>{
+  const {premiumBrandLockupFor,targetPremiumLogoWidth}=require("../netlify/functions/_shared/brand-compositor");
+  const expected={
+    "Instagram Square":.26,
+    "Instagram Portrait":.26,
+    Facebook:.26,
+    Story:.33,
+    Blog:.13,
+    "Bannière":.10,
+  };
+  for(const [platform,ratio] of Object.entries(expected)){
+    const lockup=premiumBrandLockupFor(platform);
+    assert.ok(lockup,platform);
+    assert.equal(lockup.logoWidthRatio,ratio,platform);
+    assert.ok(lockup.textTop<lockup.textBottom,platform);
+    assert.ok(lockup.logoLeft<lockup.logoRight,platform);
+    assert.equal(targetPremiumLogoWidth(1000,lockup),Math.round(1000*ratio),platform);
+  }
+  assert.equal(premiumBrandLockupFor("Instagram").family,"premium-portrait");
+  assert.equal(premiumBrandLockupFor("Article Blog Wix").family,"premium-editorial");
+  assert.equal(premiumBrandLockupFor("Google Business"),null);
+});
+'''
+          t.write_text(ts)
+          PY
+
+      - name: Run complete test suite
+        run: npm test
+
+      - name: Verify only intended files changed and no secrets
+        shell: bash
+        run: |
+          git diff --check
+          git diff -- package.json package-lock.json
+          if ! git diff --quiet -- package.json package-lock.json; then
+            echo "Dependency files changed unexpectedly" >&2
+            exit 1
+          fi
+          if git grep -I -n -E '(sk-[A-Za-z0-9_-]{20,}|gh[pousr]_[A-Za-z0-9_]{20,}|AKIA[0-9A-Z]{16}|PRIVATE KEY)' -- ':!package-lock.json'; then
+            echo "Potential secret detected" >&2
+            exit 1
+          fi
+
+      - name: Commit validated non-Google format rollout
+        shell: bash
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add netlify/functions/_shared/brand-compositor.js tests/v3-compositor-server-stability.test.js
+          git commit -m "Apply premium SDZ lockup to all formats except Google"
+          git push origin HEAD:codex/stabiliser-le-compositor-sharp
