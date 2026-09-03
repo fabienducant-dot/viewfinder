@@ -44,7 +44,7 @@ const PREMIUM_LOCKUP_BY_PLATFORM=Object.freeze({
  Facebook:Object.freeze({family:"premium-social",textTop:.43,textBottom:.65,logoLeft:.28,logoRight:.72,logoWidthRatio:.17,brandSize:36,citySize:20}),
  Story:Object.freeze({family:"premium-story",textTop:.60,textBottom:.72,logoLeft:.25,logoRight:.75,logoWidthRatio:.20,brandSize:40,citySize:23}),
  Blog:Object.freeze({family:"premium-editorial",textTop:.38,textBottom:.60,logoLeft:.36,logoRight:.64,logoWidthRatio:.12,brandSize:30,citySize:17}),
- "Bannière":Object.freeze({family:"premium-banner",textTop:.10,textBottom:.50,logoLeft:.40,logoRight:.60,logoWidthRatio:.12,brandSize:24,citySize:14}),
+ "Bannière":Object.freeze({family:"premium-banner",textTop:.10,textBottom:.44,logoLeft:.40,logoRight:.60,logoWidthRatio:.12,brandSize:24,citySize:14}),
 });
 function premiumBrandLockupFor(platform){const p=normalizePlatform(platform);return p==="Google Business"?null:(PREMIUM_LOCKUP_BY_PLATFORM[p]||null);}
 function clampLogoRatio(value){return Math.max(BRAND_TOKENS.logoMinimumScale,Math.min(BRAND_TOKENS.logoMaximumScale,Number(value)||BRAND_TOKENS.logoMinimumScale));}
@@ -69,14 +69,14 @@ async function hasOpaqueLogoRectangle(buffer){const a=await auditLogoTransparenc
 function layoutFor(width,height,platform,requestedZone,hasHeadline,selectedLayout,posterStrategy){
  const p=normalizePlatform(platform),template=selectedLayout?.template||PLATFORM_TEMPLATES[p];
  if(template){
-  const spec=template.lockup,margin=Math.max(Math.round(width*.06),Math.round(width*template.margins)),textSafe=posterStrategy?.textSafeArea,logoSafe=posterStrategy?.logoSafeArea,premium=premiumBrandLockupFor(p);
+  const spec=template.lockup,margin=Math.max(Math.round(width*.06),Math.round(width*template.margins)),verticalMargin=Math.max(24,Math.round(height*.035)),textSafe=posterStrategy?.textSafeArea,logoSafe=posterStrategy?.logoSafeArea,premium=premiumBrandLockupFor(p);
   const x=textSafe?Math.max(margin,Math.round(width*textSafe.left)):Math.max(margin,Math.round(width*spec.x));
-  let y=textSafe?Math.max(margin,Math.round(height*textSafe.top)):Math.max(margin,Math.round(height*spec.y));
+  let y=textSafe?Math.max(verticalMargin,Math.round(height*textSafe.top)):Math.max(verticalMargin,Math.round(height*spec.y));
   const boxWidth=textSafe?Math.min(Math.round(width*(textSafe.right-textSafe.left)),width-x-margin):Math.min(Math.round(width*spec.width),width-x-margin);
-  let textBottom=textSafe?Math.round(height*textSafe.bottom):Math.min(height-margin,y+Math.round(height*(hasHeadline?.18:.04)));
-  if(premium){y=Math.max(margin,Math.round(height*premium.textTop));textBottom=Math.min(height-margin,Math.round(height*premium.textBottom));}
-  const logoArea=logoSafe?{left:Math.round(width*logoSafe.left),right:Math.round(width*logoSafe.right),top:Math.round(height*logoSafe.top),bottom:Math.round(height*logoSafe.bottom)}:{left:x,right:x+boxWidth,top:textBottom,bottom:height-margin};
-  if(premium){logoArea.left=Math.round(width*premium.logoLeft);logoArea.right=Math.round(width*premium.logoRight);logoArea.top=textBottom+Math.round(height*.008);logoArea.bottom=height-Math.max(margin,Math.round(height*.035));}
+  let textBottom=textSafe?Math.round(height*textSafe.bottom):Math.min(height-verticalMargin,y+Math.round(height*(hasHeadline?.18:.04)));
+  if(premium){y=Math.max(verticalMargin,Math.round(height*premium.textTop));textBottom=Math.min(height-verticalMargin,Math.round(height*premium.textBottom));}
+  const logoArea=logoSafe?{left:Math.round(width*logoSafe.left),right:Math.round(width*logoSafe.right),top:Math.round(height*logoSafe.top),bottom:Math.round(height*logoSafe.bottom)}:{left:x,right:x+boxWidth,top:textBottom,bottom:height-verticalMargin};
+  if(premium){logoArea.left=Math.round(width*premium.logoLeft);logoArea.right=Math.round(width*premium.logoRight);logoArea.top=textBottom+Math.round(height*.008);logoArea.bottom=height-verticalMargin;}
   return {x,y,width:boxWidth,height:Math.max(1,textBottom-y),margin,portrait:height>width*1.35,landscape:width>height*1.35,template,align:spec.align,textArea:{top:y,bottom:textBottom},logoArea};
  }
  const zone=hasHeadline&&["Instagram","Facebook","Story"].includes(platform)?"bottom":normalizedZone(requestedZone,platform),portrait=height>width*1.35,landscape=width>height*1.35,margin=Math.round(width*(portrait?.065:.052)),boxW=landscape?Math.round(width*.56):width-margin*2,boxH=Math.round(height*(hasHeadline?(portrait?.32:.38):.23));let y;if(zone==="top")y=Math.round(height*.055);else if(zone==="center")y=Math.round((height-boxH)*.5);else y=height-boxH-Math.round(height*(portrait?.035:.045));const textBottom=y+Math.round(boxH*.62);return {x:margin,y,width:boxW,height:boxH,margin,portrait,landscape,textArea:{top:y,bottom:textBottom},logoArea:{left:margin,right:margin+boxW,top:textBottom,bottom:height-margin}};
