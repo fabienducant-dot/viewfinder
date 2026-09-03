@@ -58,7 +58,7 @@ async function auditLogoTransparency(buffer){
  let transparent=0,opaque=0,semiDark=0,darkOpaque=0,edgeOpaque=0;const total=info.width*info.height;
  for(let y=0;y<info.height;y++)for(let x=0;x<info.width;x++){
   const o=(y*info.width+x)*info.channels,a=data[o+3],max=Math.max(data[o],data[o+1],data[o+2]);
-  if(a<=8)transparent++;if(a>=245){opaque++;if(max<75)darkOpaque++;}if(a>8&&a<245&&max<105)semiDark++;if((x<2||y<2||x>=info.width-2||y>=info.height-2)&&a>8)edgeOpaque++;
+  if(a<=8)transparent++;if(a>=245){opaque++;if(max<75)darkOpaque++;}if(a>8&&a<245&&max<105)semiDark++;if((x===0||y===0||x===info.width-1||y===info.height-1)&&a>8)edgeOpaque++;
  }
  const transparentRatio=transparent/total,opaqueRatio=opaque/total,darkInteriorRatio=darkOpaque/Math.max(1,opaque),fringeDetected=semiDark>0||edgeOpaque>0,integrity=transparentRatio>.04&&opaqueRatio>.05&&opaqueRatio<.90&&darkInteriorRatio>.02&&!fringeDetected;
  return Object.freeze({width:info.width,height:info.height,transparentRatio,opaqueRatio,darkInteriorRatio,semiDark,edgeOpaque,fringeDetected,integrity});
