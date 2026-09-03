@@ -62,37 +62,20 @@ jobs:
               raise SystemExit('targetStoryLogoWidth marker not found')
           s = s.replace(old, new)
 
-          old = '''    const logoSafe=posterStrategy?.logoSafeArea;
-              const x=textSafe?Math.max(margin,Math.round(width*textSafe.left)):Math.max(margin,Math.round(width*spec.x));'''.replace('              ', '')
-          new = '''    const logoSafe=posterStrategy?.logoSafeArea;
-              const premiumLockup=premiumBrandLockupFor(normalized);
-              const x=textSafe?Math.max(margin,Math.round(width*textSafe.left)):Math.max(margin,Math.round(width*spec.x));'''.replace('              ', '')
+          old = '    const logoSafe=posterStrategy?.logoSafeArea;\n    const x=textSafe?Math.max(margin,Math.round(width*textSafe.left)):Math.max(margin,Math.round(width*spec.x));'
+          new = '    const logoSafe=posterStrategy?.logoSafeArea;\n    const premiumLockup=premiumBrandLockupFor(normalized);\n    const x=textSafe?Math.max(margin,Math.round(width*textSafe.left)):Math.max(margin,Math.round(width*spec.x));'
           if old not in s:
               raise SystemExit('layout premium marker not found')
           s = s.replace(old, new)
 
-          old = '''    if(normalized==="Story"){
-              if(!textSafe)y=Math.round(height*.60);
-              textBottom=Math.min(textBottom,Math.round(height*.70));
-            }'''.replace('            ', '')
-          new = '''    if(premiumLockup){
-              if(!textSafe)y=Math.round(height*premiumLockup.textTop);
-              textBottom=Math.min(textBottom,Math.round(height*premiumLockup.textBottom));
-            }'''.replace('            ', '')
+          old = '    if(normalized==="Story"){\n      if(!textSafe)y=Math.round(height*.60);\n      textBottom=Math.min(textBottom,Math.round(height*.70));\n    }'
+          new = '    if(premiumLockup){\n      if(!textSafe)y=Math.round(height*premiumLockup.textTop);\n      textBottom=Math.min(textBottom,Math.round(height*premiumLockup.textBottom));\n    }'
           if old not in s:
               raise SystemExit('Story text-zone marker not found')
           s = s.replace(old, new)
 
-          old = '''    if(normalized==="Story"){
-              logoArea.left=Math.round(width*.18);logoArea.right=Math.round(width*.82);
-              logoArea.top=textBottom+Math.round(height*.006);
-              logoArea.bottom=Math.min(height-margin,height-Math.max(24,Math.round(height*.035)));
-            }'''.replace('            ', '')
-          new = '''    if(premiumLockup){
-              logoArea.left=Math.round(width*premiumLockup.logoLeft);logoArea.right=Math.round(width*premiumLockup.logoRight);
-              logoArea.top=textBottom+Math.round(height*.006);
-              logoArea.bottom=Math.min(height-margin,height-Math.max(24,Math.round(height*.035)));
-            }'''.replace('            ', '')
+          old = '    if(normalized==="Story"){\n      logoArea.left=Math.round(width*.18);logoArea.right=Math.round(width*.82);\n      logoArea.top=textBottom+Math.round(height*.006);\n      logoArea.bottom=Math.min(height-margin,height-Math.max(24,Math.round(height*.035)));\n    }'
+          new = '    if(premiumLockup){\n      logoArea.left=Math.round(width*premiumLockup.logoLeft);logoArea.right=Math.round(width*premiumLockup.logoRight);\n      logoArea.top=textBottom+Math.round(height*.006);\n      logoArea.bottom=Math.min(height-margin,height-Math.max(24,Math.round(height*.035)));\n    }'
           if old not in s:
               raise SystemExit('Story logo-zone marker not found')
           s = s.replace(old, new)
@@ -123,44 +106,48 @@ jobs:
 
           p.write_text(s)
 
-          t = Path('tests/v3-compositor-server-stability.test.js')
-          ts = t.read_text().replace('2.2.2-precise-emblem-silhouette','2.3.0-premium-lockup-all-non-google')
-          ts += r'''
-
-test("le lock-up premium s'applique à tous les formats sauf Google Business",()=>{
-  const {premiumBrandLockupFor,targetPremiumLogoWidth}=require("../netlify/functions/_shared/brand-compositor");
-  const expected={
-    "Instagram Square":.26,
-    "Instagram Portrait":.26,
-    Facebook:.26,
-    Story:.33,
-    Blog:.13,
-    "Bannière":.10,
-  };
-  for(const [platform,ratio] of Object.entries(expected)){
-    const lockup=premiumBrandLockupFor(platform);
-    assert.ok(lockup,platform);
-    assert.equal(lockup.logoWidthRatio,ratio,platform);
-    assert.ok(lockup.textTop<lockup.textBottom,platform);
-    assert.ok(lockup.logoLeft<lockup.logoRight,platform);
-    assert.equal(targetPremiumLogoWidth(1000,lockup),Math.round(1000*ratio),platform);
-  }
-  assert.equal(premiumBrandLockupFor("Instagram").family,"premium-portrait");
-  assert.equal(premiumBrandLockupFor("Article Blog Wix").family,"premium-editorial");
-  assert.equal(premiumBrandLockupFor("Google Business"),null);
-});
-'''
-          t.write_text(ts)
+          test_file = Path('tests/v3-compositor-server-stability.test.js')
+          test_file.write_text(test_file.read_text().replace(
+              '2.2.2-precise-emblem-silhouette',
+              '2.3.0-premium-lockup-all-non-google'
+          ))
           PY
 
       - name: Run complete test suite
         run: npm test
 
-      - name: Verify only intended files changed and no secrets
+      - name: Validate format coverage explicitly
+        shell: bash
+        run: |
+          node - <<'NODE'
+          const assert=require('node:assert/strict');
+          const {premiumBrandLockupFor,targetPremiumLogoWidth}=require('./netlify/functions/_shared/brand-compositor');
+          const expected={
+            'Instagram Square':.26,
+            'Instagram Portrait':.26,
+            Facebook:.26,
+            Story:.33,
+            Blog:.13,
+            'Bannière':.10,
+          };
+          for(const [platform,ratio] of Object.entries(expected)){
+            const lockup=premiumBrandLockupFor(platform);
+            assert.ok(lockup,platform);
+            assert.equal(lockup.logoWidthRatio,ratio,platform);
+            assert.ok(lockup.textTop<lockup.textBottom,platform);
+            assert.ok(lockup.logoLeft<lockup.logoRight,platform);
+            assert.equal(targetPremiumLogoWidth(1000,lockup),Math.round(1000*ratio),platform);
+          }
+          assert.equal(premiumBrandLockupFor('Instagram').family,'premium-portrait');
+          assert.equal(premiumBrandLockupFor('Article Blog Wix').family,'premium-editorial');
+          assert.equal(premiumBrandLockupFor('Google Business'),null);
+          console.log('Premium lockup coverage OK; Google Business excluded.');
+          NODE
+
+      - name: Verify no dependency drift or secrets
         shell: bash
         run: |
           git diff --check
-          git diff -- package.json package-lock.json
           if ! git diff --quiet -- package.json package-lock.json; then
             echo "Dependency files changed unexpectedly" >&2
             exit 1
