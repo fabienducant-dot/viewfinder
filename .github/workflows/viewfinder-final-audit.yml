@@ -26,6 +26,13 @@ jobs:
       - name: Restore locked dependencies
         run: npm ci
 
+      - name: Audit production dependencies
+        run: npm audit --omit=dev --audit-level=high
+
+      - name: Report complete dependency audit
+        continue-on-error: true
+        run: npm audit --audit-level=high
+
       - name: Full deterministic verification
         run: npm run verify
 
