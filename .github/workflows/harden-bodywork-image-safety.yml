@@ -4,14 +4,16 @@ on:
   push:
     branches:
       - codex/stabiliser-le-compositor-sharp
+    paths:
+      - .github/workflows/harden-bodywork-image-safety.yml
 
 permissions:
   contents: write
 
 jobs:
   harden-and-validate:
-    if: ${{ github.actor != 'github-actions[bot]' }}
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     steps:
       - name: Checkout compositor branch
         uses: actions/checkout@v4
@@ -106,6 +108,7 @@ test("Massage dos/zone cadre explicitement le Golden Test comme une scène profe
           git diff --exit-code -- package.json package-lock.json
 
       - name: Commit validated safety framing
+        shell: bash
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
