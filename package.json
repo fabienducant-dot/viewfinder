@@ -2,7 +2,10 @@
   "name": "viewfinder",
   "private": true,
   "scripts": {
-    "test": "node --test tests/*.test.js"
+    "build:logo": "node scripts/build-sdz-logo-asset.js",
+    "verify:index": "node scripts/verify-index-integrity.js",
+    "test": "node --test tests/*.test.js",
+    "verify": "npm run build:logo && npm run verify:index && npm test"
   },
   "dependencies": {
     "@fontsource/cormorant-garamond": "^5.3.0",
