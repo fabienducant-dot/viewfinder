@@ -35,112 +35,96 @@ jobs:
         run: |
           python - <<'PY'
           from pathlib import Path
-
           p=Path('netlify/functions/process-image-job-background.js')
           s=p.read_text()
-
-          helper='''function isProviderSafetyRejection(error){
-  const text=String(error?.message||error||"");
-  return /safety system|safety_violations|image_generation_user_error/i.test(text);
-}
-
-function bodyworkSafetyFallbackEligible(v3Plan){
-  const type=String(v3Plan?.contract?.type||"").toLowerCase();
-  return /massage|drainage|réflexologie/.test(type);
-}
-
-function buildProviderSafeBodyworkPrompt(v3Plan){
-  const subject=String(v3Plan?.subjectBrief?.exactUserRequest||v3Plan?.subjectBrief?.coreTheme||"tension du haut du dos").replace(/\\s+/g," ").trim();
-  const focus=String(v3Plan?.subjectBrief?.requestedFocus||"haut du dos et épaules").replace(/\\s+/g," ").trim();
-  const active=v3Plan?.artDirection?.activeRegisters||{};
-  const architecture=active.architectural
-    ?"Architecture noire et or profonde, crédible, avec une ouverture vers un paysage ample et lumineux."
-    :"Studio de bien-être premium noir et or, sobre, crédible et spacieux.";
-  const fantastic=active.fantastic
-    ?"Le registre fantastique vient uniquement de la profondeur, de la lumière, de l'échelle et du paysage, de manière photographique et crédible."
-    :"";
-  return [
-    "Photographie éditoriale premium pour un cabinet de bien-être professionnel.",
-    `Sujet : ${subject}.`,
-    `Focus visuel : ${focus}.`,
-    "Montrer deux adultes entièrement habillés dans des vêtements opaques et professionnels.",
-    "Le bénéficiaire porte un haut noir opaque et reste assis ou debout ; sa posture du haut du dos et des épaules exprime clairement la tension et la lourdeur.",
-    "Le praticien masculin porte une tenue professionnelle noire et se tient à proximité dans une posture d'accompagnement neutre, sans contact physique.",
-    architecture,
-    fantastic,
-    "Photographie cinématographique noir et or, détails lisibles, profondeur réaliste, luxe silencieux, jamais illustration ni 3D.",
-    "Générer uniquement la scène photographique, sans texte, logo, signature, URL, badge ni pictogramme."
-  ].filter(Boolean).join("\\n");
-}
-
-'''
+          helper='\n'.join([
+            'function isProviderSafetyRejection(error){',
+            '  const text=String(error?.message||error||"");',
+            '  return /safety system|safety_violations|image_generation_user_error/i.test(text);',
+            '}',
+            '',
+            'function bodyworkSafetyFallbackEligible(v3Plan){',
+            '  const type=String(v3Plan?.contract?.type||"").toLowerCase();',
+            '  return /massage|drainage|réflexologie/.test(type);',
+            '}',
+            '',
+            'function buildProviderSafeBodyworkPrompt(v3Plan){',
+            '  const subject=String(v3Plan?.subjectBrief?.exactUserRequest||v3Plan?.subjectBrief?.coreTheme||"tension du haut du dos").replace(/\\s+/g," ").trim();',
+            '  const focus=String(v3Plan?.subjectBrief?.requestedFocus||"haut du dos et épaules").replace(/\\s+/g," ").trim();',
+            '  const active=v3Plan?.artDirection?.activeRegisters||{};',
+            '  const architecture=active.architectural ? "Architecture noire et or profonde, crédible, avec une ouverture vers un paysage ample et lumineux." : "Studio de bien-être premium noir et or, sobre, crédible et spacieux.";',
+            '  const fantastic=active.fantastic ? "Le registre fantastique vient uniquement de la profondeur, de la lumière, de l’échelle et du paysage, de manière photographique et crédible." : "";',
+            '  return [',
+            '    "Photographie éditoriale premium pour un cabinet de bien-être professionnel.",',
+            '    `Sujet : ${subject}.`,',
+            '    `Focus visuel : ${focus}.`,',
+            '    "Montrer deux adultes entièrement habillés dans des vêtements opaques et professionnels.",',
+            '    "Le bénéficiaire porte un haut noir opaque et reste assis ou debout ; sa posture du haut du dos et des épaules exprime clairement la tension et la lourdeur.",',
+            '    "Le praticien masculin porte une tenue professionnelle noire et se tient à proximité dans une posture d’accompagnement neutre, sans contact physique.",',
+            '    architecture,',
+            '    fantastic,',
+            '    "Photographie cinématographique noir et or, détails lisibles, profondeur réaliste, luxe silencieux, jamais illustration ni 3D.",',
+            '    "Générer uniquement la scène photographique, sans texte, logo, signature, URL, badge ni pictogramme."',
+            '  ].filter(Boolean).join("\\n");',
+            '}',
+            '',
+            ''
+          ])
           marker='exports.handler = async (event) => {'
           if 'function isProviderSafetyRejection' not in s:
-              if marker not in s:
-                  raise SystemExit('handler marker not found')
-              s=s.replace(marker,helper+marker,1)
-
-          old='''    let data;
-    let usedReference = false;
-    let referenceFallbackReason = null;
-    const hasUrls = Array.isArray(referenceImageUrls) && referenceImageUrls.length;
-    const hasData = Array.isArray(referenceImageData) && referenceImageData.length;
-'''
-          new='''    let data;
-    let usedReference = false;
-    let referenceFallbackReason = null;
-    let providerSafetyFallbackUsed = false;
-    const hasUrls = Array.isArray(referenceImageUrls) && referenceImageUrls.length;
-    const hasData = Array.isArray(referenceImageData) && referenceImageData.length;
-'''
+            if marker not in s: raise SystemExit('handler marker not found')
+            s=s.replace(marker,helper+marker,1)
+          old='\n'.join([
+            '    let data;',
+            '    let usedReference = false;',
+            '    let referenceFallbackReason = null;',
+            '    const hasUrls = Array.isArray(referenceImageUrls) && referenceImageUrls.length;',
+            '    const hasData = Array.isArray(referenceImageData) && referenceImageData.length;'
+          ])+'\n'
+          new='\n'.join([
+            '    let data;',
+            '    let usedReference = false;',
+            '    let referenceFallbackReason = null;',
+            '    let providerSafetyFallbackUsed = false;',
+            '    const hasUrls = Array.isArray(referenceImageUrls) && referenceImageUrls.length;',
+            '    const hasData = Array.isArray(referenceImageData) && referenceImageData.length;'
+          ])+'\n'
           if old in s:
-              s=s.replace(old,new,1)
+            s=s.replace(old,new,1)
           elif 'let providerSafetyFallbackUsed = false;' not in s:
-              raise SystemExit('generation state marker not found')
-
-          oldcatch='''    } catch (genErr) {
-      await safeSetJobStatus(store, jobId, { status: "failed", error: { message: String(genErr.message || genErr), source: "openai" }, usedReference: false, referenceFallbackReason });
-      return { statusCode: 200, body: JSON.stringify({ ok: false, error: String(genErr.message || genErr) }) };
-    }
-'''
-          newcatch='''    } catch (genErr) {
-      const canFallback=!hasUrls&&!hasData&&v3Plan&&bodyworkSafetyFallbackEligible(v3Plan)&&isProviderSafetyRejection(genErr);
-      if(canFallback){
-        const safePrompt=buildProviderSafeBodyworkPrompt(v3Plan);
-        try{
-          data=await generateStandard({key,prompt:safePrompt,size,model,quality});
-          providerSafetyFallbackUsed=true;
-          referenceFallbackReason="provider-safety-fallback-after-rejected-primary-prompt";
-        }catch(fallbackErr){
-          await safeSetJobStatus(store,jobId,{status:"failed",error:{message:String(fallbackErr.message||fallbackErr),source:"openai-safety-fallback"},usedReference:false,referenceFallbackReason:"provider-safety-fallback-rejected",providerSafetyFallbackUsed:true});
-          return {statusCode:200,body:JSON.stringify({ok:false,error:String(fallbackErr.message||fallbackErr)})};
-        }
-      }else{
-        await safeSetJobStatus(store, jobId, { status: "failed", error: { message: String(genErr.message || genErr), source: "openai" }, usedReference: false, referenceFallbackReason, providerSafetyFallbackUsed:false });
-        return { statusCode: 200, body: JSON.stringify({ ok: false, error: String(genErr.message || genErr) }) };
-      }
-    }
-'''
+            raise SystemExit('generation state marker not found')
+          oldcatch='\n'.join([
+            '    } catch (genErr) {',
+            '      await safeSetJobStatus(store, jobId, { status: "failed", error: { message: String(genErr.message || genErr), source: "openai" }, usedReference: false, referenceFallbackReason });',
+            '      return { statusCode: 200, body: JSON.stringify({ ok: false, error: String(genErr.message || genErr) }) };',
+            '    }'
+          ])+'\n'
+          newcatch='\n'.join([
+            '    } catch (genErr) {',
+            '      const canFallback=!hasUrls&&!hasData&&v3Plan&&bodyworkSafetyFallbackEligible(v3Plan)&&isProviderSafetyRejection(genErr);',
+            '      if(canFallback){',
+            '        const safePrompt=buildProviderSafeBodyworkPrompt(v3Plan);',
+            '        try{',
+            '          data=await generateStandard({key,prompt:safePrompt,size,model,quality});',
+            '          providerSafetyFallbackUsed=true;',
+            '          referenceFallbackReason="provider-safety-fallback-after-rejected-primary-prompt";',
+            '        }catch(fallbackErr){',
+            '          await safeSetJobStatus(store,jobId,{status:"failed",error:{message:String(fallbackErr.message||fallbackErr),source:"openai-safety-fallback"},usedReference:false,referenceFallbackReason:"provider-safety-fallback-rejected",providerSafetyFallbackUsed:true});',
+            '          return {statusCode:200,body:JSON.stringify({ok:false,error:String(fallbackErr.message||fallbackErr)})};',
+            '        }',
+            '      }else{',
+            '        await safeSetJobStatus(store, jobId, { status: "failed", error: { message: String(genErr.message || genErr), source: "openai" }, usedReference: false, referenceFallbackReason, providerSafetyFallbackUsed:false });',
+            '        return { statusCode: 200, body: JSON.stringify({ ok: false, error: String(genErr.message || genErr) }) };',
+            '      }',
+            '    }'
+          ])+'\n'
           if oldcatch in s:
-              s=s.replace(oldcatch,newcatch,1)
+            s=s.replace(oldcatch,newcatch,1)
           elif 'provider-safety-fallback-after-rejected-primary-prompt' not in s:
-              raise SystemExit('generation catch marker not found')
-
-          oldresult='await store.set(resultKey, JSON.stringify({ b64, url, usedReference, brandComposited, v3Finalization }));'
-          newresult='await store.set(resultKey, JSON.stringify({ b64, url, usedReference, brandComposited, v3Finalization, providerSafetyFallbackUsed }));'
-          if oldresult in s:
-              s=s.replace(oldresult,newresult,1)
-
-          oldcost='const costAudit=buildCostAudit({mode:costMode||"test",referenceImageCount,referenceRoles,imageUsage:usage,visionUsage:v3Plan?{}:false,retries:0,imageCalls:1,requestedQuality,requestedSize,effectiveSize});'
-          newcost='const costAudit=buildCostAudit({mode:costMode||"test",referenceImageCount,referenceRoles,imageUsage:usage,visionUsage:v3Plan?{}:false,retries:providerSafetyFallbackUsed?1:0,imageCalls:1,requestedQuality,requestedSize,effectiveSize});'
-          if oldcost in s:
-              s=s.replace(oldcost,newcost,1)
-
-          oldstatus='await safeSetJobStatus(store, jobId, { status: "completed", error: null, resultKey, rawResultKey, usedReference, referenceFallbackReason, brandComposited, v3Plan, v3Finalization,artFingerprint,referenceAudit,costAudit,requestedQuality,effectiveQuality:quality,requestedSize,effectiveSize:size,imageGenerationCallCount:1,usage });'
-          newstatus='await safeSetJobStatus(store, jobId, { status: "completed", error: null, resultKey, rawResultKey, usedReference, referenceFallbackReason, providerSafetyFallbackUsed, brandComposited, v3Plan, v3Finalization,artFingerprint,referenceAudit,costAudit,requestedQuality,effectiveQuality:quality,requestedSize,effectiveSize:size,imageGenerationCallCount:1,usage });'
-          if oldstatus in s:
-              s=s.replace(oldstatus,newstatus,1)
-
+            raise SystemExit('generation catch marker not found')
+          s=s.replace('await store.set(resultKey, JSON.stringify({ b64, url, usedReference, brandComposited, v3Finalization }));','await store.set(resultKey, JSON.stringify({ b64, url, usedReference, brandComposited, v3Finalization, providerSafetyFallbackUsed }));',1)
+          s=s.replace('const costAudit=buildCostAudit({mode:costMode||"test",referenceImageCount,referenceRoles,imageUsage:usage,visionUsage:v3Plan?{}:false,retries:0,imageCalls:1,requestedQuality,requestedSize,effectiveSize});','const costAudit=buildCostAudit({mode:costMode||"test",referenceImageCount,referenceRoles,imageUsage:usage,visionUsage:v3Plan?{}:false,retries:providerSafetyFallbackUsed?1:0,imageCalls:1,requestedQuality,requestedSize,effectiveSize});',1)
+          s=s.replace('await safeSetJobStatus(store, jobId, { status: "completed", error: null, resultKey, rawResultKey, usedReference, referenceFallbackReason, brandComposited, v3Plan, v3Finalization,artFingerprint,referenceAudit,costAudit,requestedQuality,effectiveQuality:quality,requestedSize,effectiveSize:size,imageGenerationCallCount:1,usage });','await safeSetJobStatus(store, jobId, { status: "completed", error: null, resultKey, rawResultKey, usedReference, referenceFallbackReason, providerSafetyFallbackUsed, brandComposited, v3Plan, v3Finalization,artFingerprint,referenceAudit,costAudit,requestedQuality,effectiveQuality:quality,requestedSize,effectiveSize:size,imageGenerationCallCount:1,usage });',1)
           p.write_text(s)
           PY
 
