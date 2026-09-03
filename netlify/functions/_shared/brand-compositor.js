@@ -9,7 +9,7 @@ const BRAND_TOKENS=require("./v3-brand-tokens");
 const {semanticLines}=require("./v3-creative-strategy");
 
 const GOLD=BRAND_TOKENS.brandGold, PALE_GOLD=BRAND_TOKENS.brandPaleGold, IVORY=BRAND_TOKENS.brandIvory;
-const COMPOSITOR_VERSION="2.2.2-precise-emblem-silhouette";
+const COMPOSITOR_VERSION="2.3.0-premium-lockup-all-non-google";
 const BRAND_CONTACTS = Object.freeze({
   domain:"la-sante-des-zebres.com", phone:"06.84.40.69.54",
   address:"11 cour Dupas, 59590 Raismes", email:"fabien.ducant@gmail.com",
@@ -133,7 +133,20 @@ function validateSemanticLines(lines, maximum){
   const weak=new Set(["À","AU","AUX","DE","DES","DU","ET","LE","LA","LES","OU","UN","UNE"]);
   return lines.length<=maximum&&lines.every(line=>String(line).trim()&&!weak.has(String(line).trim().toUpperCase()));
 }
-function targetStoryLogoWidth(width){return Math.round(Number(width)*.33);}
+const PREMIUM_LOCKUP_BY_PLATFORM=Object.freeze({
+  "Instagram Square":Object.freeze({family:"premium-square",textTop:.38,textBottom:.62,logoLeft:.25,logoRight:.75,logoWidthRatio:.26,brandSize:38,citySize:22}),
+  "Instagram Portrait":Object.freeze({family:"premium-portrait",textTop:.40,textBottom:.64,logoLeft:.22,logoRight:.78,logoWidthRatio:.26,brandSize:42,citySize:24}),
+  Facebook:Object.freeze({family:"premium-social",textTop:.40,textBottom:.64,logoLeft:.23,logoRight:.77,logoWidthRatio:.26,brandSize:42,citySize:24}),
+  Story:Object.freeze({family:"premium-story",textTop:.60,textBottom:.70,logoLeft:.18,logoRight:.82,logoWidthRatio:.33,brandSize:50,citySize:30}),
+  Blog:Object.freeze({family:"premium-editorial",textTop:.35,textBottom:.60,logoLeft:.34,logoRight:.66,logoWidthRatio:.13,brandSize:32,citySize:18}),
+  "Bannière":Object.freeze({family:"premium-banner",textTop:.10,textBottom:.50,logoLeft:.40,logoRight:.60,logoWidthRatio:.10,brandSize:24,citySize:14}),
+});
+function premiumBrandLockupFor(platform){
+  const normalized=normalizePlatform(platform);
+  return normalized==="Google Business"?null:(PREMIUM_LOCKUP_BY_PLATFORM[normalized]||null);
+}
+function targetPremiumLogoWidth(width,lockup){return Math.round(Number(width)*Number(lockup?.logoWidthRatio||0));}
+function targetStoryLogoWidth(width){return targetPremiumLogoWidth(width,PREMIUM_LOCKUP_BY_PLATFORM.Story);}
 function computeBrandTailGeometry({logoBrandGap,brandSize,citySize}){
   const brandBaselineOffset=logoBrandGap+brandSize;
   const cityBaselineOffset=brandBaselineOffset+brandSize*1.28;
@@ -150,17 +163,18 @@ function layoutFor(width, height, platform, requestedZone, hasHeadline, selected
     const margin=Math.max(Math.round(width*.06),Math.round(width*template.margins));
     const textSafe=posterStrategy?.textSafeArea;
     const logoSafe=posterStrategy?.logoSafeArea;
+    const premiumLockup=premiumBrandLockupFor(normalized);
     const x=textSafe?Math.max(margin,Math.round(width*textSafe.left)):Math.max(margin,Math.round(width*spec.x));
     let y=textSafe?Math.max(margin,Math.round(height*textSafe.top)):Math.max(margin,Math.round(height*spec.y));
     const boxWidth=textSafe?Math.min(Math.round(width*(textSafe.right-textSafe.left)),width-x-margin):Math.min(Math.round(width*spec.width),width-x-margin);
     let textBottom=textSafe?Math.round(height*textSafe.bottom):Math.min(height-margin,y+Math.round(height*(hasHeadline?.18:.04)));
-    if(normalized==="Story"){
-      if(!textSafe)y=Math.round(height*.60);
-      textBottom=Math.min(textBottom,Math.round(height*.70));
+    if(premiumLockup){
+      y=Math.max(margin,Math.round(height*premiumLockup.textTop));
+      textBottom=Math.min(height-margin,Math.round(height*premiumLockup.textBottom));
     }
     const logoArea=logoSafe?{left:Math.round(width*logoSafe.left),right:Math.round(width*logoSafe.right),top:Math.round(height*logoSafe.top),bottom:Math.round(height*logoSafe.bottom)}:{left:x,right:x+boxWidth,top:textBottom,bottom:Math.min(height-margin,textBottom+Math.round(height*(height>width?.12:.18)))};
-    if(normalized==="Story"){
-      logoArea.left=Math.round(width*.18);logoArea.right=Math.round(width*.82);
+    if(premiumLockup){
+      logoArea.left=Math.round(width*premiumLockup.logoLeft);logoArea.right=Math.round(width*premiumLockup.logoRight);
       logoArea.top=textBottom+Math.round(height*.006);
       logoArea.bottom=Math.min(height-margin,height-Math.max(24,Math.round(height*.035)));
     }
@@ -321,7 +335,9 @@ async function composeBrandPoster({ imageBuffer, logoDataUrl, platform, headline
   const hasHeadline = Boolean(String(headline || "").trim());
   const layout = layoutFor(width, height, platform, zoneText, hasHeadline, selectedLayout,posterStrategy);
   const { title, subtitle } = headlineParts(headline);
-  const story=normalizePlatform(platform)==="Story";
+  const normalizedPlatform=normalizePlatform(platform);
+  const story=normalizedPlatform==="Story";
+  const premiumLockup=premiumBrandLockupFor(normalizedPlatform);
   const scale = Math.max(0.78, Math.min(1.55, width / 1088));
   const titleLines = posterStrategy?.titleLines||semanticLines(title,story?4:3,story?18:22);
   const subtitleLines = textMode==="TEXT_MODE_MINIMAL"?[]:(posterStrategy?.subtitleLines||semanticLines(subtitle,2,28));
@@ -337,9 +353,9 @@ async function composeBrandPoster({ imageBuffer, logoDataUrl, platform, headline
   const logoMeta = await sharp(cleanLogo).metadata();
   const logoFraction=posterStrategy?.logoScale==="discreet"?.12:posterStrategy?.logoScale==="standard"?.16:.21;
   const logoAreaWidth=(layout.logoArea?.right-layout.logoArea?.left)||layout.width;
-  const desiredLogoWidth=story?targetStoryLogoWidth(width):Math.round(logoAreaWidth*logoFraction/.21);
-  const brandSize=Math.round((story?50:(layout.portrait?29:27))*scale);
-  const citySize=Math.round((story?30:15)*scale);
+  const desiredLogoWidth=premiumLockup?targetPremiumLogoWidth(width,premiumLockup):Math.round(logoAreaWidth*logoFraction/.21);
+  const brandSize=Math.round((premiumLockup?premiumLockup.brandSize:(layout.portrait?29:27))*scale);
+  const citySize=Math.round((premiumLockup?premiumLockup.citySize:15)*scale);
   const logoBrandGap=Math.max(8,Math.round(height*.006));
   const brandTail=computeBrandTailGeometry({logoBrandGap,brandSize,citySize});
   const minimumBottomMargin = Math.max(Math.round(height*.035), 24);
@@ -379,7 +395,9 @@ async function composeBrandPoster({ imageBuffer, logoDataUrl, platform, headline
   const semanticLinesValid=validateSemanticLines(titleLines,story?4:3)&&validateSemanticLines(subtitleLines,2);
   const compositionManifest=Object.freeze({
     version:COMPOSITOR_VERSION,
-    platform:normalizePlatform(platform),
+    platform:normalizedPlatform,
+    premiumBrandLockup:Boolean(premiumLockup),
+    premiumBrandLockupFamily:premiumLockup?.family||"google-legacy",
     width,height,
     title,subtitle,
     titleLines:[...titleLines],subtitleLines:[...subtitleLines],
@@ -421,4 +439,4 @@ async function composeBrandPoster({ imageBuffer, logoDataUrl, platform, headline
   return output;
 }
 
-module.exports = { BRAND_TOKENS, COMPOSITOR_VERSION, FONT_PATHS, composeBrandPoster, dataUrlToBuffer, escapeXml, wrapWords, normalizedZone, normalizeLogoRaster,buildLogoSilhouetteMask,removeBorderConnectedDarkBackground,prepareLogoOverlay,hasOpaqueLogoRectangle,vectorText,measureVectorText,fitFontSize,fitTypography,validateSemanticLines,targetStoryLogoWidth,computeBrandTailGeometry,layoutFor,BRAND_CONTACTS };
+module.exports = { BRAND_TOKENS, COMPOSITOR_VERSION, FONT_PATHS, PREMIUM_LOCKUP_BY_PLATFORM, premiumBrandLockupFor, targetPremiumLogoWidth, composeBrandPoster, dataUrlToBuffer, escapeXml, wrapWords, normalizedZone, normalizeLogoRaster,buildLogoSilhouetteMask,removeBorderConnectedDarkBackground,prepareLogoOverlay,hasOpaqueLogoRectangle,vectorText,measureVectorText,fitFontSize,fitTypography,validateSemanticLines,targetStoryLogoWidth,computeBrandTailGeometry,layoutFor,BRAND_CONTACTS };

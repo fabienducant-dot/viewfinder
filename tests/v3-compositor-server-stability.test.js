@@ -45,7 +45,7 @@ test("le healthcheck gratuit prouve le bundle sans lire de job ni générer d'im
   assert.equal(response.statusCode,200);
   assert.equal(body.ok,true);
   assert.equal(body.recomposeVersion,"2.1.0-font-bundle-diagnostic");
-  assert.equal(body.compositorVersion,"2.2.2-precise-emblem-silhouette");
+  assert.equal(body.compositorVersion,"2.3.0-premium-lockup-all-non-google");
   assert.deepEqual(body.fonts,{cormorant600:true,manrope500:true,manrope600:true});
   assert.equal(body[["cin","zel"].join("")],false);
   assert.equal(body.imageGenerationCalls,0);
