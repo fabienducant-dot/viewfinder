@@ -57,7 +57,8 @@ jobs:
             const normalized=normalizePlatform(platform);
             return normalized==="Google Business"?null:(PREMIUM_LOCKUP_BY_PLATFORM[normalized]||null);
           }
-          function targetPremiumLogoWidth(width,lockup){return Math.round(Number(width)*Number(lockup?.logoWidthRatio||0));}'''
+          function targetPremiumLogoWidth(width,lockup){return Math.round(Number(width)*Number(lockup?.logoWidthRatio||0));}
+          function targetStoryLogoWidth(width){return targetPremiumLogoWidth(width,PREMIUM_LOCKUP_BY_PLATFORM.Story);}'''
           if old not in s:
               raise SystemExit('targetStoryLogoWidth marker not found')
           s = s.replace(old, new)
@@ -121,7 +122,7 @@ jobs:
         run: |
           node - <<'NODE'
           const assert=require('node:assert/strict');
-          const {premiumBrandLockupFor,targetPremiumLogoWidth}=require('./netlify/functions/_shared/brand-compositor');
+          const {premiumBrandLockupFor,targetPremiumLogoWidth,targetStoryLogoWidth}=require('./netlify/functions/_shared/brand-compositor');
           const expected={
             'Instagram Square':.26,
             'Instagram Portrait':.26,
@@ -138,6 +139,7 @@ jobs:
             assert.ok(lockup.logoLeft<lockup.logoRight,platform);
             assert.equal(targetPremiumLogoWidth(1000,lockup),Math.round(1000*ratio),platform);
           }
+          assert.equal(targetStoryLogoWidth(1000),330);
           assert.equal(premiumBrandLockupFor('Instagram').family,'premium-portrait');
           assert.equal(premiumBrandLockupFor('Article Blog Wix').family,'premium-editorial');
           assert.equal(premiumBrandLockupFor('Google Business'),null);
