@@ -1,0 +1,117 @@
+name: Harden professional bodywork image safety framing
+
+on:
+  push:
+    branches:
+      - codex/stabiliser-le-compositor-sharp
+    paths:
+      - .github/workflows/harden-bodywork-image-safety.yml
+
+permissions:
+  contents: write
+
+jobs:
+  harden-and-validate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Checkout compositor branch
+        uses: actions/checkout@v4
+        with:
+          ref: codex/stabiliser-le-compositor-sharp
+          fetch-depth: 0
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: Install locked dependencies
+        run: npm ci
+
+      - name: Add professional and modest bodywork framing
+        shell: bash
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+
+          art = Path('netlify/functions/_shared/v3-art-direction.js')
+          s = art.read_text()
+          marker = ' const exclusions=relevantExclusions(c).filter(item=>!c.generic||!/soin|prestation/i.test(item));'
+          insertion = ''' const professionalBodyworkRule=c.name==="Massage Enfant"
+            ?"CADRE PROFESSIONNEL PROTECTEUR — Enfant entièrement vêtu, parent clairement visible, praticien professionnel, contact uniquement à travers les vêtements sur les zones prévues, contexte familial et de bien-être explicite."
+            :(/massage|drainage|réflexologie/i.test(c.type)
+              ?"CADRE PROFESSIONNEL ET PUDIQUE — Tous les sujets humains sont des adultes. Scène de bien-être strictement professionnelle. Le bénéficiaire reste vêtu ou couvert par un drap de soin opaque ; seule la zone strictement nécessaire au geste est visible. Postures neutres et naturelles, contexte de cabinet explicite, aucune mise en scène romantique."
+              :"");
+'''
+          if 'CADRE PROFESSIONNEL ET PUDIQUE' not in s:
+              if marker not in s:
+                  raise SystemExit('art-direction insertion marker not found')
+              s = s.replace(marker, insertion + marker, 1)
+          scene_marker = '  `SCÈNE — ${scene}`,\n  serviceDirectionDetails,'
+          scene_replacement = '  `SCÈNE — ${scene}`,\n  professionalBodyworkRule,\n  serviceDirectionDetails,'
+          if scene_replacement not in s:
+              if scene_marker not in s:
+                  raise SystemExit('prompt scene marker not found')
+              s = s.replace(scene_marker, scene_replacement, 1)
+          art.write_text(s)
+
+          registry = Path('netlify/functions/_shared/v3-registry.js')
+          r = registry.read_text()
+          old = '["Massage dos/zone","massage ciblé",2,"zone demandée","praticien","geste précis sur la zone","zone ciblée au centre de la narration","table","machine","pierres, fleurs","tenue noire","allongé ou assis","dos ou zone explicitement demandée"],'
+          new = '["Massage dos/zone","massage ciblé",2,"zone demandée","praticien","geste précis sur la zone","zone ciblée au centre de la narration","table","machine","pierres, fleurs","praticien en tenue noire ; bénéficiaire vêtu ou drapé professionnellement","allongé ou assis, posture de soin neutre","dos ou zone explicitement demandée"],'
+          if old in r:
+              r = r.replace(old, new, 1)
+          elif new not in r:
+              raise SystemExit('registry Massage dos/zone marker not found')
+          registry.write_text(r)
+
+          tests = Path('tests/v3-prompt-construction.test.js')
+          t = tests.read_text()
+          test_block = r'''
+
+test("Massage dos/zone cadre explicitement le Golden Test comme une scène professionnelle et pudique",()=>{
+ const plan=planV3({service:"Massage dos/zone",platform:"Story",subject:"Douleurs dorsales, blocage, sensations de lourdeur",selectedRegisters:["Fantastique","Cinématographie","Architecture"],textChoice:"automatic",costMode:"test",creativeSeed:"golden-target-systemic"});
+ assert.match(plan.photoBrief.prompt,/CADRE PROFESSIONNEL ET PUDIQUE/);
+ assert.match(plan.photoBrief.prompt,/Tous les sujets humains sont des adultes/);
+ assert.match(plan.photoBrief.prompt,/vêtu ou couvert par un drap de soin opaque/);
+ assert.match(plan.photoBrief.prompt,/postures neutres et naturelles/i);
+ assert.match(plan.photoBrief.prompt,/aucune mise en scène romantique/i);
+ assert.match(plan.photoBrief.prompt,/bénéficiaire vêtu ou drapé professionnellement/i);
+});
+'''
+          if 'Massage dos/zone cadre explicitement le Golden Test' not in t:
+              t += test_block
+          tests.write_text(t)
+          PY
+
+      - name: Validate exact Golden prompt without calling Images
+        run: |
+          node - <<'NODE'
+          const assert=require('node:assert/strict');
+          const {planV3}=require('./netlify/functions/_shared/v3-pipeline');
+          const plan=planV3({service:'Massage dos/zone',platform:'Story',subject:'Douleurs dorsales, blocage, sensations de lourdeur',selectedRegisters:['Fantastique','Cinématographie','Architecture'],textChoice:'automatic',costMode:'test',creativeSeed:'golden-target-systemic'});
+          assert.match(plan.photoBrief.prompt,/CADRE PROFESSIONNEL ET PUDIQUE/);
+          assert.match(plan.photoBrief.prompt,/drap de soin opaque/);
+          assert.match(plan.photoBrief.prompt,/postures neutres et naturelles/i);
+          console.log('SAFE_GOLDEN_PROMPT_READY=true');
+          console.log('PROMPT_LENGTH='+plan.photoBrief.prompt.length);
+          NODE
+
+      - name: Run full tests
+        run: npm test
+
+      - name: Verify no dependency drift
+        run: |
+          git diff --check
+          git diff --exit-code -- package.json package-lock.json
+
+      - name: Commit validated safety framing
+        shell: bash
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add netlify/functions/_shared/v3-art-direction.js netlify/functions/_shared/v3-registry.js tests/v3-prompt-construction.test.js
+          git commit -m "Frame bodywork image prompts as professional and modest"
+          git push origin HEAD:codex/stabiliser-le-compositor-sharp

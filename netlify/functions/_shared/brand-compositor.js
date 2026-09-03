@@ -9,32 +9,41 @@ const BRAND_TOKENS=require("./v3-brand-tokens");
 const {semanticLines}=require("./v3-creative-strategy");
 
 const GOLD=BRAND_TOKENS.brandGold, PALE_GOLD=BRAND_TOKENS.brandPaleGold, IVORY=BRAND_TOKENS.brandIvory;
-const COMPOSITOR_VERSION="2.0.0-safe-lockup";
+const COMPOSITOR_VERSION="2.3.0-premium-lockup-all-non-google";
 const BRAND_CONTACTS = Object.freeze({
   domain:"la-sante-des-zebres.com", phone:"06.84.40.69.54",
   address:"11 cour Dupas, 59590 Raismes", email:"fabien.ducant@gmail.com",
 });
 
-/* Netlify n'embarque pas les polices système utilisées par librsvg. Avec un simple <text>
-   SVG, les accents français devenaient donc des carrés. Les lettres sont maintenant converties
-   en tracés vectoriels à partir d'une police Cinzel embarquée : le rendu est identique sur tous
-   les environnements et l'OCR reçoit de vraies lettres lisibles. */
-function loadFont(relativeFile){
-  const file = require.resolve(`@fontsource/cinzel/files/${relativeFile}`);
+/* Ces six chemins doivent rester statiques : esbuild peut ainsi tracer chaque WOFF jusque dans
+   l'archive Lambda, sans police système ni résolution de package construite à l'exécution. */
+const DISPLAY_LATIN_PATH=require.resolve("@fontsource/cormorant-garamond/files/cormorant-garamond-latin-600-normal.woff");
+const DISPLAY_EXTENDED_PATH=require.resolve("@fontsource/cormorant-garamond/files/cormorant-garamond-latin-ext-600-normal.woff");
+const TEXT_LATIN_PATH=require.resolve("@fontsource/manrope/files/manrope-latin-500-normal.woff");
+const TEXT_EXTENDED_PATH=require.resolve("@fontsource/manrope/files/manrope-latin-ext-500-normal.woff");
+const BRAND_LATIN_PATH=require.resolve("@fontsource/manrope/files/manrope-latin-600-normal.woff");
+const BRAND_EXTENDED_PATH=require.resolve("@fontsource/manrope/files/manrope-latin-ext-600-normal.woff");
+const FONT_PATHS=Object.freeze({
+  displayLatin:DISPLAY_LATIN_PATH,displayExtended:DISPLAY_EXTENDED_PATH,
+  textLatin:TEXT_LATIN_PATH,textExtended:TEXT_EXTENDED_PATH,
+  brandLatin:BRAND_LATIN_PATH,brandExtended:BRAND_EXTENDED_PATH,
+});
+
+function loadFont(file){
   const buffer = fs.readFileSync(file);
   const arrayBuffer = buffer.buffer.slice(buffer.byteOffset, buffer.byteOffset + buffer.byteLength);
   return opentype.parse(arrayBuffer);
 }
 
-function loadFontSet(weight){
-  return {
-    latin: loadFont(`cinzel-latin-${weight}-normal.woff`),
-    extended: loadFont(`cinzel-latin-ext-${weight}-normal.woff`),
-  };
+function loadFontSet(latinPath, extendedPath){
+  return {latin:loadFont(latinPath),extended:loadFont(extendedPath)};
 }
 
-const DISPLAY_FONT = loadFontSet(600);
-const TEXT_FONT = loadFontSet(400);
+const DISPLAY_FONT=loadFontSet(DISPLAY_LATIN_PATH,DISPLAY_EXTENDED_PATH);
+const TEXT_FONT=loadFontSet(TEXT_LATIN_PATH,TEXT_EXTENDED_PATH);
+const BRAND_FONT=loadFontSet(BRAND_LATIN_PATH,BRAND_EXTENDED_PATH);
+// Le raster nettoyé est ajusté sur l'œuvre réellement visible, sans inventer de silhouette.
+const MEDALLION_DIAMETER_RATIO=1;
 const TRANSPARENT_LOGO_CACHE = new Map();
 
 function dataUrlToBuffer(dataUrl){
@@ -120,6 +129,30 @@ function fitTypography({titleLines,subtitleLines,safeWidth,safeHeight,preferredT
   }
   return {titleSize,subtitleSize,usedHeight:usedHeight()};
 }
+function validateSemanticLines(lines, maximum){
+  const weak=new Set(["À","AU","AUX","DE","DES","DU","ET","LE","LA","LES","OU","UN","UNE"]);
+  return lines.length<=maximum&&lines.every(line=>String(line).trim()&&!weak.has(String(line).trim().toUpperCase()));
+}
+const PREMIUM_LOCKUP_BY_PLATFORM=Object.freeze({
+  "Instagram Square":Object.freeze({family:"premium-square",textTop:.38,textBottom:.62,logoLeft:.25,logoRight:.75,logoWidthRatio:.26,brandSize:38,citySize:22}),
+  "Instagram Portrait":Object.freeze({family:"premium-portrait",textTop:.40,textBottom:.64,logoLeft:.22,logoRight:.78,logoWidthRatio:.26,brandSize:42,citySize:24}),
+  Facebook:Object.freeze({family:"premium-social",textTop:.40,textBottom:.64,logoLeft:.23,logoRight:.77,logoWidthRatio:.26,brandSize:42,citySize:24}),
+  Story:Object.freeze({family:"premium-story",textTop:.60,textBottom:.70,logoLeft:.18,logoRight:.82,logoWidthRatio:.33,brandSize:50,citySize:30}),
+  Blog:Object.freeze({family:"premium-editorial",textTop:.35,textBottom:.60,logoLeft:.34,logoRight:.66,logoWidthRatio:.13,brandSize:32,citySize:18}),
+  "Bannière":Object.freeze({family:"premium-banner",textTop:.10,textBottom:.50,logoLeft:.40,logoRight:.60,logoWidthRatio:.10,brandSize:24,citySize:14}),
+});
+function premiumBrandLockupFor(platform){
+  const normalized=normalizePlatform(platform);
+  return normalized==="Google Business"?null:(PREMIUM_LOCKUP_BY_PLATFORM[normalized]||null);
+}
+function targetPremiumLogoWidth(width,lockup){return Math.round(Number(width)*Number(lockup?.logoWidthRatio||0));}
+function targetStoryLogoWidth(width){return targetPremiumLogoWidth(width,PREMIUM_LOCKUP_BY_PLATFORM.Story);}
+function computeBrandTailGeometry({logoBrandGap,brandSize,citySize}){
+  const brandBaselineOffset=logoBrandGap+brandSize;
+  const cityBaselineOffset=brandBaselineOffset+brandSize*1.28;
+  const tailHeight=cityBaselineOffset+Math.round(citySize*.18);
+  return Object.freeze({brandBaselineOffset,cityBaselineOffset,tailHeight});
+}
 async function hasOpaqueLogoRectangle(buffer){const {data,info}=await sharp(buffer).ensureAlpha().raw().toBuffer({resolveWithObject:true});const inset=Math.max(0,Math.round(Math.min(info.width,info.height)*.02));return [[inset,inset],[info.width-1-inset,inset],[inset,info.height-1-inset],[info.width-1-inset,info.height-1-inset]].every(([x,y])=>{const o=(y*info.width+x)*info.channels;return data[o+3]>245&&Math.max(data[o],data[o+1],data[o+2])<=55;});}
 
 function layoutFor(width, height, platform, requestedZone, hasHeadline, selectedLayout, posterStrategy){
@@ -130,11 +163,21 @@ function layoutFor(width, height, platform, requestedZone, hasHeadline, selected
     const margin=Math.max(Math.round(width*.06),Math.round(width*template.margins));
     const textSafe=posterStrategy?.textSafeArea;
     const logoSafe=posterStrategy?.logoSafeArea;
+    const premiumLockup=premiumBrandLockupFor(normalized);
     const x=textSafe?Math.max(margin,Math.round(width*textSafe.left)):Math.max(margin,Math.round(width*spec.x));
-    const y=textSafe?Math.max(margin,Math.round(height*textSafe.top)):Math.max(margin,Math.round(height*spec.y));
+    let y=textSafe?Math.max(margin,Math.round(height*textSafe.top)):Math.max(margin,Math.round(height*spec.y));
     const boxWidth=textSafe?Math.min(Math.round(width*(textSafe.right-textSafe.left)),width-x-margin):Math.min(Math.round(width*spec.width),width-x-margin);
-    const textBottom=textSafe?Math.round(height*textSafe.bottom):Math.min(height-margin,y+Math.round(height*(hasHeadline?.18:.04)));
+    let textBottom=textSafe?Math.round(height*textSafe.bottom):Math.min(height-margin,y+Math.round(height*(hasHeadline?.18:.04)));
+    if(premiumLockup){
+      y=Math.max(margin,Math.round(height*premiumLockup.textTop));
+      textBottom=Math.min(height-margin,Math.round(height*premiumLockup.textBottom));
+    }
     const logoArea=logoSafe?{left:Math.round(width*logoSafe.left),right:Math.round(width*logoSafe.right),top:Math.round(height*logoSafe.top),bottom:Math.round(height*logoSafe.bottom)}:{left:x,right:x+boxWidth,top:textBottom,bottom:Math.min(height-margin,textBottom+Math.round(height*(height>width?.12:.18)))};
+    if(premiumLockup){
+      logoArea.left=Math.round(width*premiumLockup.logoLeft);logoArea.right=Math.round(width*premiumLockup.logoRight);
+      logoArea.top=textBottom+Math.round(height*.006);
+      logoArea.bottom=Math.min(height-margin,height-Math.max(24,Math.round(height*.035)));
+    }
     const result={x,y,width:boxWidth,height:Math.max(1,textBottom-y),margin,portrait:height>width*1.35,landscape:width>height*1.35,template,align:spec.align,textArea:{top:y,bottom:textBottom},logoArea};
     return result;
   }
@@ -156,22 +199,22 @@ function layoutFor(width, height, platform, requestedZone, hasHeadline, selected
   return { x, y, width: boxW, height: boxH, margin, portrait, landscape };
 }
 
-function buildOverlaySvg(width, height, layout, platform, headline, posterStrategy){
+function buildOverlaySvg(width, height, layout, platform, headline, posterStrategy,brandLockup){
   const { title, subtitle } = headlineParts(headline);
   const story=normalizePlatform(platform)==="Story";
   const scale = Math.max(0.78, Math.min(1.55, width / 1088));
   const safeWidth=Math.min(layout.width,width-Math.max(layout.margin,Math.round(width*.06))*2);
   const preferredTitle=Math.round((story?48:(layout.portrait ? 67 : 62))*scale);
   const preferredSubtitle=Math.round((story?32:(layout.portrait ? 42 : 38))*scale);
-  const brandSize = Math.round((layout.portrait ? 29 : 27) * scale);
-  const citySize = Math.round(15 * scale);
+  const brandSize=brandLockup.brandSize;
+  const citySize=brandLockup.citySize;
   const textMode=posterStrategy?.textMode||"TEXT_MODE_EDITORIAL";
   const titleLines=posterStrategy?.titleLines||semanticLines(title,story?4:3,story?18:22);
   const subtitleLines=textMode==="TEXT_MODE_MINIMAL"?[]:(posterStrategy?.subtitleLines||semanticLines(subtitle,2,28));
   const type=fitTypography({titleLines,subtitleLines,safeWidth,safeHeight:Math.max(1,layout.textArea.bottom-layout.textArea.top-Math.round(height*.018)),preferredTitle,preferredSubtitle,minimumTitle:Math.round(24*scale),minimumSubtitle:Math.round(18*scale)});
   const titleSize=type.titleSize,subtitleSize=type.subtitleSize;
   const centerX = layout.x + layout.width / 2;
-  const logoCenterX=layout.logoArea?.left!==undefined?(layout.logoArea.left+layout.logoArea.right)/2:centerX;
+  const logoCenterX=brandLockup.centerX;
   const textTop = layout.textArea.top + Math.round((layout.textArea.bottom-layout.textArea.top) * 0.08);
   let textY = textTop + titleSize;
   const titleNodes = titleLines.map((line, index)=>
@@ -183,58 +226,97 @@ function buildOverlaySvg(width, height, layout, platform, headline, posterStrate
   ).join("");
   const headlineEnd = subtitleLines.length?textY+subtitleLines.length*subtitleSize*1.10:textY;
   const dividerY = Math.min(layout.textArea.bottom-Math.round(height*.008),headlineEnd+Math.round(height*.012));
-  const brandY = Math.min(height-layout.margin-Math.round(citySize*1.8),layout.logoArea.bottom+Math.round(brandSize*1.05));
+  const brandY=brandLockup.brandBaseline;
   const scrimTop = Math.max(0, layout.y - Math.round(height * 0.025));
   const scrimBottom = Math.min(height, layout.y + layout.height + Math.round(height * 0.025));
-  const border = Math.max(2, Math.round(width * 0.0017));
-  const contactFields=(layout.template&&layout.template.contactFields)||[];
-  const contactText=contactFields.map(key=>BRAND_CONTACTS[key]).filter(Boolean).join(" · ");
-  const contactY=Math.min(height-layout.margin,brandY+brandSize*1.38+citySize*1.55);
   return Buffer.from(`
     <svg width="${width}" height="${height}" viewBox="0 0 ${width} ${height}" xmlns="http://www.w3.org/2000/svg">
       <defs>
         <linearGradient id="scrim" x1="0" y1="0" x2="0" y2="1">
-          <stop offset="0" stop-color="#050505" stop-opacity="0.08"/>
-          <stop offset="0.24" stop-color="#050505" stop-opacity="0.48"/>
-          <stop offset="0.76" stop-color="#050505" stop-opacity="0.58"/>
-          <stop offset="1" stop-color="#050505" stop-opacity="0.10"/>
+          <stop offset="0" stop-color="#050505" stop-opacity="0"/>
+          <stop offset="0.28" stop-color="#050505" stop-opacity="0.22"/>
+          <stop offset="0.72" stop-color="#050505" stop-opacity="0.34"/>
+          <stop offset="1" stop-color="#050505" stop-opacity="0"/>
         </linearGradient>
         <filter id="shadow"><feGaussianBlur stdDeviation="5"/></filter>
         <style>
           .brand,.city,.title,.subtitle { paint-order:stroke fill; stroke:#050505; stroke-opacity:.72; }
-          .brand { fill:${IVORY}; stroke-width:2px; }
+          .brand { fill:${GOLD}; stroke-width:2px; }
           .city { fill:${GOLD}; stroke-width:1px; }
           .title { fill:${IVORY}; stroke-width:3px; }
           .subtitle { fill:${PALE_GOLD}; stroke-width:2px; }
-          .contact { fill:${IVORY}; stroke-width:1px; }
         </style>
       </defs>
       <rect x="0" y="${scrimTop}" width="${width}" height="${scrimBottom-scrimTop}" fill="url(#scrim)"/>
-      <rect x="${Math.round(width*.018)}" y="${Math.round(height*.012)}" width="${Math.round(width*.964)}" height="${Math.round(height*.976)}" rx="${Math.round(width*.004)}" fill="none" stroke="${GOLD}" stroke-opacity=".68" stroke-width="${border}"/>
-      <line x1="${layout.x + layout.width*.30}" y1="${dividerY}" x2="${layout.x + layout.width*.70}" y2="${dividerY}" stroke="${GOLD}" stroke-width="${border}" stroke-opacity=".82"/>
-      ${vectorText(DISPLAY_FONT, "LA SANTÉ DES ZÈBRES", logoCenterX, brandY, brandSize, "brand")}
-      ${vectorText(DISPLAY_FONT, "RAISMES", logoCenterX, brandY + brandSize*1.38, citySize, "city")}
-      ${vectorText(TEXT_FONT, contactText, logoCenterX, contactY, Math.max(13,Math.round(citySize*.82)), "contact")}
+      <line x1="${layout.x + layout.width*.38}" y1="${dividerY}" x2="${layout.x + layout.width*.62}" y2="${dividerY}" stroke="${GOLD}" stroke-width="1" stroke-opacity=".46"/>
+      ${vectorText(BRAND_FONT, "LA SANTÉ DES ZÈBRES", logoCenterX, brandY, brandSize, "brand")}
+      ${vectorText(TEXT_FONT, "RAISMES", logoCenterX, brandLockup.cityBaseline, citySize, "city")}
       ${titleNodes}${subtitleNodes}
     </svg>`);
+}
+
+async function normalizeLogoRaster(logoBuffer){
+  return sharp(logoBuffer,{failOn:"none"}).rotate().ensureAlpha().png().toBuffer();
+}
+
+function buildLogoSilhouetteMask(width,height){
+  /* Compatibilité de test uniquement. Le détourage de production n'utilise plus de silhouette
+     géométrique inventée : il suit les pixels réels du logo officiel. */
+  return Buffer.from(`<svg width="${width}" height="${height}" viewBox="0 0 ${width} ${height}" xmlns="http://www.w3.org/2000/svg"><rect width="${width}" height="${height}" fill="white"/></svg>`);
+}
+
+async function removeBorderConnectedDarkBackground(normalizedLogo){
+  const {data,info}=await sharp(normalizedLogo,{failOn:"none"}).ensureAlpha().raw().toBuffer({resolveWithObject:true});
+  const width=info.width,height=info.height,channels=info.channels;
+  if(!width||!height||channels<4)throw new Error("Raster RGBA du logo officiel invalide.");
+  const pixelCount=width*height;
+  const visited=new Uint8Array(pixelCount);
+  const queue=new Int32Array(pixelCount);
+  let head=0,tail=0;
+  const isBackgroundCandidate=index=>{
+    const offset=index*channels;
+    const alpha=data[offset+3];
+    if(alpha===0)return true;
+    const r=data[offset],g=data[offset+1],b=data[offset+2];
+    const max=Math.max(r,g,b),min=Math.min(r,g,b);
+    return max<=96&&(max-min)<=28;
+  };
+  const enqueue=(x,y)=>{
+    if(x<0||y<0||x>=width||y>=height)return;
+    const index=y*width+x;
+    if(visited[index]||!isBackgroundCandidate(index))return;
+    visited[index]=1;
+    queue[tail++]=index;
+  };
+  for(let x=0;x<width;x++){enqueue(x,0);enqueue(x,height-1);}
+  for(let y=1;y<height-1;y++){enqueue(0,y);enqueue(width-1,y);}
+  while(head<tail){
+    const index=queue[head++];
+    const x=index%width,y=Math.floor(index/width);
+    enqueue(x-1,y);enqueue(x+1,y);enqueue(x,y-1);enqueue(x,y+1);
+  }
+  let minX=width,minY=height,maxX=-1,maxY=-1;
+  for(let index=0;index<pixelCount;index++){
+    const offset=index*channels;
+    if(visited[index])data[offset+3]=0;
+    if(data[offset+3]>8){
+      const x=index%width,y=Math.floor(index/width);
+      if(x<minX)minX=x;if(x>maxX)maxX=x;
+      if(y<minY)minY=y;if(y>maxY)maxY=y;
+    }
+  }
+  if(maxX<minX||maxY<minY)throw new Error("Détourage du logo officiel vide après suppression du fond extérieur.");
+  return sharp(data,{raw:{width,height,channels}})
+    .extract({left:minX,top:minY,width:maxX-minX+1,height:maxY-minY+1})
+    .png()
+    .toBuffer();
 }
 
 async function prepareLogoOverlay(logoBuffer){
   const cacheKey=crypto.createHash("sha256").update(logoBuffer).digest("hex");
   if(TRANSPARENT_LOGO_CACHE.has(cacheKey))return Buffer.from(TRANSPARENT_LOGO_CACHE.get(cacheKey));
-  const source = sharp(logoBuffer, { failOn: "none" }).rotate().ensureAlpha();
-  const { data, info } = await source.raw().toBuffer({ resolveWithObject: true });
-  const px = Buffer.from(data);
-  /* Détourage conservateur par composante connexe : seuls les pixels quasi noirs accessibles
-     depuis un bord deviennent transparents. Les noirs internes fermés du zèbre restent intacts. */
-  const seen=new Uint8Array(info.width*info.height);const queue=[];const dark=(x,y)=>{const o=(y*info.width+x)*info.channels;return px[o+3]>0&&Math.max(px[o],px[o+1],px[o+2])<=55;};
-  const seed=(x,y)=>{const i=y*info.width+x;if(!seen[i]&&dark(x,y)){seen[i]=1;queue.push([x,y]);}};
-  for(let x=0;x<info.width;x++){seed(x,0);seed(x,info.height-1);}for(let y=0;y<info.height;y++){seed(0,y);seed(info.width-1,y);}
-  for(let q=0;q<queue.length;q++){const [x,y]=queue[q];const o=(y*info.width+x)*info.channels;px[o+3]=0;for(const [nx,ny] of [[x-1,y],[x+1,y],[x,y-1],[x,y+1]])if(nx>=0&&ny>=0&&nx<info.width&&ny<info.height)seed(nx,ny);}
-  const output=await sharp(px, { raw: info })
-    .trim({ background: { r:0, g:0, b:0, alpha:0 } })
-    .png()
-    .toBuffer();
+  const normalizedLogo=await normalizeLogoRaster(logoBuffer);
+  const output=await removeBorderConnectedDarkBackground(normalizedLogo);
   TRANSPARENT_LOGO_CACHE.set(cacheKey,Buffer.from(output));return output;
 }
 
@@ -253,13 +335,16 @@ async function composeBrandPoster({ imageBuffer, logoDataUrl, platform, headline
   const hasHeadline = Boolean(String(headline || "").trim());
   const layout = layoutFor(width, height, platform, zoneText, hasHeadline, selectedLayout,posterStrategy);
   const { title, subtitle } = headlineParts(headline);
-  const story=normalizePlatform(platform)==="Story";
+  const normalizedPlatform=normalizePlatform(platform);
+  const story=normalizedPlatform==="Story";
+  const premiumLockup=premiumBrandLockupFor(normalizedPlatform);
   const scale = Math.max(0.78, Math.min(1.55, width / 1088));
   const titleLines = posterStrategy?.titleLines||semanticLines(title,story?4:3,story?18:22);
   const subtitleLines = textMode==="TEXT_MODE_MINIMAL"?[]:(posterStrategy?.subtitleLines||semanticLines(subtitle,2,28));
   const safeWidth=Math.min(layout.width,width-Math.max(layout.margin,Math.round(width*.06))*2);
   const type=fitTypography({titleLines,subtitleLines,safeWidth,safeHeight:Math.max(1,layout.textArea.bottom-layout.textArea.top-Math.round(height*.018)),preferredTitle:Math.round((story?48:(layout.portrait?67:62))*scale),preferredSubtitle:Math.round((story?32:(layout.portrait?42:38))*scale),minimumTitle:Math.round(24*scale),minimumSubtitle:Math.round(18*scale)});
   const titleSize=type.titleSize,subtitleSize=type.subtitleSize;
+  const centerX=layout.x+layout.width/2;
   const textTop = layout.textArea.top + Math.round((layout.textArea.bottom-layout.textArea.top) * 0.08);
   const textY = textTop + titleSize + titleLines.length * titleSize * 1.05 + subtitleSize * 0.45;
   const headlineEnd = textY + Math.max(1, subtitleLines.length) * subtitleSize * 1.10;
@@ -268,10 +353,14 @@ async function composeBrandPoster({ imageBuffer, logoDataUrl, platform, headline
   const logoMeta = await sharp(cleanLogo).metadata();
   const logoFraction=posterStrategy?.logoScale==="discreet"?.12:posterStrategy?.logoScale==="standard"?.16:.21;
   const logoAreaWidth=(layout.logoArea?.right-layout.logoArea?.left)||layout.width;
-  const desiredLogoWidth = Math.round(logoAreaWidth * logoFraction/.21);
+  const desiredLogoWidth=premiumLockup?targetPremiumLogoWidth(width,premiumLockup):Math.round(logoAreaWidth*logoFraction/.21);
+  const brandSize=Math.round((premiumLockup?premiumLockup.brandSize:(layout.portrait?29:27))*scale);
+  const citySize=Math.round((premiumLockup?premiumLockup.citySize:15)*scale);
+  const logoBrandGap=Math.max(8,Math.round(height*.006));
+  const brandTail=computeBrandTailGeometry({logoBrandGap,brandSize,citySize});
   const minimumBottomMargin = Math.max(Math.round(height*.035), 24);
   const logoZoneTop=layout.logoArea?.top??Math.round(dividerY + layout.height*.055);
-  const logoZoneBottom=layout.logoArea?.bottom??(height-minimumBottomMargin);
+  const logoZoneBottom=(layout.logoArea?.bottom??(height-minimumBottomMargin))-brandTail.tailHeight;
   const availableHeight = Math.max(24, logoZoneBottom-logoZoneTop);
   const sourceRatio = (logoMeta.width||1)/(logoMeta.height||1);
   const logoWidth = Math.max(24, Math.min(desiredLogoWidth, Math.floor(availableHeight*sourceRatio)));
@@ -286,18 +375,37 @@ async function composeBrandPoster({ imageBuffer, logoDataUrl, platform, headline
   const resizedLogo = await sharp(cleanLogo, { failOn: "none" })
     .resize({ width: logoWidth, withoutEnlargement: false, fit: "inside" })
     .png().toBuffer();
+  const resizedLogoMeta=await sharp(resizedLogo).metadata();
+  const finalLogoWidth=resizedLogoMeta.width||logoWidth,finalLogoHeight=resizedLogoMeta.height||estimatedLogoHeight;
   if(await hasOpaqueLogoRectangle(resizedLogo))throw new Error("Rectangle opaque détecté autour du logo officiel.");
+  const brandCenterX=logoLeft+finalLogoWidth/2;
+  const logoMedallionWidth=finalLogoWidth*MEDALLION_DIAMETER_RATIO;
+  const logoBottom=logoTop+finalLogoHeight;
+  const brandBaseline=logoBottom+brandTail.brandBaselineOffset;
+  const cityBaseline=logoBottom+brandTail.cityBaselineOffset;
+  const brandBottom=logoBottom+brandTail.tailHeight;
+  if(brandBottom>height-minimumBottomMargin)throw new Error("Lock-up de marque hors cadre.");
+  const brandLockup={centerX:brandCenterX,brandSize,citySize,brandBaseline,cityBaseline};
   const normalizedText=value=>String(value||"").trim().replace(/\s+/g," ");
   const titleWidths=titleLines.map(line=>measureVectorText(DISPLAY_FONT,line,titleSize));
   const subtitleWidths=subtitleLines.map(line=>measureVectorText(TEXT_FONT,line,subtitleSize));
+  const titleTop=textTop,titleBottom=textTop+titleLines.length*titleSize*1.05;
+  const subtitleTop=subtitleLines.length?textY-subtitleSize:0;
+  const subtitleBottom=subtitleLines.length?textY+(subtitleLines.length-1)*subtitleSize*1.10:0;
+  const semanticLinesValid=validateSemanticLines(titleLines,story?4:3)&&validateSemanticLines(subtitleLines,2);
   const compositionManifest=Object.freeze({
     version:COMPOSITOR_VERSION,
-    platform:normalizePlatform(platform),
+    platform:normalizedPlatform,
+    premiumBrandLockup:Boolean(premiumLockup),
+    premiumBrandLockupFamily:premiumLockup?.family||"google-legacy",
     width,height,
     title,subtitle,
     titleLines:[...titleLines],subtitleLines:[...subtitleLines],
     titleSize,subtitleSize,
     titleWidths,subtitleWidths,
+    textSafeArea:{left:layout.x,top:layout.textArea.top,right:layout.x+layout.width,bottom:layout.textArea.bottom},
+    titleBounds:{left:centerX-Math.max(0,...titleWidths)/2,top:titleTop,right:centerX+Math.max(0,...titleWidths)/2,bottom:titleBottom},
+    subtitleBounds:subtitleLines.length?{left:centerX-Math.max(...subtitleWidths)/2,top:subtitleTop,right:centerX+Math.max(...subtitleWidths)/2,bottom:subtitleBottom}:null,
     safeWidth,safeHeight:layout.textArea.bottom-layout.textArea.top,
     usedHeight:type.usedHeight,
     titleExact:normalizedText(titleLines.join(" "))===normalizedText(title),
@@ -306,14 +414,20 @@ async function composeBrandPoster({ imageBuffer, logoDataUrl, platform, headline
     marginsValid:layout.x>=Math.round(width*.04)&&layout.x+layout.width<=width-Math.round(width*.04),
     hierarchyValid:!subtitleLines.length||titleSize>subtitleSize,
     zonesDisjoint:layout.textArea.bottom<=layout.logoArea.top,
-    logoBounds:{left:logoLeft,top:logoTop,width:logoWidth,height:estimatedLogoHeight},
-    logoWithinCanvas:logoLeft>=0&&logoTop>=0&&logoLeft+logoWidth<=width&&logoTop+estimatedLogoHeight<=height-minimumBottomMargin,
+    semanticLinesValid,
+    logoBounds:{left:logoLeft,top:logoTop,width:finalLogoWidth,height:finalLogoHeight,right:logoLeft+finalLogoWidth,bottom:logoTop+finalLogoHeight},
+    completeLogoBounds:{left:logoLeft,top:logoTop,width:finalLogoWidth,height:finalLogoHeight,right:logoLeft+finalLogoWidth,bottom:logoTop+finalLogoHeight},
+    logoWidthRatio:finalLogoWidth/width,
+    logoMedallionWidth,logoMedallionWidthRatio:logoMedallionWidth/width,
+    brandLockup:{lines:["LA SANTÉ DES ZÈBRES","RAISMES"],contactLines:[],name:"LA SANTÉ DES ZÈBRES",city:"RAISMES",brandSize,citySize,tailHeight:brandTail.tailHeight,top:logoBottom+logoBrandGap,bottom:brandBottom,bottomMargin:height-brandBottom,minimumBottomMargin,centerX:brandCenterX},
+    logoWithinCanvas:logoLeft>=0&&logoTop>=0&&logoLeft+finalLogoWidth<=width&&logoTop+finalLogoHeight<=height-minimumBottomMargin,
     logoRectangleOpaque:false,
     completeText:[title,subtitle].filter(Boolean).join(" | "),
   });
   if(!compositionManifest.titleExact||!compositionManifest.subtitleExact)throw new Error("Texte validé tronqué ou remplacé pendant la composition.");
   if(!compositionManifest.hierarchyValid)throw new Error("Hiérarchie typographique invalide : le sous-titre domine le titre.");
-  const overlaySvg = buildOverlaySvg(width, height, layout, platform, headline, posterStrategy);
+  if(!compositionManifest.semanticLinesValid)throw new Error("Coupure sémantique invalide dans le bloc typographique.");
+  const overlaySvg = buildOverlaySvg(width, height, layout, platform, headline, posterStrategy,brandLockup);
   const output=await image
     .composite([
       { input: overlaySvg, left: 0, top: 0 },
@@ -325,4 +439,4 @@ async function composeBrandPoster({ imageBuffer, logoDataUrl, platform, headline
   return output;
 }
 
-module.exports = { BRAND_TOKENS, COMPOSITOR_VERSION, composeBrandPoster, dataUrlToBuffer, escapeXml, wrapWords, normalizedZone, prepareLogoOverlay, hasOpaqueLogoRectangle,vectorText, measureVectorText,fitFontSize,fitTypography,layoutFor, BRAND_CONTACTS };
+module.exports = { BRAND_TOKENS, COMPOSITOR_VERSION, FONT_PATHS, PREMIUM_LOCKUP_BY_PLATFORM, premiumBrandLockupFor, targetPremiumLogoWidth, composeBrandPoster, dataUrlToBuffer, escapeXml, wrapWords, normalizedZone, normalizeLogoRaster,buildLogoSilhouetteMask,removeBorderConnectedDarkBackground,prepareLogoOverlay,hasOpaqueLogoRectangle,vectorText,measureVectorText,fitFontSize,fitTypography,validateSemanticLines,targetStoryLogoWidth,computeBrandTailGeometry,layoutFor,BRAND_CONTACTS };

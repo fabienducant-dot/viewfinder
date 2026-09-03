@@ -6,7 +6,7 @@ const fs = require("node:fs");
 const path = require("node:path");
 const sharp = require("sharp");
 const { applyImageEditOptions, normalizeImageModel } = require("../netlify/functions/_shared/openai-image-edit-options");
-const { composeBrandPoster, prepareLogoOverlay, vectorText } = require("../netlify/functions/_shared/brand-compositor");
+const { composeBrandPoster, prepareLogoOverlay, normalizeLogoRaster, buildLogoSilhouetteMask, vectorText } = require("../netlify/functions/_shared/brand-compositor");
 
 const root = path.resolve(__dirname, "..");
 const index = fs.readFileSync(path.join(root, "index.html"), "utf8");
@@ -82,14 +82,51 @@ test("les textes de marque sont rendus en tracés vectoriels, accents compris", 
   assert.doesNotMatch(fs.readFileSync(path.join(root, "netlify/functions/_shared/brand-compositor.js"), "utf8"), /<text /);
 });
 
-test("un logo opaque sur fond noir est détouré avant composition", async () => {
-  const opaqueLogo = await sharp({
-    create: { width:120, height:120, channels:4, background:{ r:0, g:0, b:0, alpha:1 } },
-  }).composite([{ input:Buffer.from('<svg width="120" height="120"><circle cx="60" cy="60" r="34" fill="#D9AD3B"/></svg>') }]).png().toBuffer();
-  const clean = await prepareLogoOverlay(opaqueLogo);
-  const { data, info } = await sharp(clean).ensureAlpha().raw().toBuffer({ resolveWithObject:true });
-  assert.ok(info.width < 100 && info.height < 100);
-  assert.equal(data[3], 0);
+test("le détourage retire seulement le noir extérieur connecté aux bords", async () => {
+  const sourceSvg=Buffer.from(`<svg width="180" height="180" xmlns="http://www.w3.org/2000/svg">
+    <rect width="180" height="180" fill="#050505"/>
+    <circle cx="88" cy="94" r="54" fill="#050505" stroke="#D9AD3B" stroke-width="7"/>
+    <path d="M68 44 L88 12 L108 44 Z" fill="#050505" stroke="#D9AD3B" stroke-width="6"/>
+    <path d="M126 124 C145 127 160 136 169 151" fill="none" stroke="#D9AD3B" stroke-width="7" stroke-linecap="round"/>
+    <path d="M62 92 C76 72 98 72 113 92 C101 111 76 112 62 92 Z" fill="#D9AD3B"/>
+  </svg>`);
+  const opaqueLogo=await sharp(sourceSvg).png().toBuffer();
+  const clean=await prepareLogoOverlay(opaqueLogo);
+  const {data,info}=await sharp(clean).ensureAlpha().raw().toBuffer({resolveWithObject:true});
+  const pixel=(x,y)=>Array.from(data.subarray((y*info.width+x)*info.channels,(y*info.width+x)*info.channels+4));
+  assert.ok(info.width<180&&info.height<180,"le fond de bord doit être réellement rogné");
+  assert.equal(pixel(0,0)[3],0,"un coin de la bounding box finale reste transparent");
+  const center=pixel(Math.floor(info.width*.48),Math.floor(info.height*.55));
+  assert.ok(center[3]>245,"le noir intérieur du médaillon reste opaque");
+  assert.ok(Math.max(center[0],center[1],center[2])<40,"le noir intérieur du médaillon reste noir");
+  const topBand=[];
+  for(let y=0;y<Math.max(1,Math.floor(info.height*.25));y++)for(let x=Math.floor(info.width*.3);x<Math.ceil(info.width*.7);x++){
+    const p=pixel(x,y);if(p[3]>245&&Math.max(p[0],p[1],p[2])<40)topBand.push(p);
+  }
+  assert.ok(topBand.length>0,"l'intérieur noir du triangle officiel est conservé");
+  let ribbonGold=0,outerDark=0;
+  for(let y=Math.floor(info.height*.65);y<info.height;y++)for(let x=Math.floor(info.width*.68);x<info.width;x++){
+    const p=pixel(x,y),max=Math.max(p[0],p[1],p[2]),min=Math.min(p[0],p[1],p[2]);
+    if(p[3]>180&&p[0]>130&&p[1]>80&&p[2]<120)ribbonGold++;
+    if(p[3]>245&&max<70&&(max-min)<25)outerDark++;
+  }
+  assert.ok(ribbonGold>0,"la volute dorée reste visible");
+  assert.ok(outerDark<Math.round(info.width*info.height*.015),"aucune grosse masse noire n'est inventée autour de la volute");
+});
+
+test("un logo non carré auto-orienté utilise exactement les dimensions du raster normalisé",async()=>{
+  const orientedLogo=await sharp({create:{width:80,height:140,channels:3,background:"#050505"}})
+    .composite([{input:Buffer.from('<svg width="80" height="140"><circle cx="40" cy="72" r="34" fill="#D9AD3B"/></svg>')}])
+    .jpeg().withMetadata({orientation:6}).toBuffer();
+  const normalized=await normalizeLogoRaster(orientedLogo);
+  const normalizedMeta=await sharp(normalized).metadata();
+  assert.deepEqual([normalizedMeta.width,normalizedMeta.height],[140,80]);
+  const mask=buildLogoSilhouetteMask(normalizedMeta.width,normalizedMeta.height);
+  const maskMeta=await sharp(mask).metadata();
+  assert.deepEqual([maskMeta.width,maskMeta.height],[normalizedMeta.width,normalizedMeta.height]);
+  await assert.doesNotReject(()=>prepareLogoOverlay(orientedLogo));
+  const imageBuffer=await sharp({create:{width:1080,height:1920,channels:4,background:"#17120b"}}).png().toBuffer();
+  await assert.doesNotReject(()=>composeBrandPoster({imageBuffer,logoDataUrl:`data:image/jpeg;base64,${orientedLogo.toString("base64")}`,platform:"Story",headline:"TEST ORIENTATION | MASQUE NORMALISÉ"}));
 });
 
 test("le contrôle final fait confiance au logo exact composé par le serveur et bloque encore l'OCR", () => {
