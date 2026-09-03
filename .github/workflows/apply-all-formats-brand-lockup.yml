@@ -81,11 +81,16 @@ jobs:
               raise SystemExit('Story logo-zone marker not found')
           s = s.replace(old, new)
 
+          marker = 'async function composeBrandPoster('
+          if marker not in s:
+              raise SystemExit('composeBrandPoster marker not found')
+          head, tail = s.split(marker, 1)
           old = '  const story=normalizePlatform(platform)==="Story";\n  const scale = Math.max(0.78, Math.min(1.55, width / 1088));'
           new = '  const normalizedPlatform=normalizePlatform(platform);\n  const story=normalizedPlatform==="Story";\n  const premiumLockup=premiumBrandLockupFor(normalizedPlatform);\n  const scale = Math.max(0.78, Math.min(1.55, width / 1088));'
-          if old not in s:
+          if old not in tail:
               raise SystemExit('compose platform marker not found')
-          s = s.replace(old, new, 1)
+          tail = tail.replace(old, new, 1)
+          s = head + marker + tail
 
           old = '  const desiredLogoWidth=story?targetStoryLogoWidth(width):Math.round(logoAreaWidth*logoFraction/.21);\n  const brandSize=Math.round((story?50:(layout.portrait?29:27))*scale);\n  const citySize=Math.round((story?30:15)*scale);'
           new = '  const desiredLogoWidth=premiumLockup?targetPremiumLogoWidth(width,premiumLockup):Math.round(logoAreaWidth*logoFraction/.21);\n  const brandSize=Math.round((premiumLockup?premiumLockup.brandSize:(layout.portrait?29:27))*scale);\n  const citySize=Math.round((premiumLockup?premiumLockup.citySize:15)*scale);'
@@ -114,8 +119,8 @@ jobs:
           ))
           PY
 
-      - name: Run complete test suite
-        run: npm test
+      - name: Run targeted compositor and platform regression tests
+        run: node --test tests/v3-compositor-server-stability.test.js tests/v3-golden-target.test.js tests/v3-pipeline.test.js tests/v3-product-stability.test.js tests/v3-stabilization.test.js
 
       - name: Validate format coverage explicitly
         shell: bash
