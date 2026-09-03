@@ -128,6 +128,36 @@ async function generateStandard({ key, prompt, size, model, quality }){
   return res.json();
 }
 
+function isProviderSafetyRejection(error){
+  const text=String(error?.message||error||"");
+  return /safety system|safety_violations|image_generation_user_error/i.test(text);
+}
+
+function bodyworkSafetyFallbackEligible(v3Plan){
+  const type=String(v3Plan?.contract?.type||"").toLowerCase();
+  return /massage|drainage|réflexologie/.test(type);
+}
+
+function buildProviderSafeBodyworkPrompt(v3Plan){
+  const subject=String(v3Plan?.subjectBrief?.exactUserRequest||v3Plan?.subjectBrief?.coreTheme||"tension du haut du dos").replace(/\s+/g," ").trim();
+  const focus=String(v3Plan?.subjectBrief?.requestedFocus||"haut du dos et épaules").replace(/\s+/g," ").trim();
+  const active=v3Plan?.artDirection?.activeRegisters||{};
+  const architecture=active.architectural ? "Architecture noire et or profonde, crédible, avec une ouverture vers un paysage ample et lumineux." : "Studio de bien-être premium noir et or, sobre, crédible et spacieux.";
+  const fantastic=active.fantastic ? "Le registre fantastique vient uniquement de la profondeur, de la lumière, de l’échelle et du paysage, de manière photographique et crédible." : "";
+  return [
+    "Photographie éditoriale premium pour un cabinet de bien-être professionnel.",
+    `Sujet : ${subject}.`,
+    `Focus visuel : ${focus}.`,
+    "Montrer deux adultes entièrement habillés dans des vêtements opaques et professionnels.",
+    "Le bénéficiaire porte un haut noir opaque et reste assis ou debout ; sa posture du haut du dos et des épaules exprime clairement la tension et la lourdeur.",
+    "Le praticien masculin porte une tenue professionnelle noire et se tient à proximité dans une posture d’accompagnement neutre, sans contact physique.",
+    architecture,
+    fantastic,
+    "Photographie cinématographique noir et or, détails lisibles, profondeur réaliste, luxe silencieux, jamais illustration ni 3D.",
+    "Générer uniquement la scène photographique, sans texte, logo, signature, URL, badge ni pictogramme."
+  ].filter(Boolean).join("\n");
+}
+
 exports.handler = async (event) => {
   // --- Sécurité : secret partagé, vérifié avant toute autre action ---
   const providedSecret = (event.headers && (event.headers["x-image-job-secret"] || event.headers["X-Image-Job-Secret"])) || "";
@@ -201,6 +231,7 @@ exports.handler = async (event) => {
     let data;
     let usedReference = false;
     let referenceFallbackReason = null;
+    let providerSafetyFallbackUsed = false;
     const hasUrls = Array.isArray(referenceImageUrls) && referenceImageUrls.length;
     const hasData = Array.isArray(referenceImageData) && referenceImageData.length;
     try {
@@ -221,8 +252,21 @@ exports.handler = async (event) => {
         data = await generateStandard({ key, prompt, size, model, quality });
       }
     } catch (genErr) {
-      await safeSetJobStatus(store, jobId, { status: "failed", error: { message: String(genErr.message || genErr), source: "openai" }, usedReference: false, referenceFallbackReason });
-      return { statusCode: 200, body: JSON.stringify({ ok: false, error: String(genErr.message || genErr) }) };
+      const canFallback=!hasUrls&&!hasData&&v3Plan&&bodyworkSafetyFallbackEligible(v3Plan)&&isProviderSafetyRejection(genErr);
+      if(canFallback){
+        const safePrompt=buildProviderSafeBodyworkPrompt(v3Plan);
+        try{
+          data=await generateStandard({key,prompt:safePrompt,size,model,quality});
+          providerSafetyFallbackUsed=true;
+          referenceFallbackReason="provider-safety-fallback-after-rejected-primary-prompt";
+        }catch(fallbackErr){
+          await safeSetJobStatus(store,jobId,{status:"failed",error:{message:String(fallbackErr.message||fallbackErr),source:"openai-safety-fallback"},usedReference:false,referenceFallbackReason:"provider-safety-fallback-rejected",providerSafetyFallbackUsed:true});
+          return {statusCode:200,body:JSON.stringify({ok:false,error:String(fallbackErr.message||fallbackErr)})};
+        }
+      }else{
+        await safeSetJobStatus(store, jobId, { status: "failed", error: { message: String(genErr.message || genErr), source: "openai" }, usedReference: false, referenceFallbackReason, providerSafetyFallbackUsed:false });
+        return { statusCode: 200, body: JSON.stringify({ ok: false, error: String(genErr.message || genErr) }) };
+      }
     }
 
     let b64 = data.data?.[0]?.b64_json || null;
@@ -281,7 +325,7 @@ exports.handler = async (event) => {
 
     const resultKey = `jobs/${jobId}/result`;
     try {
-      await store.set(resultKey, JSON.stringify({ b64, url, usedReference, brandComposited, v3Finalization }));
+      await store.set(resultKey, JSON.stringify({ b64, url, usedReference, brandComposited, v3Finalization, providerSafetyFallbackUsed }));
     } catch (resultWriteErr) {
       await safeSetJobStatus(store, jobId, { status: "failed", error: { message: `Échec d'écriture du résultat : ${String(resultWriteErr.message || resultWriteErr)}`, source: "storage" }, usedReference, referenceFallbackReason });
       return { statusCode: 200, body: JSON.stringify({ ok: false, error: "Échec d'écriture du résultat" }) };
@@ -291,10 +335,10 @@ exports.handler = async (event) => {
     // pour l'archivage des coûts mesurés côté client. Additif, rétrocompatible.
     const usage = data.usage ? { input_tokens: data.usage.input_tokens ?? null, output_tokens: data.usage.output_tokens ?? null, input_tokens_details: data.usage.input_tokens_details ?? null } : null;
     const referenceImageCount=(referenceImageUrls||[]).length+(referenceImageData||[]).length;
-    const costAudit=buildCostAudit({mode:costMode||"test",referenceImageCount,referenceRoles,imageUsage:usage,visionUsage:v3Plan?{}:false,retries:0,imageCalls:1,requestedQuality,requestedSize,effectiveSize});
+    const costAudit=buildCostAudit({mode:costMode||"test",referenceImageCount,referenceRoles,imageUsage:usage,visionUsage:v3Plan?{}:false,retries:providerSafetyFallbackUsed?1:0,imageCalls:1,requestedQuality,requestedSize,effectiveSize});
     const referenceAudit={referenceImageCount,used:usedReference,reason:v3Plan?.psioRequired?"Étape PSiO® contractuelle":"Référence visuelle explicitement sélectionnée",stage:v3Plan?.contract.requiredCompositeStages?.find(x=>/PSiO/i.test(x))||null,roles:referenceRoles||[],estimatedInputImageCostEur:null,costDetermination:"unknown_until_billing",costIncludedInOutputEstimate:false,usage:data.usage?.input_tokens_details||null};
     const artFingerprint=v3Plan&&v3Finalization?artisticFingerprint(v3Plan,v3Finalization,v3Finalization.quality.ok?"validated":"refused"):null;
-    await safeSetJobStatus(store, jobId, { status: "completed", error: null, resultKey, rawResultKey, usedReference, referenceFallbackReason, brandComposited, v3Plan, v3Finalization,artFingerprint,referenceAudit,costAudit,requestedQuality,effectiveQuality:quality,requestedSize,effectiveSize:size,imageGenerationCallCount:1,usage });
+    await safeSetJobStatus(store, jobId, { status: "completed", error: null, resultKey, rawResultKey, usedReference, referenceFallbackReason, providerSafetyFallbackUsed, brandComposited, v3Plan, v3Finalization,artFingerprint,referenceAudit,costAudit,requestedQuality,effectiveQuality:quality,requestedSize,effectiveSize:size,imageGenerationCallCount:1,usage });
 
     // Nettoyage de l'entrée après usage réussi — best-effort, non bloquant si ça échoue.
     try { await store.delete(`jobs/${jobId}/input`); } catch (deleteErr) { /* pas grave, l'entrée reste simplement, sans impact fonctionnel */ }
