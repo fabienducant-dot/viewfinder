@@ -3,7 +3,7 @@
 const crypto=require("crypto");
 const {normalizePlatform}=require("./v3-layout-engine");
 
-const VERSION="4.0.0-scene-intent";
+const VERSION="4.1.0-scene-intent";
 const BODYWORK_RE=/massage|drainage|réflexologie/i;
 const PRODUCT_NAMES=new Set(["Luminothérapie PSIO®","Biorésonance quantique"]);
 const COMPOSITE_NAMES=new Set(["Offre Gold","Offre Sylver"]);
@@ -24,7 +24,11 @@ function resolveRegisters(subjectBrief={}){
 
 function explicitDemonstrationRequested(subjectBrief={}){
   const raw=clean(subjectBrief.exactUserRequest||subjectBrief.rawSubject||"");
-  return /\b(montrer|séance|geste|technique|pression|étirement|mouvement|massage en cours|réflexologie|pieds|visage|lunettes|appareil|dispositif|futon|table de massage)\b/i.test(raw);
+  /* Un simple mot anatomique (dos, pieds, visage...) ne doit JAMAIS transformer une intention
+     émotionnelle en photo de soin. Le mode démonstration n'est activé que par une demande
+     explicitement procédurale : montrer une séance, un geste, une technique ou un matériel. */
+  return /\b(montrer|montre|voir|visualiser|illustrer|filmer|photographier)\b[\s\S]{0,48}\b(séance|geste|technique|pression|étirement|mouvement|massage|réflexologie|appareil|dispositif|lunettes|futon|table)\b/i.test(raw)
+    || /\b(séance|geste|technique|massage en cours|réflexologie en cours|pression manuelle|étirement assisté|mouvement de massage)\b/i.test(raw);
 }
 
 function resolveVisualMode(contract,platform,subjectBrief={}){
@@ -40,7 +44,7 @@ function transformationFrom(subjectBrief={}){
   const core=clean(subjectBrief.coreTheme||subjectBrief.exactUserRequest||"un état de tension intérieure");
   const before=clean(subjectBrief.physicalOrEmotionalManifestation||subjectBrief.subjectVisualDirective||core);
   const moment=clean(subjectBrief.dramaticMoment||`L’instant précis où « ${core} » commence à perdre son emprise et où l’espace autour du sujet change.`);
-  const after=clean(subjectBrief.transformationPromise||`Une évolution crédible vers davantage d’espace, d’amplitude ou d’apaisement, sans promesse médicale.`);
+  const after=clean(subjectBrief.transformationPromise||"Une évolution crédible vers davantage d’espace, d’amplitude ou d’apaisement, sans promesse médicale.");
   return Object.freeze({before,moment,after});
 }
 
@@ -96,11 +100,11 @@ function productDirective(contract,mode){
   if(mode==="product_fidelity"&&contract.name==="Luminothérapie PSIO®")return "FIDÉLITÉ PRODUIT — Reproduire uniquement les lunettes PSiO® officielles à partir des références fournies : forme, proportions, couleurs et détails doivent rester fidèles. Ne rien inventer.";
   if(mode==="product_fidelity"&&contract.name==="Biorésonance quantique")return "PREUVE RÉELLE — Ne montrer qu’un dispositif réellement fourni en référence. Aucun scanner, écran médical ou machine fictive.";
   if(mode==="composite_fidelity")return `CONTINUITÉ DE L’OFFRE — ${contract.requiredCompositeStages.join(" → ")}. Les étapes doivent appartenir au même monde visuel et conserver les mêmes identités.`;
-  if(mode==="demonstration")return `PREUVE MÉTIER — Si la demande utilisateur exige explicitement la technique, montrer uniquement le geste distinctif suivant : ${contract.requiredAction}. Aucun accessoire interdit ou geste générique.`;
+  if(mode==="demonstration")return `PREUVE MÉTIER — La demande exige explicitement la technique : montrer uniquement le geste distinctif suivant : ${contract.requiredAction}. Aucun accessoire interdit ou geste générique.`;
   return "";
 }
 
-function buildProviderPrompt({contract,subjectBrief,artDirection,platform,mode,registers,transformation,peoplePolicy,environment,platformPolicy}){
+function buildProviderPrompt({contract,subjectBrief,platform,mode,registers,transformation,peoplePolicy,environment,platformPolicy}){
   const exact=clean(subjectBrief.exactUserRequest||subjectBrief.rawSubject||subjectBrief.coreTheme||"");
   const product=productDirective(contract,mode);
   const registerLine=[registers.cinematic&&"cinématographie",registers.fantastic&&"fantastique crédible",registers.architectural&&"architecture"].filter(Boolean).join(", ")||"socle cinématographique SDZ";
@@ -146,7 +150,7 @@ function buildSceneIntent({contract,subjectBrief,artDirection,platform}){
   const peoplePolicy=peoplePolicyFor(contract,mode,subjectBrief);
   const environment=environmentFor({subjectBrief,artDirection,registers,platform});
   const platformPolicy=platformPolicyFor(platform);
-  const providerPrompt=buildProviderPrompt({contract,subjectBrief,artDirection,platform,mode,registers,transformation,peoplePolicy,environment,platformPolicy});
+  const providerPrompt=buildProviderPrompt({contract,subjectBrief,platform,mode,registers,transformation,peoplePolicy,environment,platformPolicy});
   const serviceRole=mode==="narrative_consequence"?"invisible_cause":mode==="local_credibility"?"credible_context":"visible_proof";
   const validation=Object.freeze({
     requireDramaticMoment:mode==="narrative_consequence",
@@ -177,4 +181,4 @@ function auditSceneIntent(intent){
   return Object.freeze({ok:errors.length===0,errors,promptLength:prompt.length});
 }
 
-module.exports={VERSION,resolveRegisters,resolveVisualMode,buildSceneIntent,auditSceneIntent,platformPolicyFor};
+module.exports={VERSION,resolveRegisters,explicitDemonstrationRequested,resolveVisualMode,buildSceneIntent,auditSceneIntent,platformPolicyFor};
