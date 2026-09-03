@@ -62,7 +62,10 @@ function peoplePolicyFor(contract,mode,subjectBrief={}){
   if(contract.name==="Luminothérapie PSIO®")return "Une personne adulte entièrement vêtue porte les lunettes PSiO® officielles dans une posture confortable et neutre. Le produit reste le seul équipement spécifique visible.";
   return "Un adulte entièrement vêtu et, seulement si utile à la compréhension, un praticien en tenue professionnelle sobre. Aucun contexte médical inventé.";
  }
- if(mode==="composite_fidelity")return "Deux adultes maximum : le même bénéficiaire et le même praticien masculin adulte lorsqu’il est visible. Tenues professionnelles ou sobres, continuité d’identité stricte entre les étapes.";
+ if(mode==="composite_fidelity"){
+  const identities=Number(contract.uniqueIdentityCount||2),practitioner=contract.practitionerIdentity||"le même praticien masculin adulte";
+  return `Exactement ${identities} identités uniques : le même bénéficiaire et ${practitioner}. Tenues professionnelles ou sobres, continuité d’identité stricte entre les étapes, aucune troisième personne.`;
+ }
  if(mode==="local_credibility")return BODYWORK_RE.test(contract.type)?"Scène locale crédible de bien-être : adultes entièrement vêtus, posture neutre, contexte professionnel. Un praticien peut être présent mais aucun déshabillage ni mise en scène intime.":"Personnes uniquement si elles rendent la prestation immédiatement crédible, avec tenue sobre et contexte professionnel non médical.";
  return "Adultes entièrement vêtus, contexte professionnel explicite, postures neutres et dignes.";
 }
