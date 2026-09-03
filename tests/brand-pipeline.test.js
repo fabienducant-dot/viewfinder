@@ -69,8 +69,8 @@ test("aucun fallback fournisseur ne peut déclencher une seconde génération",(
   assert.doesNotMatch(worker,/providerSafetyFallback|buildProviderSafeBodyworkPrompt|bodyworkSafetyFallbackEligible|isProviderSafetyRejection/);
   assert.match(worker,/ce bloc contient l'unique appel Images du job/);
   assert.match(worker,/retries:0,imageCalls:1/);
-  const generationCalls=(worker.match(/generateStandard\(\{key,prompt,size,model,quality\}\)/g)||[]).length;
-  assert.equal(generationCalls,1,"un seul appel standard doit exister dans le chemin de génération");
+  assert.equal((worker.match(/await generateStandard\(/g)||[]).length,1,"un seul appel standard exécuté doit exister");
+  assert.equal((worker.match(/await generateWithReferenceImages\(/g)||[]).length,1,"un seul appel edits exécuté doit exister");
 });
 
 test("le compositeur serveur conserve marges, zones distinctes et mesures exactes",()=>{
