@@ -159,7 +159,7 @@ jobs:
             echo "Dependency files changed unexpectedly" >&2
             exit 1
           fi
-          if git grep -I -n -E '(sk-[A-Za-z0-9_-]{20,}|gh[pousr]_[A-Za-z0-9_]{20,}|AKIA[0-9A-Z]{16}|PRIVATE KEY)' -- ':!package-lock.json'; then
+          if git grep -I -n -E '(sk-[A-Za-z0-9_-]{20,}|gh[pousr]_[A-Za-z0-9_]{20,}|AKIA[0-9A-Z]{16}|PRIVATE KEY)' -- ':!package-lock.json' ':!.github/workflows/apply-all-formats-brand-lockup.yml'; then
             echo "Potential secret detected" >&2
             exit 1
           fi
