@@ -12,8 +12,24 @@ const PLATFORM_TEMPLATES=Object.freeze({
 });
 function normalizePlatform(platform){return PLATFORM_ALIASES[platform]||platform;}
 function list(value){return Array.isArray(value)?value.filter(Boolean):[];}
+function bool(value){return value===true;}
+function bounded(value,fallback=0){const n=Number(value);return Number.isFinite(n)?Math.max(0,Math.min(1,n)):fallback;}
 function analyzeActualImage(input={}){
- return { ...input,faces:list(input.faces),activeHands:list(input.activeHands),equipment:list(input.equipment||input.visibleObjects),subjects:list(input.subjects||input.visibleSubjects),gazeDirection:String(input.gazeDirection||"unknown"),protectedZones:list(input.protectedZones),calmZones:list(input.calmZones),availableContrast:Number(input.availableContrast||0),density:Number(input.density||0),negativeSpace:list(input.negativeSpace),peopleCount:Number(input.peopleCount??list(input.faces).length),identityCount:Number(input.identityCount??input.peopleCount??list(input.faces).length),sameBeneficiary:input.sameBeneficiary===true,samePractitioner:input.samePractitioner===true,foreignPersonPresent:input.foreignPersonPresent===true,practitionerGender:String(input.practitionerGender||"indeterminate"),businessCompliance:input.businessCompliance!==false,requiredActionVisible:input.requiredActionVisible===true,compositeStages:list(input.compositeStages),parasites:list(input.parasites),paletteDrift:Number(input.paletteDrift||0)};
+ return {
+  ...input,
+  faces:list(input.faces),activeHands:list(input.activeHands),equipment:list(input.equipment||input.visibleObjects),subjects:list(input.subjects||input.visibleSubjects),
+  gazeDirection:String(input.gazeDirection||"unknown"),protectedZones:list(input.protectedZones),calmZones:list(input.calmZones),availableContrast:bounded(input.availableContrast),density:bounded(input.density),negativeSpace:list(input.negativeSpace),
+  peopleCount:Number(input.peopleCount??list(input.faces).length),identityCount:Number(input.identityCount??input.peopleCount??list(input.faces).length),sameBeneficiary:bool(input.sameBeneficiary),samePractitioner:bool(input.samePractitioner),foreignPersonPresent:bool(input.foreignPersonPresent),practitionerGender:String(input.practitionerGender||"indeterminate"),businessCompliance:input.businessCompliance!==false,requiredActionVisible:bool(input.requiredActionVisible),compositeStages:list(input.compositeStages),parasites:list(input.parasites),paletteDrift:bounded(input.paletteDrift),
+  subjectMatchesRequest:bool(input.subjectMatchesRequest),dramaticMomentPresent:bool(input.dramaticMomentPresent),transformationReadable:bool(input.transformationReadable),cinematicPosterRead:bool(input.cinematicPosterRead),threePlaneDepth:bool(input.threePlaneDepth),genericSpaRisk:bounded(input.genericSpaRisk),literalTreatmentSceneRisk:bounded(input.literalTreatmentSceneRisk),observedRegisters:list(input.observedRegisters),architectureObserved:bool(input.architectureObserved),fantasticObserved:bool(input.fantasticObserved),brandSafeZoneAvailable:bool(input.brandSafeZoneAvailable),productFidelity:bool(input.productFidelity),
+ };
 }
-function chooseLayout({platform,contract,analysis}){const normalized=normalizePlatform(platform);const t=PLATFORM_TEMPLATES[normalized];if(!t)throw new Error(`Plateforme V3 inconnue : ${platform}`);const composite=contract.type==="offre composite";const compatible=t.layouts.filter(x=>contract.compatibleLayouts.includes(x));let family=compatible[0]||t.layouts[0];if(composite||contract.recommendedLayout==="Storytelling")family="Storytelling";else if(analysis.negativeSpace.length&&analysis.density<.55&&t.layouts.includes("Minimal"))family="Minimal";else if(analysis.faces.length>1&&t.layouts.includes("Split"))family="Split";if(!t.layouts.includes(family))throw new Error(`Layout ${family} absent du template ${normalized}`);return {platform:normalized,family,variant:`${family}-${t.ratioVariant}-${analysis.calmZones[0]||"safe"}`,template:t,rationale:`Choix sur image réelle : ${analysis.peopleCount} personne(s), densité ${analysis.density}, zone calme ${analysis.calmZones[0]||"marge sûre"}.`};}
+function chooseLayout({platform,contract,analysis}){
+ const normalized=normalizePlatform(platform);const t=PLATFORM_TEMPLATES[normalized];if(!t)throw new Error(`Plateforme V3 inconnue : ${platform}`);
+ const composite=contract.type==="offre composite";const compatible=t.layouts.filter(x=>contract.compatibleLayouts.includes(x));let family=compatible[0]||t.layouts[0];
+ if(composite||contract.recommendedLayout==="Storytelling")family="Storytelling";
+ else if(analysis.negativeSpace.length&&analysis.density<.55&&t.layouts.includes("Minimal"))family="Minimal";
+ else if(analysis.faces.length>1&&t.layouts.includes("Split"))family="Split";
+ if(!t.layouts.includes(family))throw new Error(`Layout ${family} absent du template ${normalized}`);
+ return {platform:normalized,family,variant:`${family}-${t.ratioVariant}-${analysis.calmZones[0]||"safe"}`,template:t,rationale:`Choix sur image réelle : ${analysis.peopleCount} personne(s), densité ${analysis.density}, zone calme ${analysis.calmZones[0]||"marge sûre"}, moment dramatique ${analysis.dramaticMomentPresent?"oui":"non"}.`};
+}
 module.exports={PLATFORM_TEMPLATES,normalizePlatform,analyzeActualImage,chooseLayout};
