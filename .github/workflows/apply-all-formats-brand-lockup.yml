@@ -46,12 +46,12 @@ jobs:
 
           old = 'function targetStoryLogoWidth(width){return Math.round(Number(width)*.33);}'
           new = '''const PREMIUM_LOCKUP_BY_PLATFORM=Object.freeze({
-            "Instagram Square":Object.freeze({family:"premium-square",textTop:.42,textBottom:.60,logoLeft:.26,logoRight:.74,logoWidthRatio:.26,brandSize:38,citySize:22}),
-            "Instagram Portrait":Object.freeze({family:"premium-portrait",textTop:.46,textBottom:.62,logoLeft:.22,logoRight:.78,logoWidthRatio:.26,brandSize:42,citySize:24}),
-            Facebook:Object.freeze({family:"premium-social",textTop:.46,textBottom:.62,logoLeft:.24,logoRight:.76,logoWidthRatio:.26,brandSize:42,citySize:24}),
+            "Instagram Square":Object.freeze({family:"premium-square",textTop:.38,textBottom:.62,logoLeft:.25,logoRight:.75,logoWidthRatio:.26,brandSize:38,citySize:22}),
+            "Instagram Portrait":Object.freeze({family:"premium-portrait",textTop:.40,textBottom:.64,logoLeft:.22,logoRight:.78,logoWidthRatio:.26,brandSize:42,citySize:24}),
+            Facebook:Object.freeze({family:"premium-social",textTop:.40,textBottom:.64,logoLeft:.23,logoRight:.77,logoWidthRatio:.26,brandSize:42,citySize:24}),
             Story:Object.freeze({family:"premium-story",textTop:.60,textBottom:.70,logoLeft:.18,logoRight:.82,logoWidthRatio:.33,brandSize:50,citySize:30}),
-            Blog:Object.freeze({family:"premium-editorial",textTop:.42,textBottom:.60,logoLeft:.34,logoRight:.66,logoWidthRatio:.13,brandSize:32,citySize:18}),
-            "Bannière":Object.freeze({family:"premium-banner",textTop:.12,textBottom:.44,logoLeft:.40,logoRight:.60,logoWidthRatio:.10,brandSize:24,citySize:14}),
+            Blog:Object.freeze({family:"premium-editorial",textTop:.35,textBottom:.60,logoLeft:.34,logoRight:.66,logoWidthRatio:.13,brandSize:32,citySize:18}),
+            "Bannière":Object.freeze({family:"premium-banner",textTop:.10,textBottom:.50,logoLeft:.40,logoRight:.60,logoWidthRatio:.10,brandSize:24,citySize:14}),
           });
           function premiumBrandLockupFor(platform){
             const normalized=normalizePlatform(platform);
@@ -70,7 +70,7 @@ jobs:
           s = s.replace(old, new)
 
           old = '    if(normalized==="Story"){\n      if(!textSafe)y=Math.round(height*.60);\n      textBottom=Math.min(textBottom,Math.round(height*.70));\n    }'
-          new = '    if(premiumLockup){\n      if(!textSafe)y=Math.round(height*premiumLockup.textTop);\n      textBottom=Math.min(textBottom,Math.round(height*premiumLockup.textBottom));\n    }'
+          new = '    if(premiumLockup){\n      y=Math.max(margin,Math.round(height*premiumLockup.textTop));\n      textBottom=Math.min(height-margin,Math.round(height*premiumLockup.textBottom));\n    }'
           if old not in s:
               raise SystemExit('Story text-zone marker not found')
           s = s.replace(old, new)
