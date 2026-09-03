@@ -33,7 +33,7 @@ test("le compositor et la recomposition sont importables dans un runtime serveur
 
 test("le healthcheck gratuit prouve le bundle statique sans génération",async()=>{
   const recompose=require("../netlify/functions/recompose-image-job"),response=await recompose.handler({httpMethod:"GET",queryStringParameters:{health:"1"}}),body=JSON.parse(response.body);
-  assert.equal(response.statusCode,200);assert.equal(body.ok,true);assert.equal(body.recomposeVersion,"3.0.0-static-brand-asset");assert.equal(body.compositorVersion,"3.0.0-static-official-logo");assert.equal(body.logoAsset,"assets/sdz-logo-compositor.png");assert.deepEqual(body.fonts,{cormorant600:true,manrope500:true,manrope600:true});assert.equal(body.imageGenerationCalls,0);
+  assert.equal(response.statusCode,200);assert.equal(body.ok,true);assert.equal(body.recomposeVersion,"3.0.0-static-brand-asset");assert.equal(body.compositorVersion,"3.1.0-static-binary-alpha-logo");assert.equal(body.logoAsset,"assets/sdz-logo-compositor.png");assert.deepEqual(body.fonts,{cormorant600:true,manrope500:true,manrope600:true});assert.equal(body.imageGenerationCalls,0);
 });
 
 test("latest choisit l'original payé récupérable le plus récent",async()=>{
