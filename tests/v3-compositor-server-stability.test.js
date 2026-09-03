@@ -33,7 +33,15 @@ test("le compositor et la recomposition sont importables dans un runtime serveur
 
 test("le healthcheck gratuit prouve le bundle statique sans génération",async()=>{
   const recompose=require("../netlify/functions/recompose-image-job"),response=await recompose.handler({httpMethod:"GET",queryStringParameters:{health:"1"}}),body=JSON.parse(response.body);
-  assert.equal(response.statusCode,200);assert.equal(body.ok,true);assert.equal(body.recomposeVersion,"3.0.0-static-brand-asset");assert.equal(body.compositorVersion,"3.1.0-static-binary-alpha-logo");assert.equal(body.logoAsset,"assets/sdz-logo-compositor.png");assert.deepEqual(body.fonts,{cormorant600:true,manrope500:true,manrope600:true});assert.equal(body.imageGenerationCalls,0);
+  assert.equal(response.statusCode,200);assert.equal(body.ok,true);assert.equal(body.recomposeVersion,"3.0.0-static-brand-asset");assert.equal(body.compositorVersion,"3.2.0-reference-signature-lockup");assert.equal(body.logoAsset,"assets/sdz-logo-compositor.png");assert.deepEqual(body.fonts,{cormorant600:true,manrope500:true,manrope600:true});assert.equal(body.imageGenerationCalls,0);
+});
+
+test("la signature de référence s'applique à tous les formats premium mais pas à Google",()=>{
+  const {signatureForPlatform,BRAND_TOKENS}=require("../netlify/functions/_shared/brand-compositor");
+  for(const platform of ["Story","Instagram Square","Instagram Portrait","Facebook","Blog","Bannière"]){
+    const s=signatureForPlatform(platform);assert.deepEqual([s.name,s.location],["LA SANTÉ DES ZÈBRES","RAISMES - VALENCIENNES"],platform);assert.equal(s.nameColor,BRAND_TOKENS.brandGold,platform);assert.equal(s.locationColor,BRAND_TOKENS.brandIvory,platform);assert.equal(s.nameFont,"display",platform);
+  }
+  const google=signatureForPlatform("Google Business");assert.deepEqual([google.name,google.location],["LA SANTÉ DES ZÈBRES","RAISMES"]);assert.equal(google.locationColor,BRAND_TOKENS.brandGold);
 });
 
 test("latest choisit l'original payé récupérable le plus récent",async()=>{
@@ -66,11 +74,12 @@ test("la recomposition ne contient aucun endpoint OpenAI Images",()=>{
   const server=fs.readFileSync(path.join(root,"netlify/functions/recompose-image-job.js"),"utf8");assert.doesNotMatch(server,/api\.openai\.com|images\/generations|images\/edits/);
 });
 
-test("Story compose une affiche avec logo statique discret, texte complet et zones sûres",async()=>{
+test("Story compose une affiche avec logo statique discret, texte complet et signature de référence",async()=>{
   const {composeBrandPoster,BRAND_TOKENS}=require("../netlify/functions/_shared/brand-compositor");
   const imageBuffer=await sharp({create:{width:1080,height:1920,channels:4,background:"#5b5148"}}).png().toBuffer();
   const output=await composeBrandPoster({imageBuffer,platform:"Story",posterStrategy:{textMode:"TEXT_MODE_EDITORIAL",title:"UNE HISTOIRE À PARTAGER",subtitle:"L’UNIVERS SDZ",titleLines:["UNE HISTOIRE","À PARTAGER"],subtitleLines:["L’UNIVERS SDZ"],textSafeArea:{top:.61,bottom:.72,left:.07,right:.93},logoSafeArea:{top:.75,bottom:.94,left:.22,right:.78},logoScale:"discreet"}});
   const meta=await sharp(output).metadata(),m=output.compositionManifest;assert.deepEqual([meta.width,meta.height],[1080,1920]);assert.deepEqual(m.titleLines,["UNE HISTOIRE","À PARTAGER"]);assert.deepEqual(m.subtitleLines,["L’UNIVERS SDZ"]);
   for(const key of ["titleExact","subtitleExact","textWithinCanvas","marginsValid","hierarchyValid","zonesDisjoint","logoWithinCanvas","semanticLinesValid","logoAssetIntegrity","logoScaleValid"])assert.equal(m[key],true,key);
   assert.equal(m.logoFringeDetected,false);assert.equal(m.logoRectangleOpaque,false);assert.ok(m.logoMedallionWidthRatio>=BRAND_TOKENS.logoMinimumScale-.005&&m.logoMedallionWidthRatio<=.205);assert.ok(m.brandLockup.top>m.logoBounds.bottom);assert.ok(m.brandLockup.bottom<=m.height-m.brandLockup.minimumBottomMargin);
+  assert.equal(m.referenceSignature,true);assert.deepEqual(m.brandLockup.lines,["LA SANTÉ DES ZÈBRES","RAISMES - VALENCIENNES"]);assert.equal(m.brandLockup.centerX,m.logoBounds.left+m.logoBounds.width/2);assert.equal(m.brandLockup.nameColor,BRAND_TOKENS.brandGold);assert.equal(m.brandLockup.locationColor,BRAND_TOKENS.brandIvory);assert.equal(m.brandLockup.nameFont,"display");
 });
