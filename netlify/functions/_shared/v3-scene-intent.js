@@ -118,7 +118,8 @@ function auditSceneIntent(intent){
  if(intent?.validation?.requireDramaticMoment&&!/Moment dramatique/i.test(prompt))errors.push("moment_dramatique_absent");
  if(intent?.validation?.requireArchitecture&&!/Architecture/i.test(prompt))errors.push("registre_architecture_perdu");
  if(intent?.validation?.requireFantastic&&!/fantastique/i.test(prompt))errors.push("registre_fantastique_perdu");
- if(intent?.mode==="narrative_consequence"&&/geste précis sur la zone|praticien et bénéficiaire tous deux visibles|séance de massage|table de massage|L’action centrale reste|geste métier/i.test(prompt))errors.push("retour_illustration_litterale");
+ const literalAuditPrompt=prompt.replace(/aucun geste métier/gi,"");
+ if(intent?.mode==="narrative_consequence"&&/geste précis sur la zone|praticien et bénéficiaire tous deux visibles|séance de massage|table de massage|L’action centrale reste|geste métier/i.test(literalAuditPrompt))errors.push("retour_illustration_litterale");
  if(prompt.length>4800)errors.push("prompt_trop_long");
  if(!/Aucun texte, aucune lettre, aucun logo/i.test(prompt))errors.push("interdit_branding_absent");
  return Object.freeze({ok:errors.length===0,errors,promptLength:prompt.length});
