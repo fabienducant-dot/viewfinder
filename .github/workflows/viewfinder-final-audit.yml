@@ -1,0 +1,90 @@
+name: Viewfinder final audit
+
+on:
+  push:
+    branches:
+      - audit/finalize-viewfinder-v3
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  full-audit:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - name: Checkout audited branch
+        uses: actions/checkout@v4
+
+      - name: Setup Node 20
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: Restore locked dependencies
+        run: npm ci
+
+      - name: Full deterministic verification
+        run: npm run verify
+
+      - name: Syntax check critical server files
+        run: |
+          node --check netlify/functions/_shared/v3-scene-intent.js
+          node --check netlify/functions/_shared/v3-pipeline.js
+          node --check netlify/functions/_shared/v3-image-analyzer.js
+          node --check netlify/functions/_shared/v3-quality.js
+          node --check netlify/functions/_shared/v3-executor.js
+          node --check netlify/functions/_shared/brand-compositor.js
+          node --check netlify/functions/create-image-job.js
+          node --check netlify/functions/process-image-job-background.js
+          node --check netlify/functions/recompose-image-job.js
+
+      - name: Enforce production architecture invariants
+        run: |
+          node - <<'NODE'
+          const fs=require('node:fs');
+          const assert=require('node:assert/strict');
+          const root=process.cwd();
+          const compositor=fs.readFileSync(`${root}/netlify/functions/_shared/brand-compositor.js`,'utf8');
+          const worker=fs.readFileSync(`${root}/netlify/functions/process-image-job-background.js`,'utf8');
+          const pipeline=fs.readFileSync(`${root}/netlify/functions/_shared/v3-pipeline.js`,'utf8');
+          const netlify=fs.readFileSync(`${root}/netlify.toml`,'utf8');
+          assert.doesNotMatch(compositor,/removeBorderConnectedDarkBackground|TRANSPARENT_LOGO_CACHE|prepareLogoOverlay|buildLogoSilhouetteMask/);
+          assert.match(compositor,/assets\/sdz-logo-compositor\.png/);
+          assert.doesNotMatch(worker,/providerSafetyFallback|buildProviderSafeBodyworkPrompt|vf-logo-asset|openBrandStore/);
+          assert.match(worker,/retries:0,imageCalls:1/);
+          assert.match(pipeline,/authority:"SceneIntentV4"/);
+          assert.match(netlify,/assets\/sdz-logo-compositor\.png/);
+          console.log('Architecture invariants: OK');
+          NODE
+
+      - name: Verify generated logo pixels independently
+        run: |
+          node - <<'NODE'
+          const sharp=require('sharp');
+          const fs=require('node:fs');
+          const assert=require('node:assert/strict');
+          (async()=>{
+            const file='assets/sdz-logo-compositor.png';
+            assert.ok(fs.existsSync(file));
+            const {data,info}=await sharp(file).ensureAlpha().raw().toBuffer({resolveWithObject:true});
+            let transparent=0,darkOpaque=0,semiDark=0;
+            for(let i=0;i<info.width*info.height;i++){
+              const o=i*info.channels,a=data[o+3],max=Math.max(data[o],data[o+1],data[o+2]);
+              if(a<=8)transparent++;
+              if(a>=245&&max<75)darkOpaque++;
+              if(a>8&&a<245&&max<105)semiDark++;
+            }
+            assert.ok(transparent>0,'outside alpha missing');
+            assert.ok(darkOpaque>0,'official internal black missing');
+            assert.equal(semiDark,0,'dark translucent fringe detected');
+            console.log(`Logo ${info.width}x${info.height}: alpha OK`);
+          })().catch(e=>{console.error(e);process.exit(1)});
+          NODE
+
+      - name: Repository hygiene
+        run: |
+          git diff --check
+          git status --short
