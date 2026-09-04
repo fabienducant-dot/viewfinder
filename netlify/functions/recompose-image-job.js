@@ -8,7 +8,7 @@ const {compatibilityMatrix,cropPosition}=require("./_shared/v3-campaign");
 const {assessQuality}=require("./_shared/v3-quality");
 const {buildCostAudit}=require("./_shared/v3-cost-control");
 
-const RECOMPOSE_VERSION="3.0.0-static-brand-asset";
+const RECOMPOSE_VERSION="3.1.0-fast-recovery";
 const EXPECTED_FONTS=Object.freeze(["Cormorant Garamond 600","Manrope 500","Manrope 600"]);
 let runtimeCache=null;
 
@@ -30,15 +30,26 @@ function healthcheck(){try{const {compositor}=loadCompositorRuntime();return jso
 function store(name){const opts={consistency:"strong"};if(process.env.BLOBS_SITE_ID&&process.env.BLOBS_TOKEN)return getStore({name,siteID:process.env.BLOBS_SITE_ID,token:process.env.BLOBS_TOKEN,...opts});return getStore({name,...opts});}
 function isRecoverableOriginal(job){return job?.status==="completed"&&Boolean(job.rawResultKey)&&Boolean(job.v3Plan)&&Boolean(job.v3Finalization?.analysis)&&!job.recomposedFrom;}
 
+/* Recherche de récupération : l'ancienne version listait récursivement TOUS les blobs sous jobs/
+   puis relisait chaque job séquentiellement. Sur un store historique cela dépassait la limite de
+   30 s des fonctions synchrones Netlify et renvoyait Sandbox.Timedout. Avec directories:true,
+   Netlify ne renvoie ici que les entrées racines jobs/<id>; les sous-objets input/result/raw-result
+   restent hors de la liste. Les lectures JSON sont ensuite parallélisées par petits lots. */
 async function findLatestRecoverableJob(jobs){
-  const listing=jobs.list({prefix:"jobs/",paginate:true}),blobs=[];
-  if(listing&&typeof listing[Symbol.asyncIterator]==="function")for await(const page of listing)blobs.push(...(page?.blobs||[]));else{const page=await listing;blobs.push(...(Array.isArray(page)?page:(page?.blobs||[])));}
-  const rootKeys=blobs.map(item=>typeof item==="string"?item:item?.key).filter(key=>/^jobs\/[^/]+$/.test(String(key||""))),candidates=[];
-  for(const key of rootKeys){try{const raw=await jobs.get(key);if(!raw)continue;const job=typeof raw==="string"?JSON.parse(raw):raw;if(isRecoverableOriginal(job))candidates.push(job);}catch(error){}}
-  const paid=candidates.filter(job=>Number(job.imageGenerationCallCount)>=1),eligible=paid.length?paid:candidates;eligible.sort((a,b)=>Number(b.createdAt||0)-Number(a.createdAt||0));
-  if(typeof jobs.getMetadata!=="function")return eligible[0]||null;
-  for(const job of eligible)if(await jobs.getMetadata(job.rawResultKey))return job;
-  return null;
+  const listed=await jobs.list({prefix:"jobs/",directories:true});
+  const rootKeys=(listed?.blobs||[]).map(item=>typeof item==="string"?item:item?.key).filter(key=>/^jobs\/[^/]+$/.test(String(key||"")));
+  const candidates=[];
+  const BATCH_SIZE=24;
+  for(let i=0;i<rootKeys.length;i+=BATCH_SIZE){
+    const batch=rootKeys.slice(i,i+BATCH_SIZE);
+    const loaded=await Promise.all(batch.map(async key=>{
+      try{const raw=await jobs.get(key);if(!raw)return null;const job=typeof raw==="string"?JSON.parse(raw):raw;return isRecoverableOriginal(job)?job:null;}catch(error){return null;}
+    }));
+    for(const job of loaded)if(job)candidates.push(job);
+  }
+  const paid=candidates.filter(job=>Number(job.imageGenerationCallCount)>=1),eligible=paid.length?paid:candidates;
+  eligible.sort((a,b)=>Number(b.createdAt||0)-Number(a.createdAt||0));
+  return eligible[0]||null;
 }
 
 async function latestRecoverableJob(jobs=store("viewfinder-image-jobs")){try{const job=await findLatestRecoverableJob(jobs);if(!job)return json(200,{ok:true,found:false,imageGenerationCalls:0});return json(200,{ok:true,found:true,jobId:job.jobId,createdAt:job.createdAt,status:job.status,platform:job.v3Plan?.artDirection?.platform||null,rawResultAvailable:true,imageGenerationCalls:0});}catch(error){return json(500,{ok:false,found:false,error:String(error.message||error),imageGenerationCalls:0});}}
