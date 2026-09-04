@@ -33,7 +33,7 @@ test("le compositor et la recomposition sont importables dans un runtime serveur
 
 test("le healthcheck gratuit prouve le bundle statique sans génération",async()=>{
   const recompose=require("../netlify/functions/recompose-image-job"),response=await recompose.handler({httpMethod:"GET",queryStringParameters:{health:"1"}}),body=JSON.parse(response.body);
-  assert.equal(response.statusCode,200);assert.equal(body.ok,true);assert.equal(body.recomposeVersion,"3.0.0-static-brand-asset");assert.equal(body.compositorVersion,"3.2.0-reference-signature-lockup");assert.equal(body.logoAsset,"assets/sdz-logo-compositor.png");assert.deepEqual(body.fonts,{cormorant600:true,manrope500:true,manrope600:true});assert.equal(body.imageGenerationCalls,0);
+  assert.equal(response.statusCode,200);assert.equal(body.ok,true);assert.equal(body.recomposeVersion,"3.1.0-fast-recovery");assert.equal(body.compositorVersion,"3.2.0-reference-signature-lockup");assert.equal(body.logoAsset,"assets/sdz-logo-compositor.png");assert.deepEqual(body.fonts,{cormorant600:true,manrope500:true,manrope600:true});assert.equal(body.imageGenerationCalls,0);
 });
 
 test("la signature de référence s'applique à tous les formats premium mais pas à Google",()=>{
@@ -44,17 +44,17 @@ test("la signature de référence s'applique à tous les formats premium mais pa
   const google=signatureForPlatform("Google Business");assert.deepEqual([google.name,google.location],["LA SANTÉ DES ZÈBRES","RAISMES"]);assert.equal(google.locationColor,BRAND_TOKENS.brandGold);
 });
 
-test("latest choisit l'original payé récupérable le plus récent",async()=>{
+test("latest choisit l'original payé récupérable le plus récent sans scanner les sous-clés",async()=>{
   const {findLatestRecoverableJob,latestRecoverableJob}=require("../netlify/functions/recompose-image-job");
   const valid=(jobId,createdAt,extra={})=>({jobId,createdAt,status:"completed",rawResultKey:`jobs/${jobId}/raw-result`,v3Plan:{artDirection:{platform:"Story"}},v3Finalization:{analysis:{}},imageGenerationCallCount:1,...extra});
   const records={"jobs/old":valid("old",100),"jobs/new":valid("new",300),"jobs/dead":valid("dead",400),"jobs/derived":valid("derived",500,{recomposedFrom:"old",imageGenerationCallCount:0}),"jobs/failed":{...valid("failed",600),status:"failed"},"jobs/no-raw":{...valid("no-raw",700),rawResultKey:null},"jobs/new/result":JSON.stringify({b64:"ne doit jamais être lu"})};
-  const readKeys=[],jobs={list:options=>{assert.deepEqual(options,{prefix:"jobs/",paginate:true});return (async function*(){const keys=Object.keys(records);yield {blobs:keys.slice(0,3).map(key=>({key}))};yield {blobs:keys.slice(3).map(key=>({key}))};})();},get:async key=>{readKeys.push(key);return typeof records[key]==="string"?records[key]:JSON.stringify(records[key]);},getMetadata:async key=>key!=="jobs/dead/raw-result"?{etag:"ok",metadata:{}}:null};
+  const readKeys=[],jobs={list:async options=>{assert.deepEqual(options,{prefix:"jobs/",directories:true});return {blobs:Object.keys(records).filter(key=>/^jobs\/[^/]+$/.test(key)).map(key=>({key})),directories:["jobs/new"]};},get:async key=>{readKeys.push(key);return typeof records[key]==="string"?records[key]:JSON.stringify(records[key]);},getMetadata:async key=>key!=="jobs/dead/raw-result"?{etag:"ok",metadata:{}}:null};
   assert.equal((await findLatestRecoverableJob(jobs)).jobId,"new");assert.equal(readKeys.includes("jobs/new/result"),false);
   const response=await latestRecoverableJob(jobs),body=JSON.parse(response.body);assert.equal(response.statusCode,200);assert.equal(body.jobId,"new");assert.equal(body.imageGenerationCalls,0);
 });
 
 test("latest retourne found false gratuitement sans original récupérable",async()=>{
-  const {latestRecoverableJob}=require("../netlify/functions/recompose-image-job"),response=await latestRecoverableJob({list:async()=>({blobs:[{key:"jobs/x/result"}]}),get:async()=>{throw new Error("sous-clé lue");}});
+  const {latestRecoverableJob}=require("../netlify/functions/recompose-image-job"),response=await latestRecoverableJob({list:async()=>({blobs:[{key:"jobs/x/result"}],directories:[]}),get:async()=>{throw new Error("sous-clé lue");}});
   assert.deepEqual(JSON.parse(response.body),{ok:true,found:false,imageGenerationCalls:0});
 });
 
