@@ -49,7 +49,11 @@ async function findLatestRecoverableJob(jobs){
   }
   const paid=candidates.filter(job=>Number(job.imageGenerationCallCount)>=1),eligible=paid.length?paid:candidates;
   eligible.sort((a,b)=>Number(b.createdAt||0)-Number(a.createdAt||0));
-  return eligible[0]||null;
+  if(typeof jobs.getMetadata!=="function")return eligible[0]||null;
+  for(const job of eligible){
+    try{if(await jobs.getMetadata(job.rawResultKey))return job;}catch(error){}
+  }
+  return null;
 }
 
 async function latestRecoverableJob(jobs=store("viewfinder-image-jobs")){try{const job=await findLatestRecoverableJob(jobs);if(!job)return json(200,{ok:true,found:false,imageGenerationCalls:0});return json(200,{ok:true,found:true,jobId:job.jobId,createdAt:job.createdAt,status:job.status,platform:job.v3Plan?.artDirection?.platform||null,rawResultAvailable:true,imageGenerationCalls:0});}catch(error){return json(500,{ok:false,found:false,error:String(error.message||error),imageGenerationCalls:0});}}
