@@ -1,0 +1,59 @@
+name: Logo diagnostic
+
+on:
+  push:
+    branches:
+      - audit/finalize-viewfinder-v3
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  inspect-logo:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+      - run: npm ci
+      - name: Build current compositor logo
+        run: npm run build:logo
+      - name: Generate diagnostic boards
+        run: |
+          node - <<'NODE'
+          const fs=require('fs');
+          const sharp=require('sharp');
+          (async()=>{
+            fs.mkdirSync('artifacts/logo-diagnostic',{recursive:true});
+            const src='icons/icon-512.png';
+            const built='assets/sdz-logo-compositor.png';
+            await fs.promises.copyFile(src,'artifacts/logo-diagnostic/source-icon-512.png');
+            await fs.promises.copyFile(built,'artifacts/logo-diagnostic/built-logo.png');
+            const meta=await sharp(built).metadata();
+            const makeBg=async(name,bg)=>{
+              const canvas=await sharp({create:{width:900,height:900,channels:4,background:bg}})
+                .composite([{input:await sharp(built).resize({width:600,fit:'inside'}).png().toBuffer(),gravity:'centre'}])
+                .png().toBuffer();
+              fs.writeFileSync(`artifacts/logo-diagnostic/${name}.png`,canvas);
+            };
+            await makeBg('built-on-white',{r:245,g:245,b:245,alpha:1});
+            await makeBg('built-on-midgray',{r:110,g:110,b:110,alpha:1});
+            await makeBg('built-on-black',{r:5,g:5,b:5,alpha:1});
+            const {data,info}=await sharp(built).ensureAlpha().raw().toBuffer({resolveWithObject:true});
+            let minX=info.width,minY=info.height,maxX=-1,maxY=-1,opaque=0,semi=0;
+            for(let y=0;y<info.height;y++)for(let x=0;x<info.width;x++){
+              const i=(y*info.width+x)*info.channels,a=data[i+3];
+              if(a>8){opaque++;if(x<minX)minX=x;if(x>maxX)maxX=x;if(y<minY)minY=y;if(y>maxY)maxY=y;}
+              if(a>8&&a<245)semi++;
+            }
+            fs.writeFileSync('artifacts/logo-diagnostic/report.json',JSON.stringify({source:'icons/icon-512.png',built:'assets/sdz-logo-compositor.png',builtMeta:meta,bounds:{minX,minY,maxX,maxY,width:maxX-minX+1,height:maxY-minY+1},opaque,semi},null,2));
+          })().catch(e=>{console.error(e);process.exit(1)});
+          NODE
+      - uses: actions/upload-artifact@v4
+        with:
+          name: logo-diagnostic
+          path: artifacts/logo-diagnostic
