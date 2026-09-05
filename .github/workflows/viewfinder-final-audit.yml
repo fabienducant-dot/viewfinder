@@ -57,18 +57,28 @@ jobs:
           const compositor=fs.readFileSync(`${root}/netlify/functions/_shared/brand-compositor.js`,'utf8');
           const worker=fs.readFileSync(`${root}/netlify/functions/process-image-job-background.js`,'utf8');
           const pipeline=fs.readFileSync(`${root}/netlify/functions/_shared/v3-pipeline.js`,'utf8');
+          const scene=fs.readFileSync(`${root}/netlify/functions/_shared/v3-scene-intent.js`,'utf8');
+          const analyzer=fs.readFileSync(`${root}/netlify/functions/_shared/v3-image-analyzer.js`,'utf8');
+          const quality=fs.readFileSync(`${root}/netlify/functions/_shared/v3-quality.js`,'utf8');
           const netlify=fs.readFileSync(`${root}/netlify.toml`,'utf8');
           assert.doesNotMatch(compositor,/removeBorderConnectedDarkBackground|TRANSPARENT_LOGO_CACHE|prepareLogoOverlay|buildLogoSilhouetteMask/);
           assert.match(compositor,/assets\/sdz-logo-compositor\.png/);
           assert.match(compositor,/LAMBDA_TASK_ROOT/);
+          assert.match(compositor,/3\.3\.0-full-official-medallion/);
           assert.doesNotMatch(worker,/providerSafetyFallback|buildProviderSafeBodyworkPrompt|vf-logo-asset|openBrandStore/);
           assert.match(worker,/retries:0,imageCalls:1/);
           assert.match(pipeline,/authority:"SceneIntentV4"/);
+          assert.match(scene,/4\.4\.0-scene-intent/);
+          assert.match(scene,/28 % inférieurs/);
+          assert.match(scene,/triangle lumineux/);
+          assert.match(analyzer,/brandZoneIntrusionRisk/);
+          assert.match(analyzer,/brandZoneBrightGoldIntrusion/);
+          assert.match(quality,/zone_branding_polluee/);
           assert.match(netlify,/assets\/sdz-logo-compositor\.png/);
-          console.log('Architecture invariants: OK');
+          console.log('Architecture and visual-fidelity invariants: OK');
           NODE
 
-      - name: Verify generated logo pixels independently
+      - name: Verify full official logo pixels independently
         run: |
           node - <<'NODE'
           const sharp=require('sharp');
@@ -78,17 +88,25 @@ jobs:
             const file='assets/sdz-logo-compositor.png';
             assert.ok(fs.existsSync(file));
             const {data,info}=await sharp(file).ensureAlpha().raw().toBuffer({resolveWithObject:true});
-            let transparent=0,darkOpaque=0,semiDark=0;
-            for(let i=0;i<info.width*info.height;i++){
-              const o=i*info.channels,a=data[o+3],max=Math.max(data[o],data[o+1],data[o+2]);
+            let transparent=0,opaque=0,darkOpaque=0,semiAlpha=0,edgeOpaque=0;
+            for(let y=0;y<info.height;y++)for(let x=0;x<info.width;x++){
+              const i=y*info.width+x,o=i*info.channels,a=data[o+3],max=Math.max(data[o],data[o+1],data[o+2]);
               if(a<=8)transparent++;
-              if(a>=245&&max<75)darkOpaque++;
-              if(a>8&&a<245&&max<105)semiDark++;
+              if(a>=245){opaque++;if(max<75)darkOpaque++;}
+              if(a>8&&a<245)semiAlpha++;
+              if((x===0||y===0||x===info.width-1||y===info.height-1)&&a>8)edgeOpaque++;
             }
-            assert.ok(transparent>0,'outside alpha missing');
-            assert.ok(darkOpaque>0,'official internal black missing');
-            assert.equal(semiDark,0,'dark translucent fringe detected');
-            console.log(`Logo ${info.width}x${info.height}: alpha OK`);
+            const total=info.width*info.height;
+            const transparentRatio=transparent/total;
+            const darkInteriorRatio=darkOpaque/Math.max(1,opaque);
+            const aspectRatio=info.width/info.height;
+            assert.ok(info.width>=850&&info.height>=950,`full official logo cropped: ${info.width}x${info.height}`);
+            assert.ok(aspectRatio>.86&&aspectRatio<.97,`unexpected full-logo aspect ratio ${aspectRatio}`);
+            assert.ok(transparentRatio>.20&&transparentRatio<.50,`unexpected exterior alpha ${transparentRatio}`);
+            assert.ok(darkInteriorRatio>.50,`official black medallion lost ${darkInteriorRatio}`);
+            assert.equal(semiAlpha,0,'semi-transparent pixels detected');
+            assert.equal(edgeOpaque,0,'logo touches asset border');
+            console.log(`Full logo ${info.width}x${info.height}: transparency=${transparentRatio.toFixed(3)}, darkInterior=${darkInteriorRatio.toFixed(3)}, alpha OK`);
           })().catch(e=>{console.error(e);process.exit(1)});
           NODE
 
@@ -115,5 +133,7 @@ jobs:
 
       - name: Repository hygiene
         run: |
+          test "$(find .github/workflows -maxdepth 1 -type f | wc -l)" -eq 1
+          test -f .github/workflows/viewfinder-final-audit.yml
           git diff --check
           git status --short
