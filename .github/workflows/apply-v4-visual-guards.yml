@@ -1,0 +1,113 @@
+name: Apply final V4 visual fidelity guards
+
+on:
+  push:
+    branches:
+      - audit/finalize-viewfinder-v3
+
+permissions:
+  contents: write
+
+jobs:
+  apply:
+    if: github.event.head_commit.message == 'Apply final V4 visual fidelity guards'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: audit/finalize-viewfinder-v3
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+      - run: npm ci
+      - name: Patch SceneIntent, analysis, quality and logo fidelity gates
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          import re
+
+          # --- SceneIntent V4: stronger dramaturgy + protected branding band ---
+          p=Path('netlify/functions/_shared/v3-scene-intent.js'); s=p.read_text()
+          s=s.replace('const VERSION="4.3.0-scene-intent";','const VERSION="4.4.0-scene-intent";',1)
+          old='''  const before=["Un état initial de contrainte, densité, saturation ou fermeture doit être perceptible par la posture, les volumes, les matières, la lumière ou l’espace",focus?`le focus visuel reste ${focus}`:""].filter(Boolean).join(" ; ")+".";\n  const fallbackMoment="L’instant précis où la contrainte commence à perdre son emprise et où l’espace autour du sujet change.";\n  const fallbackAfter="Une évolution crédible vers davantage d’espace, d’amplitude ou d’apaisement, sans promesse médicale.";\n  return Object.freeze({before,moment:narrativeSafe(subjectBrief.dramaticMoment,fallbackMoment,exact),after:narrativeSafe(subjectBrief.transformationPromise,fallbackAfter,exact)});'''
+          new='''  const dorsal=includesAny(exact,["dos","dorsal","dorsales","blocage","lourdeur","cervical","nuque","tension"]);\n  const mental=includesAny(exact,["mental","stress","charge mentale","souffler","lâcher prise","lacher prise","saturation","angoisse"]);\n  const fatigue=includesAny(exact,["fatigue","épuisement","epuisement","énergie","energie","vitalité","vitalite"]);\n  let before=["Un état initial de contrainte, densité, saturation ou fermeture doit être perceptible par la posture, les volumes, les matières, la lumière ou l’espace",focus?`le focus visuel reste ${focus}`:""].filter(Boolean).join(" ; ")+".";\n  let fallbackMoment="L’instant précis où la contrainte commence à perdre son emprise et où l’espace autour du sujet change.";\n  let fallbackAfter="Une évolution crédible vers davantage d’espace, d’amplitude ou d’apaisement, sans promesse médicale.";\n  if(dorsal){before="Le poids se lit dans une posture comprimée ou retenue : axe du dos sous tension, épaules et volumes environnants semblent peser sur le sujet, sans anatomie médicale.";fallbackMoment="Saisir l’instant exact où la rigidité de la posture et de l’architecture commence à céder autour de l’axe du dos : changement local de lumière, de respiration spatiale et d’équilibre, sans rayon magique ni illustration anatomique.";fallbackAfter="La verticalité et l’espace gagnent progressivement en amplitude ; le décor s’ouvre et la lumière accompagne un allègement perceptible, sans promesse médicale.";}\n  else if(mental){before="La surcharge se lit par une composition dense, un espace fermé ou une posture contenue, comme si l’environnement comprimait le sujet.";fallbackMoment="Saisir l’instant où une respiration apparaît dans la composition : le cadre cesse de se refermer, la profondeur reprend et le sujet n’est plus visuellement enfermé.";fallbackAfter="L’image gagne en silence, en espace négatif et en profondeur ; la sensation dominante devient la respiration plutôt que la saturation.";}\n  else if(fatigue){before="La fatigue se traduit par une présence ralentie, une lumière retenue et un environnement dense, sans codes médicaux.";fallbackMoment="Saisir l’instant où la lumière et la posture reprennent de la présence, comme un retour progressif de disponibilité plutôt qu’un effet surnaturel.";fallbackAfter="La scène devient plus ouverte, plus lisible et plus vivante, sans promesse de résultat physiologique.";}\n  return Object.freeze({before,moment:narrativeSafe(subjectBrief.dramaticMoment,fallbackMoment,exact),after:narrativeSafe(subjectBrief.transformationPromise,fallbackAfter,exact)});'''
+          assert old in s, 'transformation narrative block missing'
+          s=s.replace(old,new,1)
+          s=s.replace('if(p==="Story")return Object.freeze({platform:p,brandingZone:"réserver une zone calme et texturée dans le quart inférieur, sans visage ni élément narratif essentiel",fantasyStrength:"full_if_selected",composition:"verticale 9:16, TROIS PLANS LISIBLES, scène dominante"});',
+                      'if(p==="Story")return Object.freeze({platform:p,brandingZone:"réserver dans les 28 % inférieurs une bande de marque sombre, continue, texturée mais peu contrastée, surtout au centre ; aucun visage, main, produit, horizon, ouverture lumineuse, triangle, diagonale forte, reflet or intense ou élément narratif essentiel dans cette bande",fantasyStrength:"full_if_selected",composition:"verticale 9:16, TROIS PLANS LISIBLES, scène dominante"});',1)
+          s=s.replace('if(p==="Instagram Portrait"||p==="Instagram Square")return Object.freeze({platform:p,brandingZone:"réserver une zone calme dans le tiers inférieur sans sacrifier le sujet",fantasyStrength:"full_if_selected",composition:"impact immédiat en miniature, sujet décentré et profondeur lisible"});',
+                      'if(p==="Instagram Portrait"||p==="Instagram Square")return Object.freeze({platform:p,brandingZone:"réserver dans le tiers inférieur une zone sombre, continue et peu contrastée pour le lock-up ; aucune ouverture lumineuse, géométrie forte ou reflet or intense derrière la marque",fantasyStrength:"full_if_selected",composition:"impact immédiat en miniature, sujet décentré et profondeur lisible"});',1)
+          s=s.replace('`Branding futur : ${platformPolicy.brandingZone}. Cette zone reste intégrée au décor, jamais un aplat noir publicitaire.`',
+                      '`Branding futur : ${platformPolicy.brandingZone}. Cette zone reste intégrée au décor, jamais un aplat noir publicitaire. Elle doit être visuellement stable : pas de découpe architecturale brillante, pas de triangle lumineux, pas de diagonale à fort contraste, pas de flare doré ni de détail narratif derrière le futur logo et sa signature.`',1)
+          s=s.replace('"Construire un premier plan sombre, un plan principal narratif et un arrière-plan profond ou une ouverture. Les détails essentiels restent lisibles. Le regard doit sentir un avant et un après hors champ."',
+                      '"Construire un premier plan sombre, un plan principal narratif et un arrière-plan profond ou une ouverture. Les détails essentiels restent lisibles. Le regard doit sentir un avant et un après hors champ. Le premier plan ne doit jamais envahir ni découper la zone de marque réservée."',1)
+          p.write_text(s)
+
+          # --- Image analyzer: measure whether the future brand band is actually clean ---
+          p=Path('netlify/functions/_shared/v3-image-analyzer.js'); s=p.read_text()
+          s=s.replace(' brandSafeZoneAvailable:{type:"boolean"},\n productFidelity:{type:"boolean"},',
+                      ' brandSafeZoneAvailable:{type:"boolean"},\n brandSafeZoneClean:{type:"boolean"},\n brandZoneIntrusionRisk:{type:"number"},\n brandZoneHighContrastGeometry:{type:"boolean"},\n brandZoneBrightGoldIntrusion:{type:"boolean"},\n productFidelity:{type:"boolean"},',1)
+          s=s.replace('"architectureObserved","fantasticObserved","brandSafeZoneAvailable","productFidelity"]}};',
+                      '"architectureObserved","fantasticObserved","brandSafeZoneAvailable","brandSafeZoneClean","brandZoneIntrusionRisk","brandZoneHighContrastGeometry","brandZoneBrightGoldIntrusion","productFidelity"]}};',1)
+          s=s.replace('const target=`Mode visuel : ${intent?.mode||"legacy"}. Demande exacte : ${intent?.exactUserRequest||plan.subjectBrief?.exactUserRequest||""}. Transformation : ${intent?.transformation?.before||""} → ${intent?.transformation?.moment||""} → ${intent?.transformation?.after||""}. Registres demandés : cinematic=${requestedRegisters.cinematic===true}, fantastic=${requestedRegisters.fantastic===true}, architectural=${requestedRegisters.architectural===true}.`;',
+                      'const target=`Mode visuel : ${intent?.mode||"legacy"}. Demande exacte : ${intent?.exactUserRequest||plan.subjectBrief?.exactUserRequest||""}. Transformation : ${intent?.transformation?.before||""} → ${intent?.transformation?.moment||""} → ${intent?.transformation?.after||""}. Registres demandés : cinematic=${requestedRegisters.cinematic===true}, fantastic=${requestedRegisters.fantastic===true}, architectural=${requestedRegisters.architectural===true}. Zone de marque planifiée : ${intent?.platformPolicy?.brandingZone||"zone calme"}.`;',1)
+          s=s.replace('"brandSafeZoneAvailable=true seulement s\'il existe une zone calme exploitable pour le futur lock-up sans recouvrir visage, mains, produit ou moment dramatique.",',
+                      '"brandSafeZoneAvailable=true seulement s\'il existe la zone demandée pour le futur lock-up sans recouvrir visage, mains, produit ou moment dramatique. brandSafeZoneClean=true seulement si cette zone est sombre, continue et peu contrastée. brandZoneIntrusionRisk est compris entre 0 et 1 et augmente en présence de roche/objet, horizon, ouverture lumineuse, diagonale forte ou détail narratif dans cette zone. brandZoneHighContrastGeometry=true pour toute forme géométrique/architecturale fortement contrastée dans cette zone. brandZoneBrightGoldIntrusion=true si une lumière, ouverture ou surface dorée brillante concurrence le futur logo dans cette zone.",',1)
+          p.write_text(s)
+
+          # --- Normalize new telemetry without breaking legacy test fixtures ---
+          p=Path('netlify/functions/_shared/v3-layout-engine.js'); s=p.read_text()
+          s=s.replace('architectureObserved:bool(input.architectureObserved),fantasticObserved:bool(input.fantasticObserved),brandSafeZoneAvailable:bool(input.brandSafeZoneAvailable),productFidelity:bool(input.productFidelity),',
+                      'architectureObserved:bool(input.architectureObserved),fantasticObserved:bool(input.fantasticObserved),brandSafeZoneAvailable:bool(input.brandSafeZoneAvailable),brandSafeZoneClean:input.brandSafeZoneClean!==false,brandZoneIntrusionRisk:bounded(input.brandZoneIntrusionRisk),brandZoneHighContrastGeometry:bool(input.brandZoneHighContrastGeometry),brandZoneBrightGoldIntrusion:bool(input.brandZoneBrightGoldIntrusion),productFidelity:bool(input.productFidelity),',1)
+          p.write_text(s)
+
+          # --- Quality: reject a gold triangle / high contrast cutout in the branding band ---
+          p=Path('netlify/functions/_shared/v3-quality.js'); s=p.read_text()
+          old='if(validation.requireCinematicPoster&&analysis.brandSafeZoneAvailable!==true)artistic.push("zone_branding_calme_absente");'
+          new='''if(validation.requireCinematicPoster&&analysis.brandSafeZoneAvailable!==true)artistic.push("zone_branding_calme_absente");\n const brandTelemetryPresent=analysis.brandSafeZoneClean!==undefined||analysis.brandZoneIntrusionRisk!==undefined||analysis.brandZoneHighContrastGeometry!==undefined||analysis.brandZoneBrightGoldIntrusion!==undefined;\n if(validation.requireCinematicPoster&&brandTelemetryPresent&&(analysis.brandSafeZoneClean===false||Number(analysis.brandZoneIntrusionRisk||0)>.22||analysis.brandZoneHighContrastGeometry===true||analysis.brandZoneBrightGoldIntrusion===true))artistic.push("zone_branding_polluee");'''
+          assert old in s, 'quality brand safe marker missing'; s=s.replace(old,new,1); p.write_text(s)
+
+          # --- Compositor: pixel tests must now detect a cropped/transparent-inside fake logo ---
+          p=Path('netlify/functions/_shared/brand-compositor.js'); s=p.read_text()
+          s=s.replace('const COMPOSITOR_VERSION="3.2.0-reference-signature-lockup";','const COMPOSITOR_VERSION="3.3.0-full-official-medallion";',1)
+          old='const transparentRatio=transparent/total,opaqueRatio=opaque/total,darkInteriorRatio=darkOpaque/Math.max(1,opaque),fringeDetected=semiDark>0||edgeOpaque>0,integrity=transparentRatio>.04&&opaqueRatio>.05&&opaqueRatio<.90&&darkInteriorRatio>.02&&!fringeDetected;'
+          new='const transparentRatio=transparent/total,opaqueRatio=opaque/total,darkInteriorRatio=darkOpaque/Math.max(1,opaque),aspectRatio=info.width/info.height,fringeDetected=semiDark>0||edgeOpaque>0,integrity=transparentRatio>.20&&transparentRatio<.50&&opaqueRatio>.50&&opaqueRatio<.80&&darkInteriorRatio>.50&&aspectRatio>.86&&aspectRatio<.97&&!fringeDetected;'
+          assert old in s, 'logo audit marker missing'; s=s.replace(old,new,1)
+          s=s.replace('return Object.freeze({width:info.width,height:info.height,transparentRatio,opaqueRatio,darkInteriorRatio,semiDark,edgeOpaque,fringeDetected,integrity});',
+                      'return Object.freeze({width:info.width,height:info.height,aspectRatio,transparentRatio,opaqueRatio,darkInteriorRatio,semiDark,edgeOpaque,fringeDetected,integrity});',1)
+          p.write_text(s)
+
+          # --- Tests: current compositor version and real fidelity guards ---
+          p=Path('tests/v3-compositor-server-stability.test.js'); s=p.read_text()
+          s=s.replace('assert.equal(body.compositorVersion,"3.2.0-reference-signature-lockup")','assert.equal(body.compositorVersion,"3.3.0-full-official-medallion")',1)
+          marker='test("la signature de référence s\'applique à tous les formats premium mais pas à Google",()=>{'
+          insert='''test("le master logo complet conserve le disque noir, le triangle et un extérieur transparent",async()=>{\n  const {loadOfficialLogoAsset}=require("../netlify/functions/_shared/brand-compositor");\n  const official=await loadOfficialLogoAsset(),a=official.audit;\n  assert.ok(a.width>=850&&a.height>=950,`${a.width}x${a.height}`);\n  assert.ok(a.aspectRatio>.86&&a.aspectRatio<.97,`ratio ${a.aspectRatio}`);\n  assert.ok(a.darkInteriorRatio>.50,`noir intérieur ${a.darkInteriorRatio}`);\n  assert.ok(a.transparentRatio>.20&&a.transparentRatio<.50,`transparence ${a.transparentRatio}`);\n  assert.equal(a.fringeDetected,false);\n});\n\n'''
+          assert marker in s, 'test insertion marker missing'; s=s.replace(marker,insert+marker,1); p.write_text(s)
+
+          p=Path('tests/v4-scene-intent.test.js'); s=p.read_text()
+          s += '''\n\ntest("le Golden dorsal impose une rupture visible autour du dos et protège la bande de marque",()=>{\n  const request="Douleurs dorsales, blocage, sensations de lourdeur";\n  const b={exactUserRequest:request,rawSubject:request,coreTheme:request,requestedFocus:"dos",selectedRegisters:["Fantastique","Cinématographie","Architecture"]};\n  const intent=buildSceneIntent({contract:getServiceContract("Massage dos/zone"),subjectBrief:b,artDirection:art(),platform:"Story"});\n  assert.match(intent.providerPrompt,/axe du dos sous tension/i);\n  assert.match(intent.providerPrompt,/rigidité de la posture et de l’architecture commence à céder/i);\n  assert.match(intent.providerPrompt,/28 % inférieurs/i);\n  assert.match(intent.providerPrompt,/triangle lumineux/i);\n  assert.match(intent.providerPrompt,/premier plan ne doit jamais envahir/i);\n});\n\ntest("une ouverture dorée ou une géométrie forte dans la bande de marque est rejetée",()=>{\n  const intent=buildSceneIntent({contract:getServiceContract("Massage dos/zone"),subjectBrief:brief(),artDirection:art(),platform:"Story"});\n  const analysis={subjectMatchesRequest:true,dramaticMomentPresent:true,transformationReadable:true,cinematicPosterRead:true,threePlaneDepth:true,genericSpaRisk:.05,literalTreatmentSceneRisk:.05,observedRegisters:["cinematic","fantastic","architectural"],architectureObserved:true,fantasticObserved:true,brandSafeZoneAvailable:true,brandSafeZoneClean:false,brandZoneIntrusionRisk:.72,brandZoneHighContrastGeometry:true,brandZoneBrightGoldIntrusion:true,equipment:[],parasites:[],paletteDrift:.05};\n  const composition={imageExists:true,contrastValid:true,gazeHierarchyValid:true,thumbnailImpact:true,logoIntegrity:true,logoAssetIntegrity:true,logoFringeDetected:false,logoScaleValid:true,marginsValid:true,textWithinCanvas:true,protectedCollision:false,logoRectangleOpaque:false};\n  const quality=assessQuality({contract:getServiceContract("Massage dos/zone"),sceneIntent:intent,analysis,composition});\n  assert.equal(quality.ok,false);assert.ok(quality.artistic.errors.includes("zone_branding_polluee"));\n});\n'''
+          p.write_text(s)
+
+          print('V4 visual guards patched')
+          PY
+      - name: Validate complete deterministic suite
+        run: |
+          npm run verify
+          node --check netlify/functions/_shared/v3-scene-intent.js
+          node --check netlify/functions/_shared/v3-image-analyzer.js
+          node --check netlify/functions/_shared/v3-layout-engine.js
+          node --check netlify/functions/_shared/v3-quality.js
+          node --check netlify/functions/_shared/brand-compositor.js
+          git diff --check
+      - name: Commit validated guards and remove temporary workflows
+        run: |
+          git config user.name 'viewfinder-ci'
+          git config user.email 'actions@users.noreply.github.com'
+          git rm .github/workflows/apply-v4-visual-guards.yml
+          git rm -f .github/workflows/logo-diagnostic.yml
+          git add netlify/functions/_shared/v3-scene-intent.js netlify/functions/_shared/v3-image-analyzer.js netlify/functions/_shared/v3-layout-engine.js netlify/functions/_shared/v3-quality.js netlify/functions/_shared/brand-compositor.js tests/v3-compositor-server-stability.test.js tests/v4-scene-intent.test.js
+          git commit -m 'Enforce full logo fidelity and clean brand safe zones'
+          git push origin HEAD:audit/finalize-viewfinder-v3
