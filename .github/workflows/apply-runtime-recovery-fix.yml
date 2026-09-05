@@ -10,7 +10,6 @@ permissions:
 
 jobs:
   apply:
-    if: github.event.head_commit.message == 'Apply runtime recovery fix workflow'
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
@@ -26,130 +25,30 @@ jobs:
 
       - run: npm ci
 
-      - name: Patch runtime asset resolution and paid-image salvage
+      - name: Fix bundled logo path
         run: |
-          python - <<'PY'
-          from pathlib import Path
-          import re
+          node <<'NODE'
+          const fs=require('node:fs');
+          const file='netlify/functions/_shared/brand-compositor.js';
+          let s=fs.readFileSync(file,'utf8');
+          const old='const OFFICIAL_LOGO_PATH=path.resolve(__dirname,"../../../assets/sdz-logo-compositor.png");';
+          const replacement=`const OFFICIAL_LOGO_CANDIDATES=Object.freeze([\n process.env.LAMBDA_TASK_ROOT&&path.join(process.env.LAMBDA_TASK_ROOT,"assets/sdz-logo-compositor.png"),\n path.join(process.cwd(),"assets/sdz-logo-compositor.png"),\n path.resolve(__dirname,"../../assets/sdz-logo-compositor.png"),\n path.resolve(__dirname,"../../../assets/sdz-logo-compositor.png"),\n].filter(Boolean));\nconst OFFICIAL_LOGO_PATH=OFFICIAL_LOGO_CANDIDATES.find(candidate=>{try{return fs.existsSync(candidate);}catch(error){return false;}})||OFFICIAL_LOGO_CANDIDATES[0];`;
+          if(!s.includes(old))throw new Error('OFFICIAL_LOGO_PATH marker missing');
+          s=s.replace(old,replacement);
+          fs.writeFileSync(file,s);
+          NODE
 
-          root=Path('.')
-
-          # 1) Le bundle Netlify aplatit netlify/functions -> /var/task/functions.
-          # L'ancien ../../../assets pointait donc vers /var/assets au lieu de /var/task/assets.
-          p=root/'netlify/functions/_shared/brand-compositor.js'
-          s=p.read_text()
-          old='const OFFICIAL_LOGO_PATH=path.resolve(__dirname,"../../../assets/sdz-logo-compositor.png");'
-          new='''const OFFICIAL_LOGO_CANDIDATES=Object.freeze([\n process.env.LAMBDA_TASK_ROOT&&path.join(process.env.LAMBDA_TASK_ROOT,"assets/sdz-logo-compositor.png"),\n path.join(process.cwd(),"assets/sdz-logo-compositor.png"),\n path.resolve(__dirname,"../../assets/sdz-logo-compositor.png"),\n path.resolve(__dirname,"../../../assets/sdz-logo-compositor.png"),\n].filter(Boolean));\nconst OFFICIAL_LOGO_PATH=OFFICIAL_LOGO_CANDIDATES.find(file=>{try{return fs.existsSync(file);}catch(error){return false;}})||OFFICIAL_LOGO_CANDIDATES[0];'''
-          assert old in s, 'logo path marker missing'
-          s=s.replace(old,new,1)
-          p.write_text(s)
-
-          # 2) La récupération doit accepter un job payé ayant échoué APRES l'appel Images,
-          # si la photo brute existe encore. Le plan V4 est récupéré depuis l'input du job.
-          p=root/'netlify/functions/recompose-image-job.js'
-          s=p.read_text()
-          s=s.replace('const RECOMPOSE_VERSION="3.1.0-fast-recovery";','const RECOMPOSE_VERSION="3.2.0-resilient-recovery";',1)
-          s=s.replace('function runtimeFailure(error){return json(500,{ok:false,errorType:String(error?.name||"RuntimeImportError"),errorMessage:String(error?.message||error),recomposeVersion:RECOMPOSE_VERSION,expectedFonts:EXPECTED_FONTS,imageGenerationCalls:0});}',
-                      'function runtimeFailure(error){const message=String(error?.message||error);return json(500,{ok:false,error:`Runtime de composition indisponible : ${message}`,errorType:String(error?.name||"RuntimeImportError"),errorMessage:message,recomposeVersion:RECOMPOSE_VERSION,expectedFonts:EXPECTED_FONTS,imageGenerationCalls:0});}',1)
-
-          pattern=r'function isRecoverableOriginal\(job\)\{.*?\nasync function rawBuffer'
-          replacement=r'''function isRecoverableOriginal(job){return Boolean(job)&&!job.recomposedFrom&&Number(job.imageGenerationCallCount)>=1&&(job.status==="completed"||job.status==="failed");}
-
-async function readRecoveryInput(jobs,jobId){try{const raw=await jobs.get(`jobs/${jobId}/input`);if(!raw)return null;return typeof raw==="string"?JSON.parse(raw):raw;}catch(error){return null;}}
-async function hydrateRecoverySource(jobs,jobId,source){
-  const input=(!source?.v3Plan||!source?.v3Finalization?.analysis)?await readRecoveryInput(jobs,jobId):null;
-  const rawResultKey=source?.rawResultKey||`jobs/${jobId}/raw-result`;
-  const v3Plan=source?.v3Plan||input?.v3Plan||null;
-  const existingFinalization=source?.v3Finalization&&typeof source.v3Finalization==="object"?source.v3Finalization:{};
-  const analysis=existingFinalization.analysis||{};
-  return {...source,rawResultKey,v3Plan,v3Finalization:{...existingFinalization,analysis},recoveryFromFailedJob:source?.status==="failed"};
-}
-
-/* Recherche bornée : uniquement les jobs racine, puis lectures parallèles. Un job payé ayant échoué
-   après l'appel fournisseur reste récupérable si jobs/<id>/raw-result existe. */
-async function findLatestRecoverableJob(jobs){
-  const listed=await jobs.list({prefix:"jobs/",directories:true});
-  const rootKeys=(listed?.blobs||[]).map(item=>typeof item==="string"?item:item?.key).filter(key=>/^jobs\/[^/]+$/.test(String(key||"")));
-  const candidates=[],BATCH_SIZE=24;
-  for(let i=0;i<rootKeys.length;i+=BATCH_SIZE){
-    const loaded=await Promise.all(rootKeys.slice(i,i+BATCH_SIZE).map(async key=>{try{const raw=await jobs.get(key);if(!raw)return null;const job=typeof raw==="string"?JSON.parse(raw):raw;return isRecoverableOriginal(job)?job:null;}catch(error){return null;}}));
-    for(const job of loaded)if(job)candidates.push(job);
-  }
-  candidates.sort((a,b)=>Number(b.createdAt||0)-Number(a.createdAt||0));
-  if(typeof jobs.getMetadata!=="function")return candidates[0]||null;
-  for(const job of candidates){const rawKey=job.rawResultKey||`jobs/${job.jobId}/raw-result`;try{if(await jobs.getMetadata(rawKey))return {...job,rawResultKey:rawKey};}catch(error){}}
-  return null;
-}
-
-async function latestRecoverableJob(jobs=store("viewfinder-image-jobs")){try{
-  const job=await findLatestRecoverableJob(jobs);if(!job)return json(200,{ok:true,found:false,imageGenerationCalls:0});
-  const source=await hydrateRecoverySource(jobs,job.jobId,job);
-  if(!source.v3Plan)return json(200,{ok:true,found:false,error:"Plan créatif du dernier travail payé indisponible.",imageGenerationCalls:0});
-  return json(200,{ok:true,found:true,jobId:source.jobId,createdAt:source.createdAt,status:source.status,platform:source.v3Plan?.artDirection?.platform||null,rawResultAvailable:true,recoveryMode:source.recoveryFromFailedJob?"salvage":"standard",v3Plan:source.v3Plan,v3Finalization:source.v3Finalization,imageGenerationCalls:0});
-}catch(error){return json(500,{ok:false,found:false,error:String(error.message||error),imageGenerationCalls:0});}}
-async function rawBuffer'''
-          s2,n=re.subn(pattern,replacement,s,count=1,flags=re.S)
-          assert n==1, f'recovery block replacement count={n}'
-          s=s2
-
-          old_block='''    const jobs=store("viewfinder-image-jobs"),resolved=await resolveOriginalSource(jobs,body.sourceJobId);\n    if(!resolved.source)return recoveryFailure(404,"SOURCE_JOB_MISSING","Le travail image original est introuvable.");\n    const source=resolved.source,recoverySourceJobId=resolved.jobId;\n    if(!source.rawResultKey)return recoveryFailure(409,"RAW_SOURCE_MISSING","La photographie originale n'est plus disponible sur le serveur. Aucune nouvelle génération n'a été lancée.");\n    if(!source.v3Plan)return recoveryFailure(409,"V3_PLAN_MISSING","Le plan créatif original n'est plus disponible.");\n    if(!source.v3Finalization?.analysis)return recoveryFailure(409,"V3_ANALYSIS_MISSING","L'analyse visuelle originale n'est plus disponible.");\n    const matrix=compatibilityMatrix(source.v3Finalization.analysis),platform=normalizePlatform(body.platform),compatibility=matrix[platform];'''
-          new_block='''    const jobs=store("viewfinder-image-jobs"),resolved=await resolveOriginalSource(jobs,body.sourceJobId);\n    if(!resolved.source)return recoveryFailure(404,"SOURCE_JOB_MISSING","Le travail image original est introuvable.");\n    const recoverySourceJobId=resolved.jobId,source=await hydrateRecoverySource(jobs,recoverySourceJobId,resolved.source);\n    if(!source.rawResultKey)return recoveryFailure(409,"RAW_SOURCE_MISSING","La photographie originale n'est plus disponible sur le serveur. Aucune nouvelle génération n'a été lancée.");\n    if(!source.v3Plan)return recoveryFailure(409,"V3_PLAN_MISSING","Le plan créatif original n'est plus disponible.");\n    const recoveryAnalysis=source.v3Finalization?.analysis||{};\n    const matrix=compatibilityMatrix(recoveryAnalysis),platform=normalizePlatform(body.platform||source.v3Plan?.artDirection?.platform||"Story"),compatibility=matrix[platform];'''
-          assert old_block in s, 'POST source block marker missing'
-          s=s.replace(old_block,new_block,1)
-          s=s.replace('const analysis=analyzeActualImage(source.v3Finalization.analysis),layout=chooseLayout({platform,contract:source.v3Plan.contract,analysis});layout.cropPosition=cropPosition(analysis);\n    const final=await composeBrandPoster({imageBuffer:image,platform,headline:String(body.headline||""),zoneText:String(body.zoneText||""),selectedLayout:layout,posterStrategy:source.v3Plan.posterStrategy});',
-                      'const analysis=analyzeActualImage(recoveryAnalysis),layout=chooseLayout({platform,contract:source.v3Plan.contract,analysis});layout.cropPosition=cropPosition(analysis);\n    const defaultHeadline=[source.v3Plan.posterStrategy?.title,source.v3Plan.posterStrategy?.subtitle].filter(Boolean).join(" | ");\n    const final=await composeBrandPoster({imageBuffer:image,platform,headline:String(body.headline||defaultHeadline),zoneText:String(body.zoneText||""),selectedLayout:layout,posterStrategy:source.v3Plan.posterStrategy});',1)
-          old_return='return json(200,{ok:true,jobId:derivedJobId,recoverySourceJobId,resultUrl:`/.netlify/functions/get-image-result?jobId=${derivedJobId}`,platform,layout,quality,compositionManifest,costAudit:buildCostAudit({mode:"recompose",visionUsage:false,imageCalls:0}),imageGenerationCalls:0});'
-          new_return='return json(200,{ok:true,jobId:derivedJobId,recoverySourceJobId,resultUrl:`/.netlify/functions/get-image-result?jobId=${derivedJobId}`,platform,layout,quality,compositionManifest,v3Plan:source.v3Plan,analysis,recoveryMode:source.recoveryFromFailedJob?"salvage":"standard",costAudit:buildCostAudit({mode:"recompose",visionUsage:false,imageCalls:0}),imageGenerationCalls:0});'
-          assert old_return in s, 'POST return marker missing'
-          s=s.replace(old_return,new_return,1)
-          p.write_text(s)
-
-          # 3) Le navigateur doit pouvoir reprendre un job failed mais payé, au lieu de l'abandonner
-          # avant d'appeler l'endpoint de salvage.
-          p=root/'index.html'
-          s=p.read_text()
-          old='return data.found?{jobId:data.jobId,createdAt:data.createdAt,status:data.status,platform:data.platform,serverDiscovered:true}:null;'
-          new='return data.found?{jobId:data.jobId,createdAt:data.createdAt,status:data.status,platform:data.platform,v3Plan:data.v3Plan||null,v3Finalization:data.v3Finalization||null,recoveryMode:data.recoveryMode||null,serverDiscovered:true}:null;'
-          assert old in s, 'latest record mapper marker missing'
-          s=s.replace(old,new,1)
-          old='''  if(status.status==="completed")sourceResult=status.result;\n  else sourceResult=await pollImageJob(record.jobId,onStatus,null);'''
-          new='''  if(status.status==="completed")sourceResult=status.result;\n  else if(status.status==="failed")sourceResult={v3Plan:record.v3Plan||null,v3Finalization:record.v3Finalization||{analysis:{}}};\n  else sourceResult=await pollImageJob(record.jobId,onStatus,null);'''
-          assert old in s, 'failed recovery branch marker missing'
-          s=s.replace(old,new,1)
-          p.write_text(s)
-
-          # 4) Tests : le plus récent job payé peut être failed si son brut est encore là.
-          p=root/'tests/v3-compositor-server-stability.test.js'
-          s=p.read_text()
-          s=s.replace('assert.equal(body.recomposeVersion,"3.1.0-fast-recovery")','assert.equal(body.recomposeVersion,"3.2.0-resilient-recovery")')
-          s=s.replace('assert.equal((await findLatestRecoverableJob(jobs)).jobId,"new")','assert.equal((await findLatestRecoverableJob(jobs)).jobId,"failed")')
-          s=s.replace('assert.equal(body.jobId,"new")','assert.equal(body.jobId,"failed");assert.equal(body.recoveryMode,"salvage")')
-          p.write_text(s)
-
-          # 5) Le smoke test CI attend réellement le nouveau déploiement et valide le runtime Netlify.
-          p=root/'.github/workflows/viewfinder-final-audit.yml'
-          s=p.read_text()
-          start=s.index('      - name: Diagnose deployed recovery runtime\n')
-          end=s.index('      - name: Repository hygiene\n',start)
-          smoke='''      - name: Diagnose deployed recovery runtime\n        run: |\n          set -euo pipefail\n          URL='https://deploy-preview-14--fascinating-kashata-73134d.netlify.app/.netlify/functions/recompose-image-job?health=1'\n          EXPECTED='3.2.0-resilient-recovery'\n          for attempt in $(seq 1 18); do\n            BODY_FILE="$(mktemp)"\n            HTTP_CODE="$(curl -sS --max-time 20 -o "$BODY_FILE" -w '%{http_code}' "$URL" || true)"\n            BODY="$(cat "$BODY_FILE" 2>/dev/null || true)"\n            rm -f "$BODY_FILE"\n            echo "Attempt ${attempt}: HTTP ${HTTP_CODE} ${BODY}"\n            if [ -n "$BODY" ]; then\n              if node -e 'const b=JSON.parse(process.argv[1]);process.exit(b.ok&&b.recomposeVersion===process.argv[2]?0:1)' "$BODY" "$EXPECTED"; then\n                echo 'Deploy Preview runtime health: OK'\n                exit 0\n              fi\n            fi\n            sleep 10\n          done\n          echo 'Deploy Preview did not reach the expected healthy recovery runtime' >&2\n          exit 1\n\n'''
-          s=s[:start]+smoke+s[end:]
-          p.write_text(s)
-
-          print('Runtime recovery patch applied')
-          PY
-
-      - name: Validate before commit
+      - name: Validate deterministic suite
         run: |
           npm run verify
-          node --check netlify/functions/recompose-image-job.js
           node --check netlify/functions/_shared/brand-compositor.js
           git diff --check
 
-      - name: Commit validated fix and remove temporary workflow
+      - name: Commit validated runtime fix
         run: |
           git config user.name 'viewfinder-ci'
           git config user.email 'actions@users.noreply.github.com'
           git rm .github/workflows/apply-runtime-recovery-fix.yml
-          git add netlify/functions/_shared/brand-compositor.js netlify/functions/recompose-image-job.js index.html tests/v3-compositor-server-stability.test.js .github/workflows/viewfinder-final-audit.yml
-          git commit -m 'Fix Netlify runtime asset and recovery salvage'
+          git add netlify/functions/_shared/brand-compositor.js
+          git commit -m 'Fix bundled SDZ logo path on Netlify runtime'
           git push origin HEAD:audit/finalize-viewfinder-v3
