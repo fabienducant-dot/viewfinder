@@ -60,6 +60,7 @@ jobs:
           const netlify=fs.readFileSync(`${root}/netlify.toml`,'utf8');
           assert.doesNotMatch(compositor,/removeBorderConnectedDarkBackground|TRANSPARENT_LOGO_CACHE|prepareLogoOverlay|buildLogoSilhouetteMask/);
           assert.match(compositor,/assets\/sdz-logo-compositor\.png/);
+          assert.match(compositor,/LAMBDA_TASK_ROOT/);
           assert.doesNotMatch(worker,/providerSafetyFallback|buildProviderSafeBodyworkPrompt|vf-logo-asset|openBrandStore/);
           assert.match(worker,/retries:0,imageCalls:1/);
           assert.match(pipeline,/authority:"SceneIntentV4"/);
@@ -95,16 +96,22 @@ jobs:
         run: |
           set -euo pipefail
           URL='https://deploy-preview-14--fascinating-kashata-73134d.netlify.app/.netlify/functions/recompose-image-job?health=1'
-          echo "GET ${URL}"
-          BODY_FILE="$(mktemp)"
-          HTTP_CODE="$(curl -sS --max-time 20 -o "$BODY_FILE" -w '%{http_code}' "$URL" || true)"
-          echo "HTTP ${HTTP_CODE}"
-          cat "$BODY_FILE" || true
-          echo
-          BODY="$(cat "$BODY_FILE" 2>/dev/null || true)"
-          rm -f "$BODY_FILE"
-          [ -n "$BODY" ] || { echo 'Empty health response' >&2; exit 1; }
-          node -e 'const b=JSON.parse(process.argv[1]); console.log(JSON.stringify(b,null,2)); if(!b.ok)process.exit(2)' "$BODY"
+          for attempt in $(seq 1 18); do
+            BODY_FILE="$(mktemp)"
+            HTTP_CODE="$(curl -sS --max-time 20 -o "$BODY_FILE" -w '%{http_code}' "$URL" || true)"
+            BODY="$(cat "$BODY_FILE" 2>/dev/null || true)"
+            rm -f "$BODY_FILE"
+            echo "Attempt ${attempt}: HTTP ${HTTP_CODE} ${BODY}"
+            if [ "$HTTP_CODE" = "200" ] && [ -n "$BODY" ]; then
+              if node -e 'const b=JSON.parse(process.argv[1]);process.exit(b.ok&&b.logoAsset==="assets/sdz-logo-compositor.png"&&b.imageGenerationCalls===0?0:1)' "$BODY"; then
+                echo 'Deploy Preview runtime health: OK'
+                exit 0
+              fi
+            fi
+            sleep 10
+          done
+          echo 'Deploy Preview runtime did not become healthy in time' >&2
+          exit 1
 
       - name: Repository hygiene
         run: |
