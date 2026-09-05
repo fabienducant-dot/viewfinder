@@ -33,7 +33,7 @@ test("le compositor et la recomposition sont importables dans un runtime serveur
 
 test("le healthcheck gratuit prouve le bundle statique sans génération",async()=>{
   const recompose=require("../netlify/functions/recompose-image-job"),response=await recompose.handler({httpMethod:"GET",queryStringParameters:{health:"1"}}),body=JSON.parse(response.body);
-  assert.equal(response.statusCode,200);assert.equal(body.ok,true);assert.equal(body.recomposeVersion,"3.1.0-fast-recovery");assert.equal(body.compositorVersion,"3.3.0-full-official-medallion");assert.equal(body.logoAsset,"assets/sdz-logo-compositor.png");assert.deepEqual(body.fonts,{cormorant600:true,manrope500:true,manrope600:true});assert.equal(body.imageGenerationCalls,0);
+  assert.equal(response.statusCode,200);assert.equal(body.ok,true);assert.equal(body.recomposeVersion,"3.1.0-fast-recovery");assert.equal(body.compositorVersion,"3.4.0-high-quality-logo-resampling");assert.equal(body.logoAsset,"assets/sdz-logo-compositor.png");assert.deepEqual(body.fonts,{cormorant600:true,manrope500:true,manrope600:true});assert.equal(body.imageGenerationCalls,0);
 });
 
 test("le master logo complet conserve le disque noir, le triangle et un extérieur transparent",async()=>{
@@ -90,6 +90,6 @@ test("Story compose une affiche avec logo statique discret, texte complet et sig
   const output=await composeBrandPoster({imageBuffer,platform:"Story",posterStrategy:{textMode:"TEXT_MODE_EDITORIAL",title:"UNE HISTOIRE À PARTAGER",subtitle:"L’UNIVERS SDZ",titleLines:["UNE HISTOIRE","À PARTAGER"],subtitleLines:["L’UNIVERS SDZ"],textSafeArea:{top:.61,bottom:.72,left:.07,right:.93},logoSafeArea:{top:.75,bottom:.94,left:.22,right:.78},logoScale:"discreet"}});
   const meta=await sharp(output).metadata(),m=output.compositionManifest;assert.deepEqual([meta.width,meta.height],[1080,1920]);assert.deepEqual(m.titleLines,["UNE HISTOIRE","À PARTAGER"]);assert.deepEqual(m.subtitleLines,["L’UNIVERS SDZ"]);
   for(const key of ["titleExact","subtitleExact","textWithinCanvas","marginsValid","hierarchyValid","zonesDisjoint","logoWithinCanvas","semanticLinesValid","logoAssetIntegrity","logoScaleValid"])assert.equal(m[key],true,key);
-  assert.equal(m.logoFringeDetected,false);assert.equal(m.logoRectangleOpaque,false);assert.ok(m.logoMedallionWidthRatio>=BRAND_TOKENS.logoMinimumScale-.005&&m.logoMedallionWidthRatio<=.205);assert.ok(m.brandLockup.top>m.logoBounds.bottom);assert.ok(m.brandLockup.bottom<=m.height-m.brandLockup.minimumBottomMargin);
+  assert.equal(m.logoFringeDetected,false);assert.equal(m.logoRectangleOpaque,false);assert.equal(m.logoResampling,"lanczos3");assert.ok(m.logoAntialiasRatio>0&&m.logoAntialiasRatio<.18);assert.ok(m.logoDarkAntialiasRatio<.08);assert.ok(m.logoMedallionWidthRatio>=BRAND_TOKENS.logoMinimumScale-.005&&m.logoMedallionWidthRatio<=.205);assert.ok(m.brandLockup.top>m.logoBounds.bottom);assert.ok(m.brandLockup.bottom<=m.height-m.brandLockup.minimumBottomMargin);
   assert.equal(m.referenceSignature,true);assert.deepEqual(m.brandLockup.lines,["LA SANTÉ DES ZÈBRES","RAISMES - VALENCIENNES"]);assert.equal(m.brandLockup.centerX,m.logoBounds.left+m.logoBounds.width/2);assert.equal(m.brandLockup.nameColor,BRAND_TOKENS.brandGold);assert.equal(m.brandLockup.locationColor,BRAND_TOKENS.brandIvory);assert.equal(m.brandLockup.nameFont,"display");
 });
