@@ -53,6 +53,8 @@ function assessQuality({contract,sceneIntent=null,analysis={},composition={},non
  if(validation.rejectGenericSpa&&Number(analysis.genericSpaRisk||0)>.35)artistic.push("risque_spa_generique");
  if(mode==="narrative_consequence"&&Number(analysis.literalTreatmentSceneRisk||0)>.65)artistic.push("illustration_litterale_du_soin");
  if(validation.requireCinematicPoster&&analysis.brandSafeZoneAvailable!==true)artistic.push("zone_branding_calme_absente");
+ const brandTelemetryPresent=analysis.brandSafeZoneClean!==undefined||analysis.brandZoneIntrusionRisk!==undefined||analysis.brandZoneHighContrastGeometry!==undefined||analysis.brandZoneBrightGoldIntrusion!==undefined;
+ if(validation.requireCinematicPoster&&brandTelemetryPresent&&(analysis.brandSafeZoneClean===false||Number(analysis.brandZoneIntrusionRisk||0)>.22||analysis.brandZoneHighContrastGeometry===true||analysis.brandZoneBrightGoldIntrusion===true))artistic.push("zone_branding_polluee");
 
  const paletteDrift=Number(composition.paletteDrift??analysis.paletteDrift??0);
  if(paletteDrift>.45)artistic.push("derive_palette_importante");else if(paletteDrift>.15)warnings.push("derive_palette_moderee_corrigeable");

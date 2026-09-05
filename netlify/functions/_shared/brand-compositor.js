@@ -9,7 +9,7 @@ const BRAND_TOKENS=require("./v3-brand-tokens");
 const {semanticLines}=require("./v3-creative-strategy");
 
 const GOLD=BRAND_TOKENS.brandGold,PALE_GOLD=BRAND_TOKENS.brandPaleGold,IVORY=BRAND_TOKENS.brandIvory;
-const COMPOSITOR_VERSION="3.2.0-reference-signature-lockup";
+const COMPOSITOR_VERSION="3.3.0-full-official-medallion";
 const OFFICIAL_LOGO_CANDIDATES=Object.freeze([
  process.env.LAMBDA_TASK_ROOT&&path.join(process.env.LAMBDA_TASK_ROOT,"assets/sdz-logo-compositor.png"),
  path.join(process.cwd(),"assets/sdz-logo-compositor.png"),
@@ -69,8 +69,8 @@ async function auditLogoTransparency(buffer){
   const o=(y*info.width+x)*info.channels,a=data[o+3],max=Math.max(data[o],data[o+1],data[o+2]);
   if(a<=8)transparent++;if(a>=245){opaque++;if(max<75)darkOpaque++;}if(a>8&&a<245&&max<105)semiDark++;if((x===0||y===0||x===info.width-1||y===info.height-1)&&a>8)edgeOpaque++;
  }
- const transparentRatio=transparent/total,opaqueRatio=opaque/total,darkInteriorRatio=darkOpaque/Math.max(1,opaque),fringeDetected=semiDark>0||edgeOpaque>0,integrity=transparentRatio>.04&&opaqueRatio>.05&&opaqueRatio<.90&&darkInteriorRatio>.02&&!fringeDetected;
- return Object.freeze({width:info.width,height:info.height,transparentRatio,opaqueRatio,darkInteriorRatio,semiDark,edgeOpaque,fringeDetected,integrity});
+ const transparentRatio=transparent/total,opaqueRatio=opaque/total,darkInteriorRatio=darkOpaque/Math.max(1,opaque),aspectRatio=info.width/info.height,fringeDetected=semiDark>0||edgeOpaque>0,integrity=transparentRatio>.20&&transparentRatio<.50&&opaqueRatio>.50&&opaqueRatio<.80&&darkInteriorRatio>.50&&aspectRatio>.86&&aspectRatio<.97&&!fringeDetected;
+ return Object.freeze({width:info.width,height:info.height,aspectRatio,transparentRatio,opaqueRatio,darkInteriorRatio,semiDark,edgeOpaque,fringeDetected,integrity});
 }
 async function loadOfficialLogoAsset(){if(OFFICIAL_LOGO_CACHE)return OFFICIAL_LOGO_CACHE;let buffer;try{buffer=fs.readFileSync(OFFICIAL_LOGO_PATH);}catch(error){throw new Error(`Actif logo officiel absent du bundle : ${OFFICIAL_LOGO_PATH}`);}const audit=await auditLogoTransparency(buffer);if(!audit.integrity)throw new Error(`Actif logo officiel invalide : transparence=${audit.transparentRatio.toFixed(3)}, opaque=${audit.opaqueRatio.toFixed(3)}, halo=${audit.fringeDetected}.`);OFFICIAL_LOGO_CACHE=Object.freeze({buffer:Buffer.from(buffer),audit});return OFFICIAL_LOGO_CACHE;}
 async function hasOpaqueLogoRectangle(buffer){const a=await auditLogoTransparency(buffer);return a.transparentRatio<.02||a.edgeOpaque>0;}

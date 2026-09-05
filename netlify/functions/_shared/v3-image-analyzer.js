@@ -33,8 +33,12 @@ const ANALYSIS_SCHEMA={name:"viewfinder_v4_image_analysis",strict:true,schema:{t
  architectureObserved:{type:"boolean"},
  fantasticObserved:{type:"boolean"},
  brandSafeZoneAvailable:{type:"boolean"},
+ brandSafeZoneClean:{type:"boolean"},
+ brandZoneIntrusionRisk:{type:"number"},
+ brandZoneHighContrastGeometry:{type:"boolean"},
+ brandZoneBrightGoldIntrusion:{type:"boolean"},
  productFidelity:{type:"boolean"},
-},required:["faces","activeHands","equipment","subjects","gazeDirection","protectedZones","calmZones","availableContrast","density","negativeSpace","peopleCount","identityCount","sameBeneficiary","samePractitioner","foreignPersonPresent","practitionerGender","businessCompliance","requiredActionVisible","compositeStages","parasites","paletteDrift","subjectMatchesRequest","dramaticMomentPresent","transformationReadable","cinematicPosterRead","threePlaneDepth","genericSpaRisk","literalTreatmentSceneRisk","observedRegisters","architectureObserved","fantasticObserved","brandSafeZoneAvailable","productFidelity"]}};
+},required:["faces","activeHands","equipment","subjects","gazeDirection","protectedZones","calmZones","availableContrast","density","negativeSpace","peopleCount","identityCount","sameBeneficiary","samePractitioner","foreignPersonPresent","practitionerGender","businessCompliance","requiredActionVisible","compositeStages","parasites","paletteDrift","subjectMatchesRequest","dramaticMomentPresent","transformationReadable","cinematicPosterRead","threePlaneDepth","genericSpaRisk","literalTreatmentSceneRisk","observedRegisters","architectureObserved","fantasticObserved","brandSafeZoneAvailable","brandSafeZoneClean","brandZoneIntrusionRisk","brandZoneHighContrastGeometry","brandZoneBrightGoldIntrusion","productFidelity"]}};
 
 async function analyzeImageWithOpenAI({key,imageBuffer,plan,fetchImpl=fetch}){
  if(!key)throw new Error("Clé OpenAI absente pour l'analyse V4.");
@@ -42,7 +46,7 @@ async function analyzeImageWithOpenAI({key,imageBuffer,plan,fetchImpl=fetch}){
  const contract=plan.contract;
  const intent=plan.sceneIntent||null;
  const requestedRegisters=intent?.registers||{};
- const target=`Mode visuel : ${intent?.mode||"legacy"}. Demande exacte : ${intent?.exactUserRequest||plan.subjectBrief?.exactUserRequest||""}. Transformation : ${intent?.transformation?.before||""} → ${intent?.transformation?.moment||""} → ${intent?.transformation?.after||""}. Registres demandés : cinematic=${requestedRegisters.cinematic===true}, fantastic=${requestedRegisters.fantastic===true}, architectural=${requestedRegisters.architectural===true}.`;
+ const target=`Mode visuel : ${intent?.mode||"legacy"}. Demande exacte : ${intent?.exactUserRequest||plan.subjectBrief?.exactUserRequest||""}. Transformation : ${intent?.transformation?.before||""} → ${intent?.transformation?.moment||""} → ${intent?.transformation?.after||""}. Registres demandés : cinematic=${requestedRegisters.cinematic===true}, fantastic=${requestedRegisters.fantastic===true}, architectural=${requestedRegisters.architectural===true}. Zone de marque planifiée : ${intent?.platformPolicy?.brandingZone||"zone calme"}.`;
  const providerPolicy=intent?.validation||{};
  const response=await fetchImpl("https://api.openai.com/v1/chat/completions",{
   method:"POST",
@@ -57,7 +61,7 @@ async function analyzeImageWithOpenAI({key,imageBuffer,plan,fetchImpl=fetch}){
      "cinematicPosterRead=true seulement si l'image ressemble à un photogramme/affiche de film premium avec hiérarchie, lumière directionnelle, profondeur et atmosphère ; une photo de cabinet ou de banque d'images générique vaut false.",
      "threePlaneDepth=true seulement si premier plan, plan principal et arrière-plan sont réellement distincts. genericSpaRisk et literalTreatmentSceneRisk sont compris entre 0 et 1.",
      "observedRegisters contient uniquement les registres réellement visibles. architectureObserved et fantasticObserved ne doivent pas être déduits de la demande.",
-     "brandSafeZoneAvailable=true seulement s'il existe une zone calme exploitable pour le futur lock-up sans recouvrir visage, mains, produit ou moment dramatique.",
+     "brandSafeZoneAvailable=true seulement s'il existe la zone demandée pour le futur lock-up sans recouvrir visage, mains, produit ou moment dramatique. brandSafeZoneClean=true seulement si cette zone est sombre, continue et peu contrastée. brandZoneIntrusionRisk est compris entre 0 et 1 et augmente en présence de roche/objet, horizon, ouverture lumineuse, diagonale forte ou détail narratif dans cette zone. brandZoneHighContrastGeometry=true pour toute forme géométrique/architecturale fortement contrastée dans cette zone. brandZoneBrightGoldIntrusion=true si une lumière, ouverture ou surface dorée brillante concurrence le futur logo dans cette zone.",
      "productFidelity=true uniquement si le produit attendu est visiblement fidèle aux références ou si aucune fidélité produit n'est requise.",
      "Distingue le nombre de représentations du nombre d'identités. Si le praticien n'est pas clairement masculin, réponds female ou indeterminate, jamais par supposition.",
      "Retourne les zones sous forme de top-left, top, top-right, left, center, right, bottom-left, bottom, bottom-right. Tout texte, logo, URL, pictogramme parasite ou appareil inventé va dans parasites. paletteDrift est entre 0 (noir/or) et 1 (forte dérive)."

@@ -86,3 +86,23 @@ test("une scène spa générique ou littérale est bloquée même si elle est te
   const literal=assessQuality({contract:getServiceContract("Massage dos/zone"),sceneIntent:intent,analysis:{...base,genericSpaRisk:.1,literalTreatmentSceneRisk:.9},composition});
   assert.equal(literal.ok,false);assert.ok(literal.artistic.errors.includes("illustration_litterale_du_soin"));
 });
+
+
+test("le Golden dorsal impose une rupture visible autour du dos et protège la bande de marque",()=>{
+  const request="Douleurs dorsales, blocage, sensations de lourdeur";
+  const b={exactUserRequest:request,rawSubject:request,coreTheme:request,requestedFocus:"dos",selectedRegisters:["Fantastique","Cinématographie","Architecture"]};
+  const intent=buildSceneIntent({contract:getServiceContract("Massage dos/zone"),subjectBrief:b,artDirection:art(),platform:"Story"});
+  assert.match(intent.providerPrompt,/axe du dos sous tension/i);
+  assert.match(intent.providerPrompt,/rigidité de la posture et de l’architecture commence à céder/i);
+  assert.match(intent.providerPrompt,/28 % inférieurs/i);
+  assert.match(intent.providerPrompt,/triangle lumineux/i);
+  assert.match(intent.providerPrompt,/premier plan ne doit jamais envahir/i);
+});
+
+test("une ouverture dorée ou une géométrie forte dans la bande de marque est rejetée",()=>{
+  const intent=buildSceneIntent({contract:getServiceContract("Massage dos/zone"),subjectBrief:brief(),artDirection:art(),platform:"Story"});
+  const analysis={subjectMatchesRequest:true,dramaticMomentPresent:true,transformationReadable:true,cinematicPosterRead:true,threePlaneDepth:true,genericSpaRisk:.05,literalTreatmentSceneRisk:.05,observedRegisters:["cinematic","fantastic","architectural"],architectureObserved:true,fantasticObserved:true,brandSafeZoneAvailable:true,brandSafeZoneClean:false,brandZoneIntrusionRisk:.72,brandZoneHighContrastGeometry:true,brandZoneBrightGoldIntrusion:true,equipment:[],parasites:[],paletteDrift:.05};
+  const composition={imageExists:true,contrastValid:true,gazeHierarchyValid:true,thumbnailImpact:true,logoIntegrity:true,logoAssetIntegrity:true,logoFringeDetected:false,logoScaleValid:true,marginsValid:true,textWithinCanvas:true,protectedCollision:false,logoRectangleOpaque:false};
+  const quality=assessQuality({contract:getServiceContract("Massage dos/zone"),sceneIntent:intent,analysis,composition});
+  assert.equal(quality.ok,false);assert.ok(quality.artistic.errors.includes("zone_branding_polluee"));
+});

@@ -33,7 +33,17 @@ test("le compositor et la recomposition sont importables dans un runtime serveur
 
 test("le healthcheck gratuit prouve le bundle statique sans génération",async()=>{
   const recompose=require("../netlify/functions/recompose-image-job"),response=await recompose.handler({httpMethod:"GET",queryStringParameters:{health:"1"}}),body=JSON.parse(response.body);
-  assert.equal(response.statusCode,200);assert.equal(body.ok,true);assert.equal(body.recomposeVersion,"3.1.0-fast-recovery");assert.equal(body.compositorVersion,"3.2.0-reference-signature-lockup");assert.equal(body.logoAsset,"assets/sdz-logo-compositor.png");assert.deepEqual(body.fonts,{cormorant600:true,manrope500:true,manrope600:true});assert.equal(body.imageGenerationCalls,0);
+  assert.equal(response.statusCode,200);assert.equal(body.ok,true);assert.equal(body.recomposeVersion,"3.1.0-fast-recovery");assert.equal(body.compositorVersion,"3.3.0-full-official-medallion");assert.equal(body.logoAsset,"assets/sdz-logo-compositor.png");assert.deepEqual(body.fonts,{cormorant600:true,manrope500:true,manrope600:true});assert.equal(body.imageGenerationCalls,0);
+});
+
+test("le master logo complet conserve le disque noir, le triangle et un extérieur transparent",async()=>{
+  const {loadOfficialLogoAsset}=require("../netlify/functions/_shared/brand-compositor");
+  const official=await loadOfficialLogoAsset(),a=official.audit;
+  assert.ok(a.width>=850&&a.height>=950,`${a.width}x${a.height}`);
+  assert.ok(a.aspectRatio>.86&&a.aspectRatio<.97,`ratio ${a.aspectRatio}`);
+  assert.ok(a.darkInteriorRatio>.50,`noir intérieur ${a.darkInteriorRatio}`);
+  assert.ok(a.transparentRatio>.20&&a.transparentRatio<.50,`transparence ${a.transparentRatio}`);
+  assert.equal(a.fringeDetected,false);
 });
 
 test("la signature de référence s'applique à tous les formats premium mais pas à Google",()=>{
