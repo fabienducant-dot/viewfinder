@@ -1,103 +1,139 @@
-name: Apply logo resampling correction
+name: Viewfinder final audit
 
 on:
   push:
     branches:
       - audit/finalize-viewfinder-v3
+  workflow_dispatch:
 
 permissions:
-  contents: write
+  contents: read
 
 jobs:
-  apply:
+  full-audit:
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    timeout-minutes: 25
     steps:
-      - uses: actions/checkout@v4
-        with:
-          fetch-depth: 2
-      - uses: actions/setup-node@v4
+      - name: Checkout audited branch
+        uses: actions/checkout@v4
+
+      - name: Setup Node 20
+        uses: actions/setup-node@v4
         with:
           node-version: 20
           cache: npm
-      - run: npm ci
-      - name: Patch logo rendering quality
+
+      - name: Restore locked dependencies
+        run: npm ci
+
+      - name: Audit production dependencies
+        run: npm audit --omit=dev --audit-level=high
+
+      - name: Report complete dependency audit
+        continue-on-error: true
+        run: npm audit --audit-level=high
+
+      - name: Full deterministic verification
+        run: npm run verify
+
+      - name: Syntax check critical server files
         run: |
-          python - <<'PY'
-          from pathlib import Path
+          node --check netlify/functions/_shared/v3-scene-intent.js
+          node --check netlify/functions/_shared/v3-pipeline.js
+          node --check netlify/functions/_shared/v3-image-analyzer.js
+          node --check netlify/functions/_shared/v3-quality.js
+          node --check netlify/functions/_shared/v3-executor.js
+          node --check netlify/functions/_shared/brand-compositor.js
+          node --check netlify/functions/create-image-job.js
+          node --check netlify/functions/process-image-job-background.js
+          node --check netlify/functions/recompose-image-job.js
 
-          p=Path('netlify/functions/_shared/brand-compositor.js')
-          s=p.read_text()
-          s=s.replace('const COMPOSITOR_VERSION="3.3.0-full-official-medallion";','const COMPOSITOR_VERSION="3.4.0-high-quality-logo-resampling";',1)
-
-          old='''async function auditLogoTransparency(buffer){
- const {data,info}=await sharp(buffer,{failOn:"none"}).ensureAlpha().raw().toBuffer({resolveWithObject:true});
- if(!info.width||!info.height||info.channels<4)throw new Error("Actif logo statique invalide : raster RGBA requis.");
- let transparent=0,opaque=0,semiDark=0,darkOpaque=0,edgeOpaque=0;const total=info.width*info.height;
- for(let y=0;y<info.height;y++)for(let x=0;x<info.width;x++){
-  const o=(y*info.width+x)*info.channels,a=data[o+3],max=Math.max(data[o],data[o+1],data[o+2]);
-  if(a<=8)transparent++;if(a>=245){opaque++;if(max<75)darkOpaque++;}if(a>8&&a<245&&max<105)semiDark++;if((x===0||y===0||x===info.width-1||y===info.height-1)&&a>8)edgeOpaque++;
- }
- const transparentRatio=transparent/total,opaqueRatio=opaque/total,darkInteriorRatio=darkOpaque/Math.max(1,opaque),aspectRatio=info.width/info.height,fringeDetected=semiDark>0||edgeOpaque>0,integrity=transparentRatio>.20&&transparentRatio<.50&&opaqueRatio>.50&&opaqueRatio<.80&&darkInteriorRatio>.50&&aspectRatio>.86&&aspectRatio<.97&&!fringeDetected;
- return Object.freeze({width:info.width,height:info.height,aspectRatio,transparentRatio,opaqueRatio,darkInteriorRatio,semiDark,edgeOpaque,fringeDetected,integrity});
-}'''
-          new='''async function auditLogoTransparency(buffer,{allowAntialias=false}={}){
- const {data,info}=await sharp(buffer,{failOn:"none"}).ensureAlpha().raw().toBuffer({resolveWithObject:true});
- if(!info.width||!info.height||info.channels<4)throw new Error("Actif logo statique invalide : raster RGBA requis.");
- let transparent=0,opaque=0,semiAlpha=0,semiDark=0,darkOpaque=0,edgeOpaque=0;const total=info.width*info.height;
- for(let y=0;y<info.height;y++)for(let x=0;x<info.width;x++){
-  const o=(y*info.width+x)*info.channels,a=data[o+3],max=Math.max(data[o],data[o+1],data[o+2]);
-  if(a<=8)transparent++;
-  if(a>=245){opaque++;if(max<75)darkOpaque++;}
-  if(a>8&&a<245){semiAlpha++;if(max<105)semiDark++;}
-  if((x===0||y===0||x===info.width-1||y===info.height-1)&&a>8)edgeOpaque++;
- }
- const transparentRatio=transparent/total,opaqueRatio=opaque/total,semiAlphaRatio=semiAlpha/total,semiDarkRatio=semiDark/total,darkInteriorRatio=darkOpaque/Math.max(1,opaque),aspectRatio=info.width/info.height;
- const fringeDetected=edgeOpaque>0||(allowAntialias?semiDarkRatio>.08:semiDark>0);
- const alphaQuality=allowAntialias?semiAlphaRatio<.18:semiAlpha===0;
- const integrity=transparentRatio>.18&&transparentRatio<.52&&opaqueRatio>.45&&opaqueRatio<.82&&darkInteriorRatio>.48&&aspectRatio>.86&&aspectRatio<.97&&alphaQuality&&!fringeDetected;
- return Object.freeze({width:info.width,height:info.height,aspectRatio,transparentRatio,opaqueRatio,semiAlpha,semiAlphaRatio,darkInteriorRatio,semiDark,semiDarkRatio,edgeOpaque,fringeDetected,integrity});
-}'''
-          assert old in s, 'audit function marker not found'
-          s=s.replace(old,new,1)
-
-          old='''/* Le master a un alpha binaire validé au build. Un redimensionnement interpolé recréait des pixels
-    noirs semi-transparents — le voile constaté en production. Le noyau nearest conserve strictement
-    l'alpha binaire et les noirs internes officiels. */
- const resizedLogo=await sharp(official.buffer,{failOn:"none"}).resize({width:logoWidth,withoutEnlargement:false,fit:"inside",kernel:sharp.kernel.nearest}).png({compressionLevel:9}).toBuffer(),resizedMeta=await sharp(resizedLogo).metadata(),finalLogoWidth=resizedMeta.width||logoWidth,finalLogoHeight=resizedMeta.height||logoHeight,resizedAudit=await auditLogoTransparency(resizedLogo);'''
-          new='''/* Le master reste binaire au build, mais nearest-neighbour détruit les courbes et les détails fins.
-    Lanczos3 fournit l'antialiasing nécessaire à un rendu premium ; l'audit distingue cet antialiasing
-    local d'un halo ou voile étendu réellement indésirable. */
- const resizedLogo=await sharp(official.buffer,{failOn:"none"}).resize({width:logoWidth,withoutEnlargement:false,fit:"inside",kernel:sharp.kernel.lanczos3}).png({compressionLevel:9}).toBuffer(),resizedMeta=await sharp(resizedLogo).metadata(),finalLogoWidth=resizedMeta.width||logoWidth,finalLogoHeight=resizedMeta.height||logoHeight,resizedAudit=await auditLogoTransparency(resizedLogo,{allowAntialias:true});'''
-          assert old in s, 'nearest resize marker not found'
-          s=s.replace(old,new,1)
-
-          marker='logoAssetSource:"assets/sdz-logo-compositor.png",logoAssetIntegrity:official.audit.integrity&&resizedAudit.integrity,logoFringeDetected:official.audit.fringeDetected||resizedAudit.fringeDetected,'
-          repl='logoAssetSource:"assets/sdz-logo-compositor.png",logoResampling:"lanczos3",logoAntialiasRatio:resizedAudit.semiAlphaRatio,logoDarkAntialiasRatio:resizedAudit.semiDarkRatio,logoAssetIntegrity:official.audit.integrity&&resizedAudit.integrity,logoFringeDetected:official.audit.fringeDetected||resizedAudit.fringeDetected,'
-          assert marker in s, 'manifest marker not found'
-          s=s.replace(marker,repl,1)
-          p.write_text(s)
-
-          p=Path('tests/v3-compositor-server-stability.test.js')
-          s=p.read_text()
-          s=s.replace('assert.equal(body.compositorVersion,"3.3.0-full-official-medallion")','assert.equal(body.compositorVersion,"3.4.0-high-quality-logo-resampling")',1)
-          old='''  assert.equal(m.logoFringeDetected,false);assert.equal(m.logoRectangleOpaque,false);assert.ok(m.logoMedallionWidthRatio>=BRAND_TOKENS.logoMinimumScale-.005&&m.logoMedallionWidthRatio<=.205);assert.ok(m.brandLockup.top>m.logoBounds.bottom);assert.ok(m.brandLockup.bottom<=m.height-m.brandLockup.minimumBottomMargin);'''
-          new='''  assert.equal(m.logoFringeDetected,false);assert.equal(m.logoRectangleOpaque,false);assert.equal(m.logoResampling,"lanczos3");assert.ok(m.logoAntialiasRatio>0&&m.logoAntialiasRatio<.18,`antialias ${m.logoAntialiasRatio}`);assert.ok(m.logoDarkAntialiasRatio<.08,`dark antialias ${m.logoDarkAntialiasRatio}`);assert.ok(m.logoMedallionWidthRatio>=BRAND_TOKENS.logoMinimumScale-.005&&m.logoMedallionWidthRatio<=.205);assert.ok(m.brandLockup.top>m.logoBounds.bottom);assert.ok(m.brandLockup.bottom<=m.height-m.brandLockup.minimumBottomMargin);'''
-          assert old in s, 'Story assertion marker not found'
-          s=s.replace(old,new,1)
-          p.write_text(s)
-          PY
-      - name: Validate
+      - name: Enforce production architecture invariants
         run: |
-          npm run verify
-          npm audit --omit=dev --audit-level=high
+          node - <<'NODE'
+          const fs=require('node:fs');
+          const assert=require('node:assert/strict');
+          const root=process.cwd();
+          const compositor=fs.readFileSync(`${root}/netlify/functions/_shared/brand-compositor.js`,'utf8');
+          const worker=fs.readFileSync(`${root}/netlify/functions/process-image-job-background.js`,'utf8');
+          const pipeline=fs.readFileSync(`${root}/netlify/functions/_shared/v3-pipeline.js`,'utf8');
+          const scene=fs.readFileSync(`${root}/netlify/functions/_shared/v3-scene-intent.js`,'utf8');
+          const analyzer=fs.readFileSync(`${root}/netlify/functions/_shared/v3-image-analyzer.js`,'utf8');
+          const quality=fs.readFileSync(`${root}/netlify/functions/_shared/v3-quality.js`,'utf8');
+          const netlify=fs.readFileSync(`${root}/netlify.toml`,'utf8');
+          assert.doesNotMatch(compositor,/removeBorderConnectedDarkBackground|TRANSPARENT_LOGO_CACHE|prepareLogoOverlay|buildLogoSilhouetteMask/);
+          assert.match(compositor,/assets\/sdz-logo-compositor\.png/);
+          assert.match(compositor,/LAMBDA_TASK_ROOT/);
+          assert.match(compositor,/3\.3\.0-full-official-medallion/);
+          assert.doesNotMatch(worker,/providerSafetyFallback|buildProviderSafeBodyworkPrompt|vf-logo-asset|openBrandStore/);
+          assert.match(worker,/retries:0,imageCalls:1/);
+          assert.match(pipeline,/authority:"SceneIntentV4"/);
+          assert.match(scene,/4\.4\.0-scene-intent/);
+          assert.match(scene,/28 % inférieurs/);
+          assert.match(scene,/triangle lumineux/);
+          assert.match(analyzer,/brandZoneIntrusionRisk/);
+          assert.match(analyzer,/brandZoneBrightGoldIntrusion/);
+          assert.match(quality,/zone_branding_polluee/);
+          assert.match(netlify,/assets\/sdz-logo-compositor\.png/);
+          console.log('Architecture and visual-fidelity invariants: OK');
+          NODE
+
+      - name: Verify full official logo pixels independently
+        run: |
+          node - <<'NODE'
+          const sharp=require('sharp');
+          const fs=require('node:fs');
+          const assert=require('node:assert/strict');
+          (async()=>{
+            const file='assets/sdz-logo-compositor.png';
+            assert.ok(fs.existsSync(file));
+            const {data,info}=await sharp(file).ensureAlpha().raw().toBuffer({resolveWithObject:true});
+            let transparent=0,opaque=0,darkOpaque=0,semiAlpha=0,edgeOpaque=0;
+            for(let y=0;y<info.height;y++)for(let x=0;x<info.width;x++){
+              const i=y*info.width+x,o=i*info.channels,a=data[o+3],max=Math.max(data[o],data[o+1],data[o+2]);
+              if(a<=8)transparent++;
+              if(a>=245){opaque++;if(max<75)darkOpaque++;}
+              if(a>8&&a<245)semiAlpha++;
+              if((x===0||y===0||x===info.width-1||y===info.height-1)&&a>8)edgeOpaque++;
+            }
+            const total=info.width*info.height;
+            const transparentRatio=transparent/total;
+            const darkInteriorRatio=darkOpaque/Math.max(1,opaque);
+            const aspectRatio=info.width/info.height;
+            assert.ok(info.width>=850&&info.height>=950,`full official logo cropped: ${info.width}x${info.height}`);
+            assert.ok(aspectRatio>.86&&aspectRatio<.97,`unexpected full-logo aspect ratio ${aspectRatio}`);
+            assert.ok(transparentRatio>.20&&transparentRatio<.50,`unexpected exterior alpha ${transparentRatio}`);
+            assert.ok(darkInteriorRatio>.50,`official black medallion lost ${darkInteriorRatio}`);
+            assert.equal(semiAlpha,0,'semi-transparent pixels detected');
+            assert.equal(edgeOpaque,0,'logo touches asset border');
+            console.log(`Full logo ${info.width}x${info.height}: transparency=${transparentRatio.toFixed(3)}, darkInterior=${darkInteriorRatio.toFixed(3)}, alpha OK`);
+          })().catch(e=>{console.error(e);process.exit(1)});
+          NODE
+
+      - name: Diagnose deployed recovery runtime
+        run: |
+          set -euo pipefail
+          URL='https://deploy-preview-14--fascinating-kashata-73134d.netlify.app/.netlify/functions/recompose-image-job?health=1'
+          for attempt in $(seq 1 18); do
+            BODY_FILE="$(mktemp)"
+            HTTP_CODE="$(curl -sS --max-time 20 -o "$BODY_FILE" -w '%{http_code}' "$URL" || true)"
+            BODY="$(cat "$BODY_FILE" 2>/dev/null || true)"
+            rm -f "$BODY_FILE"
+            echo "Attempt ${attempt}: HTTP ${HTTP_CODE} ${BODY}"
+            if [ "$HTTP_CODE" = "200" ] && [ -n "$BODY" ]; then
+              if node -e 'const b=JSON.parse(process.argv[1]);process.exit(b.ok&&b.logoAsset==="assets/sdz-logo-compositor.png"&&b.imageGenerationCalls===0?0:1)' "$BODY"; then
+                echo 'Deploy Preview runtime health: OK'
+                exit 0
+              fi
+            fi
+            sleep 10
+          done
+          echo 'Deploy Preview runtime did not become healthy in time' >&2
+          exit 1
+
+      - name: Repository hygiene
+        run: |
+          test "$(find .github/workflows -maxdepth 1 -type f | wc -l)" -eq 1
+          test -f .github/workflows/viewfinder-final-audit.yml
           git diff --check
-      - name: Commit fix and restore permanent audit workflow
-        run: |
-          git config user.name 'viewfinder-ci'
-          git config user.email 'actions@users.noreply.github.com'
-          git rm -f .github/workflows/fix-logo-resampling.yml
-          git checkout HEAD^ -- .github/workflows/viewfinder-final-audit.yml
-          git add netlify/functions/_shared/brand-compositor.js tests/v3-compositor-server-stability.test.js .github/workflows/viewfinder-final-audit.yml
-          git commit -m 'Render official logo with high-quality antialiasing'
-          git push origin HEAD:audit/finalize-viewfinder-v3
+          git status --short
