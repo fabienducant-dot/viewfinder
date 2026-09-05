@@ -10,7 +10,13 @@ const {semanticLines}=require("./v3-creative-strategy");
 
 const GOLD=BRAND_TOKENS.brandGold,PALE_GOLD=BRAND_TOKENS.brandPaleGold,IVORY=BRAND_TOKENS.brandIvory;
 const COMPOSITOR_VERSION="3.2.0-reference-signature-lockup";
-const OFFICIAL_LOGO_PATH=path.resolve(__dirname,"../../../assets/sdz-logo-compositor.png");
+const OFFICIAL_LOGO_CANDIDATES=Object.freeze([
+ process.env.LAMBDA_TASK_ROOT&&path.join(process.env.LAMBDA_TASK_ROOT,"assets/sdz-logo-compositor.png"),
+ path.join(process.cwd(),"assets/sdz-logo-compositor.png"),
+ path.resolve(__dirname,"../../assets/sdz-logo-compositor.png"),
+ path.resolve(__dirname,"../../../assets/sdz-logo-compositor.png"),
+].filter(Boolean));
+const OFFICIAL_LOGO_PATH=OFFICIAL_LOGO_CANDIDATES.find(candidate=>{try{return fs.existsSync(candidate);}catch(error){return false;}})||OFFICIAL_LOGO_CANDIDATES[0];
 const BRAND_CONTACTS=Object.freeze({domain:"la-sante-des-zebres.com",phone:"06.84.40.69.54",address:"11 cour Dupas, 59590 Raismes",email:"fabien.ducant@gmail.com"});
 const PREMIUM_SIGNATURE=Object.freeze({name:"LA SANTÉ DES ZÈBRES",location:"RAISMES - VALENCIENNES",nameColor:GOLD,locationColor:IVORY,nameFont:"display",locationFont:"text"});
 const GOOGLE_SIGNATURE=Object.freeze({name:"LA SANTÉ DES ZÈBRES",location:"RAISMES",nameColor:GOLD,locationColor:GOLD,nameFont:"brand",locationFont:"text"});
