@@ -1,0 +1,139 @@
+name: Viewfinder final audit
+
+on:
+  push:
+    branches:
+      - audit/finalize-viewfinder-v3
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  full-audit:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - name: Checkout audited branch
+        uses: actions/checkout@v4
+
+      - name: Setup Node 20
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: Restore locked dependencies
+        run: npm ci
+
+      - name: Audit production dependencies
+        run: npm audit --omit=dev --audit-level=high
+
+      - name: Report complete dependency audit
+        continue-on-error: true
+        run: npm audit --audit-level=high
+
+      - name: Full deterministic verification
+        run: npm run verify
+
+      - name: Syntax check critical server files
+        run: |
+          node --check netlify/functions/_shared/v3-scene-intent.js
+          node --check netlify/functions/_shared/v3-pipeline.js
+          node --check netlify/functions/_shared/v3-image-analyzer.js
+          node --check netlify/functions/_shared/v3-quality.js
+          node --check netlify/functions/_shared/v3-executor.js
+          node --check netlify/functions/_shared/brand-compositor.js
+          node --check netlify/functions/create-image-job.js
+          node --check netlify/functions/process-image-job-background.js
+          node --check netlify/functions/recompose-image-job.js
+
+      - name: Enforce production architecture invariants
+        run: |
+          node - <<'NODE'
+          const fs=require('node:fs');
+          const assert=require('node:assert/strict');
+          const root=process.cwd();
+          const compositor=fs.readFileSync(`${root}/netlify/functions/_shared/brand-compositor.js`,'utf8');
+          const worker=fs.readFileSync(`${root}/netlify/functions/process-image-job-background.js`,'utf8');
+          const pipeline=fs.readFileSync(`${root}/netlify/functions/_shared/v3-pipeline.js`,'utf8');
+          const scene=fs.readFileSync(`${root}/netlify/functions/_shared/v3-scene-intent.js`,'utf8');
+          const analyzer=fs.readFileSync(`${root}/netlify/functions/_shared/v3-image-analyzer.js`,'utf8');
+          const quality=fs.readFileSync(`${root}/netlify/functions/_shared/v3-quality.js`,'utf8');
+          const netlify=fs.readFileSync(`${root}/netlify.toml`,'utf8');
+          assert.doesNotMatch(compositor,/removeBorderConnectedDarkBackground|TRANSPARENT_LOGO_CACHE|prepareLogoOverlay|buildLogoSilhouetteMask/);
+          assert.match(compositor,/assets\/sdz-logo-compositor\.png/);
+          assert.match(compositor,/LAMBDA_TASK_ROOT/);
+          assert.match(compositor,/3\.3\.0-full-official-medallion/);
+          assert.doesNotMatch(worker,/providerSafetyFallback|buildProviderSafeBodyworkPrompt|vf-logo-asset|openBrandStore/);
+          assert.match(worker,/retries:0,imageCalls:1/);
+          assert.match(pipeline,/authority:"SceneIntentV4"/);
+          assert.match(scene,/4\.4\.0-scene-intent/);
+          assert.match(scene,/28 % inférieurs/);
+          assert.match(scene,/triangle lumineux/);
+          assert.match(analyzer,/brandZoneIntrusionRisk/);
+          assert.match(analyzer,/brandZoneBrightGoldIntrusion/);
+          assert.match(quality,/zone_branding_polluee/);
+          assert.match(netlify,/assets\/sdz-logo-compositor\.png/);
+          console.log('Architecture and visual-fidelity invariants: OK');
+          NODE
+
+      - name: Verify full official logo pixels independently
+        run: |
+          node - <<'NODE'
+          const sharp=require('sharp');
+          const fs=require('node:fs');
+          const assert=require('node:assert/strict');
+          (async()=>{
+            const file='assets/sdz-logo-compositor.png';
+            assert.ok(fs.existsSync(file));
+            const {data,info}=await sharp(file).ensureAlpha().raw().toBuffer({resolveWithObject:true});
+            let transparent=0,opaque=0,darkOpaque=0,semiAlpha=0,edgeOpaque=0;
+            for(let y=0;y<info.height;y++)for(let x=0;x<info.width;x++){
+              const i=y*info.width+x,o=i*info.channels,a=data[o+3],max=Math.max(data[o],data[o+1],data[o+2]);
+              if(a<=8)transparent++;
+              if(a>=245){opaque++;if(max<75)darkOpaque++;}
+              if(a>8&&a<245)semiAlpha++;
+              if((x===0||y===0||x===info.width-1||y===info.height-1)&&a>8)edgeOpaque++;
+            }
+            const total=info.width*info.height;
+            const transparentRatio=transparent/total;
+            const darkInteriorRatio=darkOpaque/Math.max(1,opaque);
+            const aspectRatio=info.width/info.height;
+            assert.ok(info.width>=850&&info.height>=950,`full official logo cropped: ${info.width}x${info.height}`);
+            assert.ok(aspectRatio>.86&&aspectRatio<.97,`unexpected full-logo aspect ratio ${aspectRatio}`);
+            assert.ok(transparentRatio>.20&&transparentRatio<.50,`unexpected exterior alpha ${transparentRatio}`);
+            assert.ok(darkInteriorRatio>.50,`official black medallion lost ${darkInteriorRatio}`);
+            assert.equal(semiAlpha,0,'semi-transparent pixels detected');
+            assert.equal(edgeOpaque,0,'logo touches asset border');
+            console.log(`Full logo ${info.width}x${info.height}: transparency=${transparentRatio.toFixed(3)}, darkInterior=${darkInteriorRatio.toFixed(3)}, alpha OK`);
+          })().catch(e=>{console.error(e);process.exit(1)});
+          NODE
+
+      - name: Diagnose deployed recovery runtime
+        run: |
+          set -euo pipefail
+          URL='https://deploy-preview-14--fascinating-kashata-73134d.netlify.app/.netlify/functions/recompose-image-job?health=1'
+          for attempt in $(seq 1 18); do
+            BODY_FILE="$(mktemp)"
+            HTTP_CODE="$(curl -sS --max-time 20 -o "$BODY_FILE" -w '%{http_code}' "$URL" || true)"
+            BODY="$(cat "$BODY_FILE" 2>/dev/null || true)"
+            rm -f "$BODY_FILE"
+            echo "Attempt ${attempt}: HTTP ${HTTP_CODE} ${BODY}"
+            if [ "$HTTP_CODE" = "200" ] && [ -n "$BODY" ]; then
+              if node -e 'const b=JSON.parse(process.argv[1]);process.exit(b.ok&&b.logoAsset==="assets/sdz-logo-compositor.png"&&b.imageGenerationCalls===0?0:1)' "$BODY"; then
+                echo 'Deploy Preview runtime health: OK'
+                exit 0
+              fi
+            fi
+            sleep 10
+          done
+          echo 'Deploy Preview runtime did not become healthy in time' >&2
+          exit 1
+
+      - name: Repository hygiene
+        run: |
+          test "$(find .github/workflows -maxdepth 1 -type f | wc -l)" -eq 1
+          test -f .github/workflows/viewfinder-final-audit.yml
+          git diff --check
+          git status --short

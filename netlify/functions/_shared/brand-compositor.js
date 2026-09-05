@@ -1,328 +1,124 @@
 "use strict";
 
-const fs = require("fs");
-const sharp = require("sharp");
-const opentype = require("opentype.js");
-const crypto = require("crypto");
-const { PLATFORM_TEMPLATES, normalizePlatform } = require("./v3-layout-engine");
+const fs=require("fs");
+const path=require("path");
+const sharp=require("sharp");
+const opentype=require("opentype.js");
+const {PLATFORM_TEMPLATES,normalizePlatform}=require("./v3-layout-engine");
 const BRAND_TOKENS=require("./v3-brand-tokens");
 const {semanticLines}=require("./v3-creative-strategy");
 
-const GOLD=BRAND_TOKENS.brandGold, PALE_GOLD=BRAND_TOKENS.brandPaleGold, IVORY=BRAND_TOKENS.brandIvory;
-const COMPOSITOR_VERSION="2.0.0-safe-lockup";
-const BRAND_CONTACTS = Object.freeze({
-  domain:"la-sante-des-zebres.com", phone:"06.84.40.69.54",
-  address:"11 cour Dupas, 59590 Raismes", email:"fabien.ducant@gmail.com",
-});
+const GOLD=BRAND_TOKENS.brandGold,PALE_GOLD=BRAND_TOKENS.brandPaleGold,IVORY=BRAND_TOKENS.brandIvory;
+const COMPOSITOR_VERSION="3.4.0-high-quality-logo-resampling";
+const OFFICIAL_LOGO_CANDIDATES=Object.freeze([
+ process.env.LAMBDA_TASK_ROOT&&path.join(process.env.LAMBDA_TASK_ROOT,"assets/sdz-logo-compositor.png"),
+ path.join(process.cwd(),"assets/sdz-logo-compositor.png"),
+ path.resolve(__dirname,"../../assets/sdz-logo-compositor.png"),
+ path.resolve(__dirname,"../../../assets/sdz-logo-compositor.png"),
+].filter(Boolean));
+const OFFICIAL_LOGO_PATH=OFFICIAL_LOGO_CANDIDATES.find(candidate=>{try{return fs.existsSync(candidate);}catch(error){return false;}})||OFFICIAL_LOGO_CANDIDATES[0];
+const BRAND_CONTACTS=Object.freeze({domain:"la-sante-des-zebres.com",phone:"06.84.40.69.54",address:"11 cour Dupas, 59590 Raismes",email:"fabien.ducant@gmail.com"});
+const PREMIUM_SIGNATURE=Object.freeze({name:"LA SANTÉ DES ZÈBRES",location:"RAISMES - VALENCIENNES",nameColor:GOLD,locationColor:IVORY,nameFont:"display",locationFont:"text"});
+const GOOGLE_SIGNATURE=Object.freeze({name:"LA SANTÉ DES ZÈBRES",location:"RAISMES",nameColor:GOLD,locationColor:GOLD,nameFont:"brand",locationFont:"text"});
 
-/* Netlify n'embarque pas les polices système utilisées par librsvg. Avec un simple <text>
-   SVG, les accents français devenaient donc des carrés. Les lettres sont maintenant converties
-   en tracés vectoriels à partir d'une police Cinzel embarquée : le rendu est identique sur tous
-   les environnements et l'OCR reçoit de vraies lettres lisibles. */
-function loadFont(relativeFile){
-  const file = require.resolve(`@fontsource/cinzel/files/${relativeFile}`);
-  const buffer = fs.readFileSync(file);
-  const arrayBuffer = buffer.buffer.slice(buffer.byteOffset, buffer.byteOffset + buffer.byteLength);
-  return opentype.parse(arrayBuffer);
-}
+const DISPLAY_LATIN_PATH=require.resolve("@fontsource/cormorant-garamond/files/cormorant-garamond-latin-600-normal.woff");
+const DISPLAY_EXTENDED_PATH=require.resolve("@fontsource/cormorant-garamond/files/cormorant-garamond-latin-ext-600-normal.woff");
+const TEXT_LATIN_PATH=require.resolve("@fontsource/manrope/files/manrope-latin-500-normal.woff");
+const TEXT_EXTENDED_PATH=require.resolve("@fontsource/manrope/files/manrope-latin-ext-500-normal.woff");
+const BRAND_LATIN_PATH=require.resolve("@fontsource/manrope/files/manrope-latin-600-normal.woff");
+const BRAND_EXTENDED_PATH=require.resolve("@fontsource/manrope/files/manrope-latin-ext-600-normal.woff");
+const FONT_PATHS=Object.freeze({displayLatin:DISPLAY_LATIN_PATH,displayExtended:DISPLAY_EXTENDED_PATH,textLatin:TEXT_LATIN_PATH,textExtended:TEXT_EXTENDED_PATH,brandLatin:BRAND_LATIN_PATH,brandExtended:BRAND_EXTENDED_PATH});
 
-function loadFontSet(weight){
-  return {
-    latin: loadFont(`cinzel-latin-${weight}-normal.woff`),
-    extended: loadFont(`cinzel-latin-ext-${weight}-normal.woff`),
-  };
-}
+function loadFont(file){const b=fs.readFileSync(file),ab=b.buffer.slice(b.byteOffset,b.byteOffset+b.byteLength);return opentype.parse(ab);}
+function loadFontSet(latin,extended){return {latin:loadFont(latin),extended:loadFont(extended)};}
+const DISPLAY_FONT=loadFontSet(DISPLAY_LATIN_PATH,DISPLAY_EXTENDED_PATH),TEXT_FONT=loadFontSet(TEXT_LATIN_PATH,TEXT_EXTENDED_PATH),BRAND_FONT=loadFontSet(BRAND_LATIN_PATH,BRAND_EXTENDED_PATH);
+let OFFICIAL_LOGO_CACHE=null;
 
-const DISPLAY_FONT = loadFontSet(600);
-const TEXT_FONT = loadFontSet(400);
-const TRANSPARENT_LOGO_CACHE = new Map();
+function escapeXml(value){return String(value||"").replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;").replace(/"/g,"&quot;").replace(/'/g,"&apos;");}
+function normalizedZone(value,platform){const raw=String(value||"").toLowerCase();if(/sup|haut|top/.test(raw))return "top";if(/centre|milieu|center/.test(raw))return "center";if(/inf|bas|bottom/.test(raw))return "bottom";return normalizePlatform(platform)==="Story"?"top":"bottom";}
+function wrapWords(text,maxChars,maxLines){const words=String(text||"").trim().split(/\s+/).filter(Boolean),lines=[];let line="";for(const word of words){const c=line?`${line} ${word}`:word;if(c.length<=maxChars||!line)line=c;else{lines.push(line);line=word;if(lines.length===maxLines-1)break;}}if(line&&lines.length<maxLines)lines.push(line);const consumed=lines.join(" ").split(/\s+/).filter(Boolean).length;if(consumed<words.length&&lines.length)lines[lines.length-1]=`${lines[lines.length-1].replace(/[.…]+$/,"")}…`;return lines;}
+function headlineParts(headline){const parts=String(headline||"").split("|").map(v=>v.trim()).filter(Boolean);return {title:parts[0]||"",subtitle:parts.slice(1).join(" — ")};}
 
-function dataUrlToBuffer(dataUrl){
-  const match = String(dataUrl || "").match(/^data:image\/[a-zA-Z0-9.+-]+;base64,(.+)$/);
-  if(!match) throw new Error("Logo officiel invalide dans Netlify Blobs.");
-  return Buffer.from(match[1], "base64");
-}
-
-function escapeXml(value){
-  return String(value || "")
-    .replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;")
-    .replace(/"/g, "&quot;").replace(/'/g, "&apos;");
-}
-
-function normalizedZone(value, platform){
-  const raw = String(value || "").toLowerCase();
-  if(/sup|haut|top/.test(raw)) return "top";
-  if(/centre|milieu|center/.test(raw)) return "center";
-  if(/inf|bas|bottom/.test(raw)) return "bottom";
-  return platform === "Story" ? "top" : "bottom";
-}
-
-function wrapWords(text, maxChars, maxLines){
-  const words = String(text || "").trim().split(/\s+/).filter(Boolean);
-  const lines = [];
-  let line = "";
-  for(const word of words){
-    const candidate = line ? `${line} ${word}` : word;
-    if(candidate.length <= maxChars || !line){
-      line = candidate;
-    }else{
-      lines.push(line);
-      line = word;
-      if(lines.length === maxLines - 1) break;
-    }
-  }
-  if(line && lines.length < maxLines) lines.push(line);
-  const consumed = lines.join(" ").split(/\s+/).length;
-  if(consumed < words.length && lines.length){
-    lines[lines.length - 1] = `${lines[lines.length - 1].replace(/[.…]+$/, "")}…`;
-  }
-  return lines;
-}
-
-function headlineParts(headline){
-  const parts = String(headline || "").split("|").map(v=>v.trim()).filter(Boolean);
-  return { title: parts[0] || "", subtitle: parts.slice(1).join(" — ") };
-}
-
-function vectorText(fontSet, text, centerX, baselineY, fontSize, className){
-  const value = String(text || "");
-  if(!value) return "";
-  const runs = Array.from(value).map(character=>{
-    const latinGlyph = fontSet.latin.charToGlyph(character);
-    const useExtended = latinGlyph.index === 0 && character !== "\0";
-    const font = useExtended ? fontSet.extended : fontSet.latin;
-    const glyph = useExtended ? font.charToGlyph(character) : latinGlyph;
-    return { font, glyph };
-  });
-  const advances = runs.map(({font,glyph})=>(glyph.advanceWidth || font.unitsPerEm*.38) * fontSize / font.unitsPerEm);
-  const width = advances.reduce((sum, advance)=>sum+advance, 0);
-  let x = centerX - width / 2;
-  const paths = runs.map(({glyph}, index)=>{
-    const node = glyph.getPath(x, baselineY, fontSize).toPathData(2);
-    x += advances[index];
-    return node;
-  }).join("");
-  return `<path d="${paths}" class="${className}"/>`;
-}
-
-function measureVectorText(fontSet,text,fontSize,letterSpacing=0){
-  const chars=Array.from(String(text||""));
-  return chars.reduce((sum,character)=>{const latin=fontSet.latin.charToGlyph(character);const font=latin.index===0&&character!=="\0"?fontSet.extended:fontSet.latin;const glyph=font.charToGlyph(character);return sum+(glyph.advanceWidth||font.unitsPerEm*.38)*fontSize/font.unitsPerEm;},0)+Math.max(0,chars.length-1)*letterSpacing;
-}
+function glyphRun(fontSet,character){const latin=fontSet.latin.charToGlyph(character),useExtended=latin.index===0&&character!=="\0",font=useExtended?fontSet.extended:fontSet.latin,glyph=useExtended?font.charToGlyph(character):latin;return {font,glyph};}
+function vectorText(fontSet,text,centerX,baselineY,fontSize,className){const runs=Array.from(String(text||"")).map(character=>glyphRun(fontSet,character));if(!runs.length)return "";const advances=runs.map(({font,glyph})=>(glyph.advanceWidth||font.unitsPerEm*.38)*fontSize/font.unitsPerEm),width=advances.reduce((a,b)=>a+b,0);let x=centerX-width/2;const d=runs.map(({glyph},i)=>{const node=glyph.getPath(x,baselineY,fontSize).toPathData(2);x+=advances[i];return node;}).join("");return `<path d="${d}" class="${className}"/>`;}
+function measureVectorText(fontSet,text,fontSize,letterSpacing=0){const chars=Array.from(String(text||""));return chars.reduce((sum,c)=>{const {font,glyph}=glyphRun(fontSet,c);return sum+(glyph.advanceWidth||font.unitsPerEm*.38)*fontSize/font.unitsPerEm;},0)+Math.max(0,chars.length-1)*letterSpacing;}
 function fitFontSize(fontSet,lines,preferred,minimum,safeWidth){let size=preferred;while(size>minimum&&lines.some(line=>measureVectorText(fontSet,line,size)>safeWidth))size--;return size;}
-function fitTypography({titleLines,subtitleLines,safeWidth,safeHeight,preferredTitle,preferredSubtitle,minimumTitle,minimumSubtitle}){
-  let titleSize=fitFontSize(DISPLAY_FONT,titleLines,preferredTitle,minimumTitle,safeWidth);
-  let subtitleSize=fitFontSize(TEXT_FONT,subtitleLines,preferredSubtitle,minimumSubtitle,safeWidth);
-  const usedHeight=()=>titleLines.length*titleSize*1.08+(subtitleLines.length?subtitleSize*.55+subtitleLines.length*subtitleSize*1.12:0);
-  while(usedHeight()>safeHeight&&(titleSize>minimumTitle||subtitleSize>minimumSubtitle)){
-    if(titleSize>minimumTitle)titleSize--;
-    if(subtitleSize>minimumSubtitle)subtitleSize--;
-  }
-  return {titleSize,subtitleSize,usedHeight:usedHeight()};
-}
-async function hasOpaqueLogoRectangle(buffer){const {data,info}=await sharp(buffer).ensureAlpha().raw().toBuffer({resolveWithObject:true});const inset=Math.max(0,Math.round(Math.min(info.width,info.height)*.02));return [[inset,inset],[info.width-1-inset,inset],[inset,info.height-1-inset],[info.width-1-inset,info.height-1-inset]].every(([x,y])=>{const o=(y*info.width+x)*info.channels;return data[o+3]>245&&Math.max(data[o],data[o+1],data[o+2])<=55;});}
+function fitTypography({titleLines,subtitleLines,safeWidth,safeHeight,preferredTitle,preferredSubtitle,minimumTitle,minimumSubtitle}){let titleSize=fitFontSize(DISPLAY_FONT,titleLines,preferredTitle,minimumTitle,safeWidth),subtitleSize=fitFontSize(TEXT_FONT,subtitleLines,preferredSubtitle,minimumSubtitle,safeWidth);const usedHeight=()=>titleLines.length*titleSize*1.08+(subtitleLines.length?subtitleSize*.55+subtitleLines.length*subtitleSize*1.12:0);while(usedHeight()>safeHeight&&(titleSize>minimumTitle||subtitleSize>minimumSubtitle)){if(titleSize>minimumTitle)titleSize--;if(subtitleSize>minimumSubtitle)subtitleSize--;}return {titleSize,subtitleSize,usedHeight:usedHeight()};}
+function validateSemanticLines(lines,maximum){const weak=new Set(["À","AU","AUX","DE","DES","DU","ET","LE","LA","LES","OU","UN","UNE"]);return lines.length<=maximum&&lines.every(line=>String(line).trim()&&!weak.has(String(line).trim().toUpperCase()));}
 
-function layoutFor(width, height, platform, requestedZone, hasHeadline, selectedLayout, posterStrategy){
-  const normalized=normalizePlatform(platform);
-  const template=(selectedLayout&&selectedLayout.template)||PLATFORM_TEMPLATES[normalized];
-  if(template){
-    const spec=template.lockup;
-    const margin=Math.max(Math.round(width*.06),Math.round(width*template.margins));
-    const textSafe=posterStrategy?.textSafeArea;
-    const logoSafe=posterStrategy?.logoSafeArea;
-    const x=textSafe?Math.max(margin,Math.round(width*textSafe.left)):Math.max(margin,Math.round(width*spec.x));
-    const y=textSafe?Math.max(margin,Math.round(height*textSafe.top)):Math.max(margin,Math.round(height*spec.y));
-    const boxWidth=textSafe?Math.min(Math.round(width*(textSafe.right-textSafe.left)),width-x-margin):Math.min(Math.round(width*spec.width),width-x-margin);
-    const textBottom=textSafe?Math.round(height*textSafe.bottom):Math.min(height-margin,y+Math.round(height*(hasHeadline?.18:.04)));
-    const logoArea=logoSafe?{left:Math.round(width*logoSafe.left),right:Math.round(width*logoSafe.right),top:Math.round(height*logoSafe.top),bottom:Math.round(height*logoSafe.bottom)}:{left:x,right:x+boxWidth,top:textBottom,bottom:Math.min(height-margin,textBottom+Math.round(height*(height>width?.12:.18)))};
-    const result={x,y,width:boxWidth,height:Math.max(1,textBottom-y),margin,portrait:height>width*1.35,landscape:width>height*1.35,template,align:spec.align,textArea:{top:y,bottom:textBottom},logoArea};
-    return result;
-  }
-  /* L'identité et l'accroche forment un cartouche éditorial unique en bas de l'image. L'ancien
-     empilement en haut traversait régulièrement le visage et serrait la signature contre le logo. */
-  const zone = hasHeadline && ["Instagram","Facebook","Story"].includes(platform)
-    ? "bottom"
-    : normalizedZone(requestedZone, platform);
-  const portrait = height > width * 1.35;
-  const landscape = width > height * 1.35;
-  const margin = Math.round(width * (portrait ? 0.065 : 0.052));
-  const boxW = landscape ? Math.round(width * 0.56) : width - margin * 2;
-  const boxH = Math.round(height * (hasHeadline ? (portrait ? 0.32 : 0.38) : 0.23));
-  const x = landscape ? margin : margin;
-  let y;
-  if(zone === "top") y = Math.round(height * 0.055);
-  else if(zone === "center") y = Math.round((height - boxH) * 0.50);
-  else y = height - boxH - Math.round(height * (portrait ? 0.035 : 0.045));
-  return { x, y, width: boxW, height: boxH, margin, portrait, landscape };
-}
+const PREMIUM_LOCKUP_BY_PLATFORM=Object.freeze({
+ "Instagram Square":Object.freeze({family:"premium-square",textTop:.42,textBottom:.64,logoLeft:.30,logoRight:.70,logoWidthRatio:.17,brandSize:34,citySize:19}),
+ "Instagram Portrait":Object.freeze({family:"premium-portrait",textTop:.43,textBottom:.65,logoLeft:.28,logoRight:.72,logoWidthRatio:.17,brandSize:36,citySize:20}),
+ Facebook:Object.freeze({family:"premium-social",textTop:.43,textBottom:.65,logoLeft:.28,logoRight:.72,logoWidthRatio:.17,brandSize:36,citySize:20}),
+ Story:Object.freeze({family:"premium-story",textTop:.60,textBottom:.72,logoLeft:.25,logoRight:.75,logoWidthRatio:.20,brandSize:40,citySize:23}),
+ Blog:Object.freeze({family:"premium-editorial",textTop:.38,textBottom:.60,logoLeft:.36,logoRight:.64,logoWidthRatio:.12,brandSize:30,citySize:17}),
+ "Bannière":Object.freeze({family:"premium-banner",textTop:.10,textBottom:.44,logoLeft:.40,logoRight:.60,logoWidthRatio:.12,brandSize:24,citySize:14}),
+});
+function premiumBrandLockupFor(platform){const p=normalizePlatform(platform);return p==="Google Business"?null:(PREMIUM_LOCKUP_BY_PLATFORM[p]||null);}
+function signatureForPlatform(platform){return premiumBrandLockupFor(platform)?PREMIUM_SIGNATURE:GOOGLE_SIGNATURE;}
+function clampLogoRatio(value){return Math.max(BRAND_TOKENS.logoMinimumScale,Math.min(BRAND_TOKENS.logoMaximumScale,Number(value)||BRAND_TOKENS.logoMinimumScale));}
+function targetPremiumLogoWidth(width,lockup){return Math.round(Number(width)*clampLogoRatio(lockup?.logoWidthRatio));}
+function targetStoryLogoWidth(width){return targetPremiumLogoWidth(width,PREMIUM_LOCKUP_BY_PLATFORM.Story);}
+function computeBrandTailGeometry({logoBrandGap,brandSize,citySize}){const brandBaselineOffset=logoBrandGap+brandSize,cityBaselineOffset=brandBaselineOffset+brandSize*1.24,tailHeight=cityBaselineOffset+Math.round(citySize*.18);return Object.freeze({brandBaselineOffset,cityBaselineOffset,tailHeight});}
 
-function buildOverlaySvg(width, height, layout, platform, headline, posterStrategy){
-  const { title, subtitle } = headlineParts(headline);
-  const story=normalizePlatform(platform)==="Story";
-  const scale = Math.max(0.78, Math.min(1.55, width / 1088));
-  const safeWidth=Math.min(layout.width,width-Math.max(layout.margin,Math.round(width*.06))*2);
-  const preferredTitle=Math.round((story?48:(layout.portrait ? 67 : 62))*scale);
-  const preferredSubtitle=Math.round((story?32:(layout.portrait ? 42 : 38))*scale);
-  const brandSize = Math.round((layout.portrait ? 29 : 27) * scale);
-  const citySize = Math.round(15 * scale);
-  const textMode=posterStrategy?.textMode||"TEXT_MODE_EDITORIAL";
-  const titleLines=posterStrategy?.titleLines||semanticLines(title,story?4:3,story?18:22);
-  const subtitleLines=textMode==="TEXT_MODE_MINIMAL"?[]:(posterStrategy?.subtitleLines||semanticLines(subtitle,2,28));
-  const type=fitTypography({titleLines,subtitleLines,safeWidth,safeHeight:Math.max(1,layout.textArea.bottom-layout.textArea.top-Math.round(height*.018)),preferredTitle,preferredSubtitle,minimumTitle:Math.round(24*scale),minimumSubtitle:Math.round(18*scale)});
-  const titleSize=type.titleSize,subtitleSize=type.subtitleSize;
-  const centerX = layout.x + layout.width / 2;
-  const logoCenterX=layout.logoArea?.left!==undefined?(layout.logoArea.left+layout.logoArea.right)/2:centerX;
-  const textTop = layout.textArea.top + Math.round((layout.textArea.bottom-layout.textArea.top) * 0.08);
-  let textY = textTop + titleSize;
-  const titleNodes = titleLines.map((line, index)=>
-    vectorText(DISPLAY_FONT, line, centerX, textY + index * titleSize * 1.05, titleSize, "title")
-  ).join("");
-  textY += titleLines.length * titleSize * 1.05 + subtitleSize * 0.45;
-  const subtitleNodes = subtitleLines.map((line, index)=>
-    vectorText(TEXT_FONT, line, centerX, textY + index * subtitleSize * 1.10, subtitleSize, "subtitle")
-  ).join("");
-  const headlineEnd = subtitleLines.length?textY+subtitleLines.length*subtitleSize*1.10:textY;
-  const dividerY = Math.min(layout.textArea.bottom-Math.round(height*.008),headlineEnd+Math.round(height*.012));
-  const brandY = Math.min(height-layout.margin-Math.round(citySize*1.8),layout.logoArea.bottom+Math.round(brandSize*1.05));
-  const scrimTop = Math.max(0, layout.y - Math.round(height * 0.025));
-  const scrimBottom = Math.min(height, layout.y + layout.height + Math.round(height * 0.025));
-  const border = Math.max(2, Math.round(width * 0.0017));
-  const contactFields=(layout.template&&layout.template.contactFields)||[];
-  const contactText=contactFields.map(key=>BRAND_CONTACTS[key]).filter(Boolean).join(" · ");
-  const contactY=Math.min(height-layout.margin,brandY+brandSize*1.38+citySize*1.55);
-  return Buffer.from(`
-    <svg width="${width}" height="${height}" viewBox="0 0 ${width} ${height}" xmlns="http://www.w3.org/2000/svg">
-      <defs>
-        <linearGradient id="scrim" x1="0" y1="0" x2="0" y2="1">
-          <stop offset="0" stop-color="#050505" stop-opacity="0.08"/>
-          <stop offset="0.24" stop-color="#050505" stop-opacity="0.48"/>
-          <stop offset="0.76" stop-color="#050505" stop-opacity="0.58"/>
-          <stop offset="1" stop-color="#050505" stop-opacity="0.10"/>
-        </linearGradient>
-        <filter id="shadow"><feGaussianBlur stdDeviation="5"/></filter>
-        <style>
-          .brand,.city,.title,.subtitle { paint-order:stroke fill; stroke:#050505; stroke-opacity:.72; }
-          .brand { fill:${IVORY}; stroke-width:2px; }
-          .city { fill:${GOLD}; stroke-width:1px; }
-          .title { fill:${IVORY}; stroke-width:3px; }
-          .subtitle { fill:${PALE_GOLD}; stroke-width:2px; }
-          .contact { fill:${IVORY}; stroke-width:1px; }
-        </style>
-      </defs>
-      <rect x="0" y="${scrimTop}" width="${width}" height="${scrimBottom-scrimTop}" fill="url(#scrim)"/>
-      <rect x="${Math.round(width*.018)}" y="${Math.round(height*.012)}" width="${Math.round(width*.964)}" height="${Math.round(height*.976)}" rx="${Math.round(width*.004)}" fill="none" stroke="${GOLD}" stroke-opacity=".68" stroke-width="${border}"/>
-      <line x1="${layout.x + layout.width*.30}" y1="${dividerY}" x2="${layout.x + layout.width*.70}" y2="${dividerY}" stroke="${GOLD}" stroke-width="${border}" stroke-opacity=".82"/>
-      ${vectorText(DISPLAY_FONT, "LA SANTÉ DES ZÈBRES", logoCenterX, brandY, brandSize, "brand")}
-      ${vectorText(DISPLAY_FONT, "RAISMES", logoCenterX, brandY + brandSize*1.38, citySize, "city")}
-      ${vectorText(TEXT_FONT, contactText, logoCenterX, contactY, Math.max(13,Math.round(citySize*.82)), "contact")}
-      ${titleNodes}${subtitleNodes}
-    </svg>`);
+async function auditLogoTransparency(buffer,{allowAntialias=false}={}){
+ const {data,info}=await sharp(buffer,{failOn:"none"}).ensureAlpha().raw().toBuffer({resolveWithObject:true});
+ if(!info.width||!info.height||info.channels<4)throw new Error("Actif logo statique invalide : raster RGBA requis.");
+ let transparent=0,opaque=0,semiAlpha=0,semiDark=0,darkOpaque=0,edgeOpaque=0;const total=info.width*info.height;
+ for(let y=0;y<info.height;y++)for(let x=0;x<info.width;x++){
+  const o=(y*info.width+x)*info.channels,a=data[o+3],max=Math.max(data[o],data[o+1],data[o+2]);
+  if(a<=8)transparent++;if(a>=245){opaque++;if(max<75)darkOpaque++;}if(a>8&&a<245){semiAlpha++;if(max<105)semiDark++;}if((x===0||y===0||x===info.width-1||y===info.height-1)&&a>8)edgeOpaque++;
+ }
+ const transparentRatio=transparent/total,opaqueRatio=opaque/total,semiAlphaRatio=semiAlpha/total,semiDarkRatio=semiDark/total,darkInteriorRatio=darkOpaque/Math.max(1,opaque),aspectRatio=info.width/info.height,fringeDetected=edgeOpaque>0||(allowAntialias?semiDarkRatio>.08:semiDark>0),alphaQuality=allowAntialias?semiAlphaRatio<.18:semiAlpha===0,integrity=transparentRatio>.18&&transparentRatio<.52&&opaqueRatio>.45&&opaqueRatio<.82&&darkInteriorRatio>.48&&aspectRatio>.86&&aspectRatio<.97&&alphaQuality&&!fringeDetected;
+ return Object.freeze({width:info.width,height:info.height,aspectRatio,transparentRatio,opaqueRatio,semiAlpha,semiAlphaRatio,darkInteriorRatio,semiDark,semiDarkRatio,edgeOpaque,fringeDetected,integrity});
+}
+async function loadOfficialLogoAsset(){if(OFFICIAL_LOGO_CACHE)return OFFICIAL_LOGO_CACHE;let buffer;try{buffer=fs.readFileSync(OFFICIAL_LOGO_PATH);}catch(error){throw new Error(`Actif logo officiel absent du bundle : ${OFFICIAL_LOGO_PATH}`);}const audit=await auditLogoTransparency(buffer);if(!audit.integrity)throw new Error(`Actif logo officiel invalide : transparence=${audit.transparentRatio.toFixed(3)}, opaque=${audit.opaqueRatio.toFixed(3)}, halo=${audit.fringeDetected}.`);OFFICIAL_LOGO_CACHE=Object.freeze({buffer:Buffer.from(buffer),audit});return OFFICIAL_LOGO_CACHE;}
+async function hasOpaqueLogoRectangle(buffer){const a=await auditLogoTransparency(buffer);return a.transparentRatio<.02||a.edgeOpaque>0;}
+
+function layoutFor(width,height,platform,requestedZone,hasHeadline,selectedLayout,posterStrategy){
+ const p=normalizePlatform(platform),template=selectedLayout?.template||PLATFORM_TEMPLATES[p];
+ if(template){
+  const spec=template.lockup,margin=Math.max(Math.round(width*.06),Math.round(width*template.margins)),verticalMargin=Math.max(24,Math.round(height*.035)),textSafe=posterStrategy?.textSafeArea,logoSafe=posterStrategy?.logoSafeArea,premium=premiumBrandLockupFor(p);
+  const x=textSafe?Math.max(margin,Math.round(width*textSafe.left)):Math.max(margin,Math.round(width*spec.x));
+  let y=textSafe?Math.max(verticalMargin,Math.round(height*textSafe.top)):Math.max(verticalMargin,Math.round(height*spec.y));
+  const boxWidth=textSafe?Math.min(Math.round(width*(textSafe.right-textSafe.left)),width-x-margin):Math.min(Math.round(width*spec.width),width-x-margin);
+  let textBottom=textSafe?Math.round(height*textSafe.bottom):Math.min(height-verticalMargin,y+Math.round(height*(hasHeadline?.18:.04)));
+  if(premium){y=Math.max(verticalMargin,Math.round(height*premium.textTop));textBottom=Math.min(height-verticalMargin,Math.round(height*premium.textBottom));}
+  const logoArea=logoSafe?{left:Math.round(width*logoSafe.left),right:Math.round(width*logoSafe.right),top:Math.round(height*logoSafe.top),bottom:Math.round(height*logoSafe.bottom)}:{left:x,right:x+boxWidth,top:textBottom,bottom:height-verticalMargin};
+  if(premium){logoArea.left=Math.round(width*premium.logoLeft);logoArea.right=Math.round(width*premium.logoRight);logoArea.top=textBottom+Math.round(height*.008);logoArea.bottom=height-verticalMargin;}
+  return {x,y,width:boxWidth,height:Math.max(1,textBottom-y),margin,portrait:height>width*1.35,landscape:width>height*1.35,template,align:spec.align,textArea:{top:y,bottom:textBottom},logoArea};
+ }
+ const zone=hasHeadline&&["Instagram","Facebook","Story"].includes(platform)?"bottom":normalizedZone(requestedZone,platform),portrait=height>width*1.35,landscape=width>height*1.35,margin=Math.round(width*(portrait?.065:.052)),boxW=landscape?Math.round(width*.56):width-margin*2,boxH=Math.round(height*(hasHeadline?(portrait?.32:.38):.23));let y;if(zone==="top")y=Math.round(height*.055);else if(zone==="center")y=Math.round((height-boxH)*.5);else y=height-boxH-Math.round(height*(portrait?.035:.045));const textBottom=y+Math.round(boxH*.62);return {x:margin,y,width:boxW,height:boxH,margin,portrait,landscape,textArea:{top:y,bottom:textBottom},logoArea:{left:margin,right:margin+boxW,top:textBottom,bottom:height-margin}};
 }
 
-async function prepareLogoOverlay(logoBuffer){
-  const cacheKey=crypto.createHash("sha256").update(logoBuffer).digest("hex");
-  if(TRANSPARENT_LOGO_CACHE.has(cacheKey))return Buffer.from(TRANSPARENT_LOGO_CACHE.get(cacheKey));
-  const source = sharp(logoBuffer, { failOn: "none" }).rotate().ensureAlpha();
-  const { data, info } = await source.raw().toBuffer({ resolveWithObject: true });
-  const px = Buffer.from(data);
-  /* Détourage conservateur par composante connexe : seuls les pixels quasi noirs accessibles
-     depuis un bord deviennent transparents. Les noirs internes fermés du zèbre restent intacts. */
-  const seen=new Uint8Array(info.width*info.height);const queue=[];const dark=(x,y)=>{const o=(y*info.width+x)*info.channels;return px[o+3]>0&&Math.max(px[o],px[o+1],px[o+2])<=55;};
-  const seed=(x,y)=>{const i=y*info.width+x;if(!seen[i]&&dark(x,y)){seen[i]=1;queue.push([x,y]);}};
-  for(let x=0;x<info.width;x++){seed(x,0);seed(x,info.height-1);}for(let y=0;y<info.height;y++){seed(0,y);seed(info.width-1,y);}
-  for(let q=0;q<queue.length;q++){const [x,y]=queue[q];const o=(y*info.width+x)*info.channels;px[o+3]=0;for(const [nx,ny] of [[x-1,y],[x+1,y],[x,y-1],[x,y+1]])if(nx>=0&&ny>=0&&nx<info.width&&ny<info.height)seed(nx,ny);}
-  const output=await sharp(px, { raw: info })
-    .trim({ background: { r:0, g:0, b:0, alpha:0 } })
-    .png()
-    .toBuffer();
-  TRANSPARENT_LOGO_CACHE.set(cacheKey,Buffer.from(output));return output;
+function typographyFor({layout,width,height,platform,title,subtitle,posterStrategy,textMode}){const story=normalizePlatform(platform)==="Story",scale=Math.max(.78,Math.min(1.55,width/1088)),titleLines=posterStrategy?.titleLines||semanticLines(title,story?4:3,story?18:22),subtitleLines=textMode==="TEXT_MODE_MINIMAL"?[]:(posterStrategy?.subtitleLines||semanticLines(subtitle,2,28)),safeWidth=Math.min(layout.width,width-Math.max(layout.margin,Math.round(width*.06))*2),type=fitTypography({titleLines,subtitleLines,safeWidth,safeHeight:Math.max(1,layout.textArea.bottom-layout.textArea.top-Math.round(height*.018)),preferredTitle:Math.round((story?48:(layout.portrait?67:62))*scale),preferredSubtitle:Math.round((story?30:(layout.portrait?40:36))*scale),minimumTitle:Math.round(24*scale),minimumSubtitle:Math.round(18*scale)});return {story,scale,titleLines,subtitleLines,safeWidth,...type};}
+
+function buildOverlaySvg(width,height,layout,platform,headline,posterStrategy,brandLockup){
+ const {title,subtitle}=headlineParts(headline),textMode=posterStrategy?.textMode||"TEXT_MODE_EDITORIAL",t=typographyFor({layout,width,height,platform,title,subtitle,posterStrategy,textMode}),centerX=layout.x+layout.width/2,textTop=layout.textArea.top+Math.round((layout.textArea.bottom-layout.textArea.top)*.08);let y=textTop+t.titleSize;
+ const titleNodes=t.titleLines.map((line,i)=>vectorText(DISPLAY_FONT,line,centerX,y+i*t.titleSize*1.05,t.titleSize,"title")).join("");y+=t.titleLines.length*t.titleSize*1.05+t.subtitleSize*.45;const subtitleNodes=t.subtitleLines.map((line,i)=>vectorText(TEXT_FONT,line,centerX,y+i*t.subtitleSize*1.10,t.subtitleSize,"subtitle")).join(""),headlineEnd=t.subtitleLines.length?y+t.subtitleLines.length*t.subtitleSize*1.10:y,dividerY=Math.min(layout.textArea.bottom-Math.round(height*.008),headlineEnd+Math.round(height*.012)),scrimTop=Math.max(0,layout.y-Math.round(height*.025)),scrimBottom=Math.min(height,layout.textArea.bottom+Math.round(height*.025)),brandFont=brandLockup.nameFont==="display"?DISPLAY_FONT:BRAND_FONT;
+ return Buffer.from(`<svg width="${width}" height="${height}" viewBox="0 0 ${width} ${height}" xmlns="http://www.w3.org/2000/svg"><defs><linearGradient id="scrim" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#050505" stop-opacity="0"/><stop offset="0.30" stop-color="#050505" stop-opacity="0.14"/><stop offset="0.72" stop-color="#050505" stop-opacity="0.24"/><stop offset="1" stop-color="#050505" stop-opacity="0"/></linearGradient><style>.brand,.city,.title,.subtitle{paint-order:stroke fill;stroke:#050505;stroke-opacity:.68}.brand{fill:${brandLockup.nameColor};stroke-width:2px}.city{fill:${brandLockup.locationColor};stroke-width:1px}.title{fill:${IVORY};stroke-width:3px}.subtitle{fill:${PALE_GOLD};stroke-width:2px}</style></defs><rect x="0" y="${scrimTop}" width="${width}" height="${scrimBottom-scrimTop}" fill="url(#scrim)"/><line x1="${layout.x+layout.width*.40}" y1="${dividerY}" x2="${layout.x+layout.width*.60}" y2="${dividerY}" stroke="${GOLD}" stroke-width="1" stroke-opacity=".42"/>${vectorText(brandFont,brandLockup.name,brandLockup.centerX,brandLockup.brandBaseline,brandLockup.brandSize,"brand")}${vectorText(TEXT_FONT,brandLockup.location,brandLockup.centerX,brandLockup.cityBaseline,brandLockup.citySize,"city")}${titleNodes}${subtitleNodes}</svg>`);
 }
 
-async function composeBrandPoster({ imageBuffer, logoDataUrl, platform, headline, zoneText, selectedLayout, posterStrategy }){
-  if(!imageBuffer || !Buffer.isBuffer(imageBuffer)) throw new Error("Image générée absente du compositeur.");
-  const logoBuffer = dataUrlToBuffer(logoDataUrl);
-  const template=(selectedLayout&&selectedLayout.template)||PLATFORM_TEMPLATES[normalizePlatform(platform)];
-  const sourceImage=sharp(imageBuffer,{failOn:"none"}).rotate();
-  const image=template?sourceImage.resize({width:template.width,height:template.height,fit:"cover",position:selectedLayout?.cropPosition||"attention"}):sourceImage;
-  const meta = await sourceImage.metadata();
-  const width = template?.width || meta.width;
-  const height = template?.height || meta.height;
-  if(!width || !height) throw new Error("Dimensions de l'image générée introuvables.");
-  const textMode=posterStrategy?.textMode||"TEXT_MODE_EDITORIAL";
-  if(textMode==="TEXT_MODE_NONE")headline="";else if(posterStrategy){const subtitle=textMode==="TEXT_MODE_MINIMAL"?"":posterStrategy.subtitle;headline=[posterStrategy.title,subtitle].filter(Boolean).join(" | ");}
-  const hasHeadline = Boolean(String(headline || "").trim());
-  const layout = layoutFor(width, height, platform, zoneText, hasHeadline, selectedLayout,posterStrategy);
-  const { title, subtitle } = headlineParts(headline);
-  const story=normalizePlatform(platform)==="Story";
-  const scale = Math.max(0.78, Math.min(1.55, width / 1088));
-  const titleLines = posterStrategy?.titleLines||semanticLines(title,story?4:3,story?18:22);
-  const subtitleLines = textMode==="TEXT_MODE_MINIMAL"?[]:(posterStrategy?.subtitleLines||semanticLines(subtitle,2,28));
-  const safeWidth=Math.min(layout.width,width-Math.max(layout.margin,Math.round(width*.06))*2);
-  const type=fitTypography({titleLines,subtitleLines,safeWidth,safeHeight:Math.max(1,layout.textArea.bottom-layout.textArea.top-Math.round(height*.018)),preferredTitle:Math.round((story?48:(layout.portrait?67:62))*scale),preferredSubtitle:Math.round((story?32:(layout.portrait?42:38))*scale),minimumTitle:Math.round(24*scale),minimumSubtitle:Math.round(18*scale)});
-  const titleSize=type.titleSize,subtitleSize=type.subtitleSize;
-  const textTop = layout.textArea.top + Math.round((layout.textArea.bottom-layout.textArea.top) * 0.08);
-  const textY = textTop + titleSize + titleLines.length * titleSize * 1.05 + subtitleSize * 0.45;
-  const headlineEnd = textY + Math.max(1, subtitleLines.length) * subtitleSize * 1.10;
-  const dividerY = headlineEnd + Math.round(layout.height * 0.055);
-  const cleanLogo = await prepareLogoOverlay(logoBuffer);
-  const logoMeta = await sharp(cleanLogo).metadata();
-  const logoFraction=posterStrategy?.logoScale==="discreet"?.12:posterStrategy?.logoScale==="standard"?.16:.21;
-  const logoAreaWidth=(layout.logoArea?.right-layout.logoArea?.left)||layout.width;
-  const desiredLogoWidth = Math.round(logoAreaWidth * logoFraction/.21);
-  const minimumBottomMargin = Math.max(Math.round(height*.035), 24);
-  const logoZoneTop=layout.logoArea?.top??Math.round(dividerY + layout.height*.055);
-  const logoZoneBottom=layout.logoArea?.bottom??(height-minimumBottomMargin);
-  const availableHeight = Math.max(24, logoZoneBottom-logoZoneTop);
-  const sourceRatio = (logoMeta.width||1)/(logoMeta.height||1);
-  const logoWidth = Math.max(24, Math.min(desiredLogoWidth, Math.floor(availableHeight*sourceRatio)));
-  const logoTop = Math.max(logoZoneTop,Math.min(logoZoneBottom-Math.ceil(logoWidth/sourceRatio),logoZoneTop));
-  const logoLeft = Math.round((layout.logoArea?.left??layout.x) + (logoAreaWidth - logoWidth) / 2);
-  const estimatedLogoHeight=Math.ceil(logoWidth/sourceRatio);
-  if(layout.x<Math.round(width*.04)||layout.x+layout.width>width-Math.round(width*.04))throw new Error("Marges latérales du lock-up insuffisantes.");
-  if(logoLeft<0||logoTop<0||logoLeft+logoWidth>width||logoTop+estimatedLogoHeight>height-minimumBottomMargin)throw new Error("Logo hors cadre.");
-  if(titleLines.some(line=>measureVectorText(DISPLAY_FONT,line,titleSize)>safeWidth)||subtitleLines.some(line=>measureVectorText(TEXT_FONT,line,subtitleSize)>safeWidth))throw new Error("Texte hors cadre après mesure typographique.");
-  if(type.usedHeight>layout.textArea.bottom-layout.textArea.top)throw new Error("Bloc typographique trop haut pour la zone sûre.");
-  if(layout.textArea.bottom>layout.logoArea.top)throw new Error("Collision entre la zone de texte et la zone du logo.");
-  const resizedLogo = await sharp(cleanLogo, { failOn: "none" })
-    .resize({ width: logoWidth, withoutEnlargement: false, fit: "inside" })
-    .png().toBuffer();
-  if(await hasOpaqueLogoRectangle(resizedLogo))throw new Error("Rectangle opaque détecté autour du logo officiel.");
-  const normalizedText=value=>String(value||"").trim().replace(/\s+/g," ");
-  const titleWidths=titleLines.map(line=>measureVectorText(DISPLAY_FONT,line,titleSize));
-  const subtitleWidths=subtitleLines.map(line=>measureVectorText(TEXT_FONT,line,subtitleSize));
-  const compositionManifest=Object.freeze({
-    version:COMPOSITOR_VERSION,
-    platform:normalizePlatform(platform),
-    width,height,
-    title,subtitle,
-    titleLines:[...titleLines],subtitleLines:[...subtitleLines],
-    titleSize,subtitleSize,
-    titleWidths,subtitleWidths,
-    safeWidth,safeHeight:layout.textArea.bottom-layout.textArea.top,
-    usedHeight:type.usedHeight,
-    titleExact:normalizedText(titleLines.join(" "))===normalizedText(title),
-    subtitleExact:normalizedText(subtitleLines.join(" "))===normalizedText(subtitle),
-    textWithinCanvas:[...titleWidths,...subtitleWidths].every(value=>value<=safeWidth)&&type.usedHeight<=layout.textArea.bottom-layout.textArea.top,
-    marginsValid:layout.x>=Math.round(width*.04)&&layout.x+layout.width<=width-Math.round(width*.04),
-    hierarchyValid:!subtitleLines.length||titleSize>subtitleSize,
-    zonesDisjoint:layout.textArea.bottom<=layout.logoArea.top,
-    logoBounds:{left:logoLeft,top:logoTop,width:logoWidth,height:estimatedLogoHeight},
-    logoWithinCanvas:logoLeft>=0&&logoTop>=0&&logoLeft+logoWidth<=width&&logoTop+estimatedLogoHeight<=height-minimumBottomMargin,
-    logoRectangleOpaque:false,
-    completeText:[title,subtitle].filter(Boolean).join(" | "),
-  });
-  if(!compositionManifest.titleExact||!compositionManifest.subtitleExact)throw new Error("Texte validé tronqué ou remplacé pendant la composition.");
-  if(!compositionManifest.hierarchyValid)throw new Error("Hiérarchie typographique invalide : le sous-titre domine le titre.");
-  const overlaySvg = buildOverlaySvg(width, height, layout, platform, headline, posterStrategy);
-  const output=await image
-    .composite([
-      { input: overlaySvg, left: 0, top: 0 },
-      { input: resizedLogo, left: logoLeft, top: logoTop },
-    ])
-    .png({ compressionLevel: 9, adaptiveFiltering: true })
-    .toBuffer();
-  output.compositionManifest=compositionManifest;
-  return output;
+async function composeBrandPoster({imageBuffer,platform,headline,zoneText,selectedLayout,posterStrategy}){
+ if(!Buffer.isBuffer(imageBuffer))throw new Error("Image générée absente du compositeur.");
+ const template=selectedLayout?.template||PLATFORM_TEMPLATES[normalizePlatform(platform)],source=sharp(imageBuffer,{failOn:"none"}).rotate(),image=template?source.resize({width:template.width,height:template.height,fit:"cover",position:selectedLayout?.cropPosition||"attention"}):source,meta=await source.metadata(),width=template?.width||meta.width,height=template?.height||meta.height;if(!width||!height)throw new Error("Dimensions de l'image générée introuvables.");
+ const textMode=posterStrategy?.textMode||"TEXT_MODE_EDITORIAL";if(textMode==="TEXT_MODE_NONE")headline="";else if(posterStrategy){const sub=textMode==="TEXT_MODE_MINIMAL"?"":posterStrategy.subtitle;headline=[posterStrategy.title,sub].filter(Boolean).join(" | ");}
+ const layout=layoutFor(width,height,platform,zoneText,Boolean(String(headline||"").trim()),selectedLayout,posterStrategy),{title,subtitle}=headlineParts(headline),t=typographyFor({layout,width,height,platform,title,subtitle,posterStrategy,textMode}),centerX=layout.x+layout.width/2,textTop=layout.textArea.top+Math.round((layout.textArea.bottom-layout.textArea.top)*.08),textY=textTop+t.titleSize+t.titleLines.length*t.titleSize*1.05+t.subtitleSize*.45;
+ if(t.titleLines.some(line=>measureVectorText(DISPLAY_FONT,line,t.titleSize)>t.safeWidth)||t.subtitleLines.some(line=>measureVectorText(TEXT_FONT,line,t.subtitleSize)>t.safeWidth)||t.usedHeight>layout.textArea.bottom-layout.textArea.top)throw new Error("Texte hors cadre après mesure typographique.");
+ if(layout.textArea.bottom>layout.logoArea.top)throw new Error("Collision entre la zone de texte et la zone du logo.");
+ const official=await loadOfficialLogoAsset(),logoMeta=await sharp(official.buffer).metadata(),premium=premiumBrandLockupFor(platform),signature=signatureForPlatform(platform),fallback=posterStrategy?.logoScale==="discreet"?.12:posterStrategy?.logoScale==="standard"?.14:.16,targetRatio=clampLogoRatio(premium?.logoWidthRatio||fallback),logoAreaWidth=layout.logoArea.right-layout.logoArea.left,signatureSafeWidth=Math.min(width-layout.margin*2,Math.max(logoAreaWidth,Math.round(width*.34))),preferredBrandSize=Math.round((premium?.brandSize||(layout.portrait?28:26))*t.scale),preferredCitySize=Math.round((premium?.citySize||15)*t.scale),signatureBrandFont=signature.nameFont==="display"?DISPLAY_FONT:BRAND_FONT,brandSize=fitFontSize(signatureBrandFont,[signature.name],preferredBrandSize,Math.max(12,Math.round(preferredBrandSize*.55)),signatureSafeWidth),citySize=fitFontSize(TEXT_FONT,[signature.location],preferredCitySize,Math.max(10,Math.round(preferredCitySize*.55)),signatureSafeWidth),brandTail=computeBrandTailGeometry({logoBrandGap:Math.max(8,Math.round(height*.006)),brandSize,citySize}),minimumBottomMargin=Math.max(Math.round(height*.035),24),availableHeight=Math.max(24,layout.logoArea.bottom-brandTail.tailHeight-layout.logoArea.top),sourceRatio=(logoMeta.width||1)/(logoMeta.height||1),desired=Math.round(width*targetRatio),logoWidth=Math.max(24,Math.min(desired,Math.floor(availableHeight*sourceRatio),logoAreaWidth)),logoHeight=Math.ceil(logoWidth/sourceRatio),logoTop=layout.logoArea.top,logoLeft=Math.round(layout.logoArea.left+(logoAreaWidth-logoWidth)/2);
+ if(layout.x<Math.round(width*.04)||layout.x+layout.width>width-Math.round(width*.04))throw new Error("Marges latérales du lock-up insuffisantes.");
+ if(logoLeft<0||logoTop<0||logoLeft+logoWidth>width||logoTop+logoHeight>height-minimumBottomMargin)throw new Error("Logo hors cadre.");
+ /* Le master a un alpha binaire validé au build. Un redimensionnement interpolé recréait des pixels
+    noirs semi-transparents — le voile constaté en production. Le noyau nearest conserve strictement
+    l'alpha binaire et les noirs internes officiels. */
+ const resizedLogo=await sharp(official.buffer,{failOn:"none"}).resize({width:logoWidth,withoutEnlargement:false,fit:"inside",kernel:sharp.kernel.lanczos3}).png({compressionLevel:9}).toBuffer(),resizedMeta=await sharp(resizedLogo).metadata(),finalLogoWidth=resizedMeta.width||logoWidth,finalLogoHeight=resizedMeta.height||logoHeight,resizedAudit=await auditLogoTransparency(resizedLogo,{allowAntialias:true});
+ if(!resizedAudit.integrity)throw new Error("Intégrité du logo perdue pendant le redimensionnement.");
+ const logoBottom=logoTop+finalLogoHeight,brandLockup={centerX:logoLeft+finalLogoWidth/2,brandSize,citySize,brandBaseline:logoBottom+brandTail.brandBaselineOffset,cityBaseline:logoBottom+brandTail.cityBaselineOffset,name:signature.name,location:signature.location,nameColor:signature.nameColor,locationColor:signature.locationColor,nameFont:signature.nameFont,locationFont:signature.locationFont},brandBottom=logoBottom+brandTail.tailHeight;if(brandBottom>height-minimumBottomMargin)throw new Error("Lock-up de marque hors cadre.");
+ const norm=v=>String(v||"").trim().replace(/\s+/g," "),titleWidths=t.titleLines.map(line=>measureVectorText(DISPLAY_FONT,line,t.titleSize)),subtitleWidths=t.subtitleLines.map(line=>measureVectorText(TEXT_FONT,line,t.subtitleSize)),titleBottom=textTop+t.titleLines.length*t.titleSize*1.05,subtitleTop=t.subtitleLines.length?textY-t.subtitleSize:0,subtitleBottom=t.subtitleLines.length?textY+(t.subtitleLines.length-1)*t.subtitleSize*1.10:0,ratio=finalLogoWidth/width,logoScaleValid=ratio>=BRAND_TOKENS.logoMinimumScale-.005&&ratio<=BRAND_TOKENS.logoMaximumScale+.005;if(!logoScaleValid)throw new Error(`Logo hors échelle autorisée : ${(ratio*100).toFixed(1)} %.`);
+ const manifest=Object.freeze({version:COMPOSITOR_VERSION,platform:normalizePlatform(platform),premiumBrandLockup:Boolean(premium),premiumBrandLockupFamily:premium?.family||"google-legacy",referenceSignature:Boolean(premium),width,height,title,subtitle,titleLines:[...t.titleLines],subtitleLines:[...t.subtitleLines],titleSize:t.titleSize,subtitleSize:t.subtitleSize,titleWidths,subtitleWidths,textSafeArea:{left:layout.x,top:layout.textArea.top,right:layout.x+layout.width,bottom:layout.textArea.bottom},titleBounds:{left:centerX-Math.max(0,...titleWidths)/2,top:textTop,right:centerX+Math.max(0,...titleWidths)/2,bottom:titleBottom},subtitleBounds:t.subtitleLines.length?{left:centerX-Math.max(...subtitleWidths)/2,top:subtitleTop,right:centerX+Math.max(...subtitleWidths)/2,bottom:subtitleBottom}:null,safeWidth:t.safeWidth,safeHeight:layout.textArea.bottom-layout.textArea.top,usedHeight:t.usedHeight,titleExact:norm(t.titleLines.join(" "))===norm(title),subtitleExact:norm(t.subtitleLines.join(" "))===norm(subtitle),textWithinCanvas:[...titleWidths,...subtitleWidths].every(v=>v<=t.safeWidth)&&t.usedHeight<=layout.textArea.bottom-layout.textArea.top,marginsValid:layout.x>=Math.round(width*.04)&&layout.x+layout.width<=width-Math.round(width*.04),hierarchyValid:!t.subtitleLines.length||t.titleSize>t.subtitleSize,zonesDisjoint:layout.textArea.bottom<=layout.logoArea.top,semanticLinesValid:validateSemanticLines(t.titleLines,t.story?4:3)&&validateSemanticLines(t.subtitleLines,2),logoBounds:{left:logoLeft,top:logoTop,width:finalLogoWidth,height:finalLogoHeight,right:logoLeft+finalLogoWidth,bottom:logoTop+finalLogoHeight},completeLogoBounds:{left:logoLeft,top:logoTop,width:finalLogoWidth,height:finalLogoHeight,right:logoLeft+finalLogoWidth,bottom:logoTop+finalLogoHeight},logoWidthRatio:ratio,logoMedallionWidth:finalLogoWidth,logoMedallionWidthRatio:ratio,logoAssetSource:"assets/sdz-logo-compositor.png",logoResampling:"lanczos3",logoAntialiasRatio:resizedAudit.semiAlphaRatio,logoDarkAntialiasRatio:resizedAudit.semiDarkRatio,logoAssetIntegrity:official.audit.integrity&&resizedAudit.integrity,logoFringeDetected:official.audit.fringeDetected||resizedAudit.fringeDetected,logoScaleValid,brandLockup:{lines:[signature.name,signature.location],contactLines:[],name:signature.name,city:signature.location,brandSize,citySize,tailHeight:brandTail.tailHeight,top:logoBottom+Math.max(8,Math.round(height*.006)),bottom:brandBottom,bottomMargin:height-brandBottom,minimumBottomMargin,centerX:brandLockup.centerX,nameColor:signature.nameColor,locationColor:signature.locationColor,nameFont:signature.nameFont,locationFont:signature.locationFont,signatureSafeWidth},logoWithinCanvas:logoLeft>=0&&logoTop>=0&&logoLeft+finalLogoWidth<=width&&logoTop+finalLogoHeight<=height-minimumBottomMargin,logoRectangleOpaque:false,completeText:[title,subtitle].filter(Boolean).join(" | ")});
+ if(!manifest.titleExact||!manifest.subtitleExact)throw new Error("Texte validé tronqué ou remplacé pendant la composition.");if(!manifest.hierarchyValid)throw new Error("Hiérarchie typographique invalide : le sous-titre domine le titre.");if(!manifest.semanticLinesValid)throw new Error("Coupure sémantique invalide dans le bloc typographique.");if(!manifest.logoAssetIntegrity||manifest.logoFringeDetected)throw new Error("Logo officiel non conforme après composition.");
+ const overlay=buildOverlaySvg(width,height,layout,platform,headline,posterStrategy,brandLockup),output=await image.composite([{input:overlay,left:0,top:0},{input:resizedLogo,left:logoLeft,top:logoTop}]).png({compressionLevel:9,adaptiveFiltering:true}).toBuffer();output.compositionManifest=manifest;return output;
 }
 
-module.exports = { BRAND_TOKENS, COMPOSITOR_VERSION, composeBrandPoster, dataUrlToBuffer, escapeXml, wrapWords, normalizedZone, prepareLogoOverlay, hasOpaqueLogoRectangle,vectorText, measureVectorText,fitFontSize,fitTypography,layoutFor, BRAND_CONTACTS };
+module.exports={BRAND_TOKENS,COMPOSITOR_VERSION,FONT_PATHS,OFFICIAL_LOGO_PATH,PREMIUM_LOCKUP_BY_PLATFORM,PREMIUM_SIGNATURE,GOOGLE_SIGNATURE,premiumBrandLockupFor,signatureForPlatform,targetPremiumLogoWidth,targetStoryLogoWidth,composeBrandPoster,loadOfficialLogoAsset,auditLogoTransparency,hasOpaqueLogoRectangle,escapeXml,wrapWords,normalizedZone,vectorText,measureVectorText,fitFontSize,fitTypography,validateSemanticLines,computeBrandTailGeometry,layoutFor,BRAND_CONTACTS};

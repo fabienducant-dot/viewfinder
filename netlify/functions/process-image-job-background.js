@@ -1,315 +1,186 @@
-/* Background Function Netlify — exécute réellement l'appel OpenAI, jusqu'à 15 minutes,
-   sans jamais bloquer de connexion HTTP client. Reconnue par Netlify grâce au suffixe
-   "-background" du nom de fichier (aucune configuration supplémentaire requise).
-
-   Sécurité : n'accepte que les requêtes internes portant l'en-tête x-image-job-secret
-   correspondant à la variable d'environnement IMAGE_JOB_SECRET — sans quoi n'importe qui
-   connaissant l'URL pourrait déclencher directement des générations OpenAI facturées.
-
-   Robustesse : l'intégralité du traitement (ouverture du store, lecture de l'entrée, appel
-   OpenAI, écriture du résultat) est protégée contre toute exception non interceptée, pour ne
-   jamais déclencher le retry automatique de Netlify sur une Background Function en échec
-   (documenté : une invocation en erreur est retentée après 1 min, puis 2 min) — ce qui
-   provoquerait un second appel OpenAI facturé pour le même job. Une protection d'idempotence
-   complète également ce garde-fou : un job déjà completed/failed/processing-récent n'est jamais
-   retraité. */
-const { getStore } = require("@netlify/blobs");
-const { applyImageEditOptions } = require("./_shared/openai-image-edit-options");
-const { composeBrandPoster } = require("./_shared/brand-compositor");
-const { analyzeImageWithOpenAI } = require("./_shared/v3-image-analyzer");
-const { executeV3Pipeline } = require("./_shared/v3-executor");
+/* Background Function Netlify — exécute un et un seul appel OpenAI Images par job.
+   La scène est générée par le fournisseur, puis contrôlée par SceneIntent et composée avec
+   l'actif SDZ statique embarqué dans le bundle. Aucun fallback image caché n'est autorisé. */
+const {getStore}=require("@netlify/blobs");
+const {applyImageEditOptions}=require("./_shared/openai-image-edit-options");
+const {composeBrandPoster}=require("./_shared/brand-compositor");
+const {analyzeImageWithOpenAI}=require("./_shared/v3-image-analyzer");
+const {executeV3Pipeline}=require("./_shared/v3-executor");
 const {buildCostAudit}=require("./_shared/v3-cost-control");
 const {artisticFingerprint}=require("./_shared/v3-pipeline");
 
-const PROCESSING_RECENT_THRESHOLD_MS = 14 * 60 * 1000; // en dessous, on suppose qu'une autre
-                                                          // invocation traite déjà ce job
+const PROCESSING_RECENT_THRESHOLD_MS=14*60*1000;
 
 function openJobStore(){
-  const opts = { consistency: "strong" };
-  if(process.env.BLOBS_SITE_ID && process.env.BLOBS_TOKEN){
-    return getStore({ name: "viewfinder-image-jobs", siteID: process.env.BLOBS_SITE_ID, token: process.env.BLOBS_TOKEN, ...opts });
-  }
-  return getStore({ name: "viewfinder-image-jobs", ...opts });
+  const opts={consistency:"strong"};
+  if(process.env.BLOBS_SITE_ID&&process.env.BLOBS_TOKEN)return getStore({name:"viewfinder-image-jobs",siteID:process.env.BLOBS_SITE_ID,token:process.env.BLOBS_TOKEN,...opts});
+  return getStore({name:"viewfinder-image-jobs",...opts});
 }
 
-function openBrandStore(){
-  if(process.env.BLOBS_SITE_ID && process.env.BLOBS_TOKEN){
-    return getStore({ name: "viewfinder-data", siteID: process.env.BLOBS_SITE_ID, token: process.env.BLOBS_TOKEN, consistency: "strong" });
-  }
-  return getStore({ name: "viewfinder-data", consistency: "strong" });
-}
-
-async function generatedImageToBuffer(b64, url){
-  if(b64) return Buffer.from(b64, "base64");
-  if(!url) throw new Error("Aucune image reçue du fournisseur.");
-  const response = await fetch(url);
-  if(!response.ok) throw new Error(`Téléchargement de l'image OpenAI impossible (${response.status}).`);
+async function generatedImageToBuffer(b64,url){
+  if(b64)return Buffer.from(b64,"base64");
+  if(!url)throw new Error("Aucune image reçue du fournisseur.");
+  const response=await fetch(url);
+  if(!response.ok)throw new Error(`Téléchargement de l'image OpenAI impossible (${response.status}).`);
   return Buffer.from(await response.arrayBuffer());
 }
 
-async function safeSetJobStatus(store, jobId, patch){
-  // Ne laisse jamais une écriture de statut, même dans un bloc catch, remonter comme exception
-  // non interceptée — sinon Netlify pourrait considérer l'invocation entière en échec et la
-  // retenter automatiquement (voir doc citée en tête de fichier).
-  try {
-    const raw = await store.get(`jobs/${jobId}`);
-    const current = raw ? JSON.parse(raw) : { jobId, createdAt: Date.now() };
-    const next = { ...current, ...patch, jobId, updatedAt: Date.now() };
-    await store.set(`jobs/${jobId}`, JSON.stringify(next));
+async function safeSetJobStatus(store,jobId,patch){
+  try{
+    const raw=await store.get(`jobs/${jobId}`);
+    const current=raw?JSON.parse(raw):{jobId,createdAt:Date.now()};
+    const next={...current,...patch,jobId,updatedAt:Date.now()};
+    await store.set(`jobs/${jobId}`,JSON.stringify(next));
     return next;
-  } catch (writeErr) {
-    console.error(`[process-image-job-background] Échec d'écriture du statut pour ${jobId} : ${String(writeErr.message || writeErr)}`);
+  }catch(writeErr){
+    console.error(`[process-image-job-background] Échec d'écriture du statut pour ${jobId} : ${String(writeErr.message||writeErr)}`);
     return null;
   }
 }
 
 async function fetchAsBlob(url){
-  const res = await fetch(url);
-  if(!res.ok) throw new Error(`Impossible de récupérer l'image de référence (${res.status})`);
-  const buf = await res.arrayBuffer();
-  const contentType = res.headers.get("content-type") || "image/png";
-  return new Blob([buf], { type: contentType });
+  const res=await fetch(url);
+  if(!res.ok)throw new Error(`Impossible de récupérer l'image de référence (${res.status})`);
+  const buf=await res.arrayBuffer();
+  return new Blob([buf],{type:res.headers.get("content-type")||"image/png"});
 }
 
 function dataUrlToBlob(dataUrl){
-  const match = String(dataUrl).match(/^data:(image\/[a-zA-Z0-9.+-]+);base64,(.+)$/);
-  if(!match) throw new Error("Image de référence en base64 invalide");
-  const contentType = match[1];
-  const binary = Buffer.from(match[2], "base64");
-  return new Blob([binary], { type: contentType });
+  const match=String(dataUrl).match(/^data:(image\/[a-zA-Z0-9.+-]+);base64,(.+)$/);
+  if(!match)throw new Error("Image de référence en base64 invalide");
+  return new Blob([Buffer.from(match[2],"base64")],{type:match[1]});
 }
 
-async function generateWithReferenceImages({ key, prompt, size, model, quality, referenceImageUrls, referenceImageData }){
-  const form = new FormData();
-  form.append("prompt", prompt);
-  form.append("size", size || "1024x1024");
-  form.append("n", "1");
-  applyImageEditOptions(form, { model, quality });
-  // PSiO® utilise trois vues produit ; une quatrième vue peut rester disponible pour une référence
-  // de scène fournie par l'utilisateur. L'identité SDZ est composée ensuite, hors du modèle.
-  const urls = (referenceImageUrls || []).slice(0, 4);
-  const dataUrls = (referenceImageData || []).slice(0, 4 - urls.length);
-  for(const url of urls){
-    const blob = await fetchAsBlob(url);
-    form.append("image[]", blob, "reference.png");
-  }
-  for(const dataUrl of dataUrls){
-    const blob = dataUrlToBlob(dataUrl);
-    form.append("image[]", blob, "campaign-reference.png");
-  }
-  const res = await fetch("https://api.openai.com/v1/images/edits", {
-    method: "POST",
-    headers: { Authorization: `Bearer ${key}` },
-    body: form,
-  });
-  if(!res.ok){
-    const errText = await res.text();
-    throw new Error(`OpenAI Images (edits) a répondu ${res.status} : ${errText.slice(0, 300)}`);
-  }
+async function generateWithReferenceImages({key,prompt,size,model,quality,referenceImageUrls,referenceImageData}){
+  const form=new FormData();
+  form.append("prompt",prompt);form.append("size",size||"1024x1024");form.append("n","1");
+  applyImageEditOptions(form,{model,quality});
+  const urls=(referenceImageUrls||[]).slice(0,4),dataUrls=(referenceImageData||[]).slice(0,4-urls.length);
+  for(const url of urls)form.append("image[]",await fetchAsBlob(url),"reference.png");
+  for(const dataUrl of dataUrls)form.append("image[]",dataUrlToBlob(dataUrl),"campaign-reference.png");
+  const res=await fetch("https://api.openai.com/v1/images/edits",{method:"POST",headers:{Authorization:`Bearer ${key}`},body:form});
+  if(!res.ok)throw new Error(`OpenAI Images (edits) a répondu ${res.status} : ${(await res.text()).slice(0,300)}`);
   return res.json();
 }
 
-async function generateStandard({ key, prompt, size, model, quality }){
-  const res = await fetch("https://api.openai.com/v1/images/generations", {
-    method: "POST",
-    headers: { "Content-Type": "application/json", Authorization: `Bearer ${key}` },
-    body: JSON.stringify({
-      model: model || "gpt-image-2",
-      prompt,
-      size: size || "1024x1024",
-      ...(quality ? { quality } : {}),
-      n: 1,
-    }),
-  });
-  if (!res.ok) {
-    const errText = await res.text();
-    throw new Error(`OpenAI Images a répondu ${res.status} : ${errText.slice(0, 300)}`);
-  }
+async function generateStandard({key,prompt,size,model,quality}){
+  const res=await fetch("https://api.openai.com/v1/images/generations",{method:"POST",headers:{"Content-Type":"application/json",Authorization:`Bearer ${key}`},body:JSON.stringify({model:model||"gpt-image-2",prompt,size:size||"1024x1024",...(quality?{quality}:{}),n:1})});
+  if(!res.ok)throw new Error(`OpenAI Images a répondu ${res.status} : ${(await res.text()).slice(0,300)}`);
   return res.json();
 }
 
-exports.handler = async (event) => {
-  // --- Sécurité : secret partagé, vérifié avant toute autre action ---
-  const providedSecret = (event.headers && (event.headers["x-image-job-secret"] || event.headers["X-Image-Job-Secret"])) || "";
-  const expectedSecret = process.env.IMAGE_JOB_SECRET;
-  if (!expectedSecret || providedSecret !== expectedSecret) {
-    console.error("[process-image-job-background] Requête refusée : secret absent ou incorrect."); // jamais la valeur elle-même
-    return { statusCode: 401, body: JSON.stringify({ ok: false, error: "Non autorisé" }) };
+exports.handler=async event=>{
+  const providedSecret=(event.headers&&(event.headers["x-image-job-secret"]||event.headers["X-Image-Job-Secret"]))||"";
+  const expectedSecret=process.env.IMAGE_JOB_SECRET;
+  if(!expectedSecret||providedSecret!==expectedSecret){
+    console.error("[process-image-job-background] Requête refusée : secret absent ou incorrect.");
+    return {statusCode:401,body:JSON.stringify({ok:false,error:"Non autorisé"})};
   }
 
   let jobId;
-  try {
-    const payload = JSON.parse(event.body || "{}");
-    jobId = payload.jobId;
-  } catch (e) {
-    return { statusCode: 400, body: "Corps de requête invalide" };
-  }
-  if (!jobId) return { statusCode: 400, body: "jobId manquant" };
+  try{jobId=JSON.parse(event.body||"{}").jobId;}catch(error){return {statusCode:400,body:"Corps de requête invalide"};}
+  if(!jobId)return {statusCode:400,body:"jobId manquant"};
 
-  // À partir d'ici : plus aucune exception ne doit sortir non interceptée de cette fonction.
-  try {
-    const store = openJobStore();
-
-    // --- Idempotence : ne jamais rappeler OpenAI pour un job déjà traité ou en cours récent ---
+  try{
+    const store=openJobStore();
     let job;
-    try {
-      const raw = await store.get(`jobs/${jobId}`);
-      job = raw ? JSON.parse(raw) : null;
-    } catch (readErr) {
-      console.error(`[process-image-job-background] Échec de lecture du job ${jobId} : ${String(readErr.message || readErr)}`);
-      job = null;
-    }
-    if (!job) {
-      console.error(`[process-image-job-background] Job ${jobId} introuvable — abandon sans appel OpenAI.`);
-      return { statusCode: 200, body: JSON.stringify({ ok: false, error: "Job introuvable" }) };
-    }
-    if (job.status === "completed" || job.status === "failed") {
-      return { statusCode: 200, body: JSON.stringify({ ok: true, skipped: job.status }) };
-    }
-    if (job.status === "processing" && (Date.now() - (job.updatedAt || 0)) < PROCESSING_RECENT_THRESHOLD_MS) {
-      return { statusCode: 200, body: JSON.stringify({ ok: true, skipped: "already-processing" }) };
-    }
+    try{const raw=await store.get(`jobs/${jobId}`);job=raw?JSON.parse(raw):null;}catch(error){job=null;}
+    if(!job)return {statusCode:200,body:JSON.stringify({ok:false,error:"Job introuvable"})};
+    if(job.status==="completed"||job.status==="failed")return {statusCode:200,body:JSON.stringify({ok:true,skipped:job.status})};
+    if(job.status==="processing"&&(Date.now()-(job.updatedAt||0))<PROCESSING_RECENT_THRESHOLD_MS)return {statusCode:200,body:JSON.stringify({ok:true,skipped:"already-processing"})};
+    await safeSetJobStatus(store,jobId,{status:"processing",error:null});
 
-    await safeSetJobStatus(store, jobId, { status: "processing", error: null });
-
-    // --- Lecture de l'entrée complète (prompt + références) depuis Blobs, jamais depuis le corps ---
     let input;
-    try {
-      const inputRaw = await store.get(`jobs/${jobId}/input`);
-      input = inputRaw ? JSON.parse(inputRaw) : null;
-    } catch (inputErr) {
-      input = null;
+    try{const raw=await store.get(`jobs/${jobId}/input`);input=raw?JSON.parse(raw):null;}catch(error){input=null;}
+    if(!input){
+      await safeSetJobStatus(store,jobId,{status:"failed",error:{message:"Entrée du job introuvable en Blobs.",source:"storage"},imageGenerationCallCount:0});
+      return {statusCode:200,body:JSON.stringify({ok:false,error:"Entrée introuvable",imageGenerationCallCount:0})};
     }
-    if (!input) {
-      await safeSetJobStatus(store, jobId, { status: "failed", error: { message: "Entrée du job introuvable en Blobs.", source: "storage" } });
-      return { statusCode: 200, body: JSON.stringify({ ok: false, error: "Entrée introuvable" }) };
-    }
-    const { prompt, size, model, quality, requestedQuality, effectiveQuality, requestedSize, effectiveSize, referenceImageUrls, referenceImageData, referenceRoles, brandComposition, v3Plan, costMode } = input;
-    const referenceRequired = input.referenceRequired === true;
 
+    const {prompt,size,model,quality,requestedQuality,effectiveQuality,requestedSize,effectiveSize,referenceImageUrls,referenceImageData,referenceRoles,brandComposition,v3Plan,costMode}=input;
     if(costMode==="test"&&(quality==="high"||effectiveQuality==="high")){
       const costAudit=buildCostAudit({mode:"test",referenceImageCount:0,visionUsage:false,imageCalls:0,requestedQuality,requestedSize,effectiveSize});
       await safeSetJobStatus(store,jobId,{status:"failed",error:{message:"Incohérence de coût : Mode Test demandé, qualité haute détectée",source:"cost-control"},costAudit,imageGenerationCallCount:0});
       return {statusCode:200,body:JSON.stringify({ok:false,error:"Incohérence de coût : Mode Test demandé, qualité haute détectée",imageGenerationCallCount:0})};
     }
-    const key = process.env.OPENAI_API_KEY;
-    if (!key) {
-      await safeSetJobStatus(store, jobId, { status: "failed", error: { message: "Variable d'environnement OPENAI_API_KEY manquante sur Netlify", source: "config" } });
-      return { statusCode: 200, body: JSON.stringify({ ok: false, error: "Configuration manquante" }) };
+    const key=process.env.OPENAI_API_KEY;
+    if(!key){
+      await safeSetJobStatus(store,jobId,{status:"failed",error:{message:"Variable d'environnement OPENAI_API_KEY manquante sur Netlify",source:"config"},imageGenerationCallCount:0});
+      return {statusCode:200,body:JSON.stringify({ok:false,error:"Configuration manquante",imageGenerationCallCount:0})};
     }
 
+    const hasUrls=Array.isArray(referenceImageUrls)&&referenceImageUrls.length>0,hasData=Array.isArray(referenceImageData)&&referenceImageData.length>0,usedReference=hasUrls||hasData;
     let data;
-    let usedReference = false;
-    let referenceFallbackReason = null;
-    const hasUrls = Array.isArray(referenceImageUrls) && referenceImageUrls.length;
-    const hasData = Array.isArray(referenceImageData) && referenceImageData.length;
-    try {
-      if (hasUrls || hasData) {
-        try {
-          data = await generateWithReferenceImages({ key, prompt, size, model, quality, referenceImageUrls, referenceImageData });
-          usedReference = true;
-        } catch (refErr) {
-          referenceFallbackReason = String(refErr.message || refErr);
-          if(referenceRequired||v3Plan){
-            throw new Error(`Référence obligatoire non utilisée : ${referenceFallbackReason}`);
-          }
-          // Dégradation propre pour les références artistiques facultatives uniquement.
-          data = await generateStandard({ key, prompt, size, model, quality });
-          usedReference = false;
-        }
-      } else {
-        data = await generateStandard({ key, prompt, size, model, quality });
-      }
-    } catch (genErr) {
-      await safeSetJobStatus(store, jobId, { status: "failed", error: { message: String(genErr.message || genErr), source: "openai" }, usedReference: false, referenceFallbackReason });
-      return { statusCode: 200, body: JSON.stringify({ ok: false, error: String(genErr.message || genErr) }) };
+    try{
+      /* Frontière de coût absolue : ce bloc contient l'unique appel Images du job. Si cet appel
+         échoue, le job échoue. Aucun second prompt, aucune seconde génération, aucun retry applicatif. */
+      data=usedReference
+        ?await generateWithReferenceImages({key,prompt,size,model,quality,referenceImageUrls,referenceImageData})
+        :await generateStandard({key,prompt,size,model,quality});
+    }catch(genErr){
+      await safeSetJobStatus(store,jobId,{status:"failed",error:{message:String(genErr.message||genErr),source:"openai"},usedReference,referenceFallbackReason:null,imageGenerationCallCount:1});
+      return {statusCode:200,body:JSON.stringify({ok:false,error:String(genErr.message||genErr),imageGenerationCallCount:1})};
     }
 
-    let b64 = data.data?.[0]?.b64_json || null;
-    let url = data.data?.[0]?.url || null;
-    if (!b64 && !url) {
-      await safeSetJobStatus(store, jobId, { status: "failed", error: { message: "Aucune image reçue du fournisseur.", source: "openai" }, usedReference, referenceFallbackReason });
-      return { statusCode: 200, body: JSON.stringify({ ok: false, error: "Aucune image reçue du fournisseur." }) };
+    let b64=data.data?.[0]?.b64_json||null,url=data.data?.[0]?.url||null;
+    if(!b64&&!url){
+      await safeSetJobStatus(store,jobId,{status:"failed",error:{message:"Aucune image reçue du fournisseur.",source:"openai"},usedReference,imageGenerationCallCount:1});
+      return {statusCode:200,body:JSON.stringify({ok:false,error:"Aucune image reçue du fournisseur.",imageGenerationCallCount:1})};
     }
 
-    // V3 conserve toujours la photographie éditoriale brute, y compris lorsqu'une composition ou
-    // un contrôle aval la refuse. Elle reste distincte de l'affiche finale et du texte du post.
-    const rawResultKey = `jobs/${jobId}/raw-result`;
-    try { await store.set(rawResultKey, JSON.stringify({ b64, url, preserved:true })); }
+    const rawResultKey=`jobs/${jobId}/raw-result`;
+    try{await store.set(rawResultKey,JSON.stringify({b64,url,preserved:true}));}
     catch(rawWriteErr){
-      await safeSetJobStatus(store, jobId, { status:"failed", error:{ message:`Conservation de la photographie brute impossible : ${String(rawWriteErr.message||rawWriteErr)}`, source:"storage" } });
-      return { statusCode:200, body:JSON.stringify({ok:false,error:"Conservation de la photographie brute impossible"}) };
+      await safeSetJobStatus(store,jobId,{status:"failed",error:{message:`Conservation de la photographie brute impossible : ${String(rawWriteErr.message||rawWriteErr)}`,source:"storage"},imageGenerationCallCount:1});
+      return {statusCode:200,body:JSON.stringify({ok:false,error:"Conservation de la photographie brute impossible",imageGenerationCallCount:1})};
     }
 
-    let brandComposited = false;
-    let v3Finalization = null;
-    let rawImageBuffer = null;
+    let brandComposited=false,v3Finalization=null,rawImageBuffer=null;
     if(v3Plan){
       rawImageBuffer=await generatedImageToBuffer(b64,url);
-      const executed=await executeV3Pipeline({plan:v3Plan,rawImageBuffer,preserveRaw:async()=>{},analyzeImage:(buffer,plan)=>analyzeImageWithOpenAI({key,imageBuffer:buffer,plan}),brandComposition,
-        composeImage:async(buffer,selectedLayout,composition)=>{if(!composition||composition.enabled!==true)throw new Error("Composition de marque V3 absente.");const brandStore=openBrandStore();const rawLogoRecord=await brandStore.get("vf-logo-asset");if(!rawLogoRecord)throw new Error("Logo officiel absent de Netlify Blobs.");const logoRecord=JSON.parse(rawLogoRecord);return composeBrandPoster({imageBuffer:buffer,logoDataUrl:logoRecord.dataUrl,platform:String(composition.platform||"Instagram"),headline:String(composition.headline||""),zoneText:String(composition.zoneText||""),selectedLayout,posterStrategy:v3Plan.posterStrategy});}});
-      v3Finalization=executed.finalization;brandComposited=executed.brandComposited;b64=executed.imageBuffer.toString("base64");url=null;
-    }
-    if(!v3Plan && brandComposition && brandComposition.enabled === true){
-      try{
-        const brandStore = openBrandStore();
-        const rawLogoRecord = await brandStore.get("vf-logo-asset");
-        if(!rawLogoRecord) throw new Error("Logo officiel absent de Netlify Blobs.");
-        const logoRecord = JSON.parse(rawLogoRecord);
-        const imageBuffer = rawImageBuffer || await generatedImageToBuffer(b64, url);
-        const finalBuffer = await composeBrandPoster({
-          imageBuffer,
-          logoDataUrl: logoRecord.dataUrl,
-          platform: String(brandComposition.platform || "Instagram"),
-          headline: String(brandComposition.headline || ""),
-          zoneText: String(brandComposition.zoneText || ""),
-          selectedLayout: v3Finalization&&v3Finalization.layout,
-        });
-        b64 = finalBuffer.toString("base64");
-        url = null;
-        brandComposited = true;
-      }catch(compositionErr){
-        if(v3Plan){
-          v3Finalization.quality={...v3Finalization.quality,ok:false,technical:{ok:false,errors:[...v3Finalization.quality.technical.errors,"composition_sharp"]}};
-          v3Finalization.error=`Composition de marque impossible : ${String(compositionErr.message||compositionErr)}`;
-        }else{
-          await safeSetJobStatus(store,jobId,{status:"failed",error:{message:`Composition de marque impossible : ${String(compositionErr.message||compositionErr)}`,source:"brand-compositor"},usedReference,referenceFallbackReason,rawResultKey});
-          return {statusCode:200,body:JSON.stringify({ok:false,error:"Composition de marque impossible"})};
+      const executed=await executeV3Pipeline({
+        plan:v3Plan,rawImageBuffer,preserveRaw:async()=>{},
+        analyzeImage:(buffer,plan)=>analyzeImageWithOpenAI({key,imageBuffer:buffer,plan}),
+        brandComposition,
+        composeImage:async(buffer,selectedLayout,composition)=>{
+          if(!composition||composition.enabled!==true)throw new Error("Composition de marque V4 absente.");
+          return composeBrandPoster({imageBuffer:buffer,platform:String(composition.platform||"Instagram"),headline:String(composition.headline||""),zoneText:String(composition.zoneText||""),selectedLayout,posterStrategy:v3Plan.posterStrategy});
         }
+      });
+      v3Finalization=executed.finalization;brandComposited=executed.brandComposited;b64=executed.imageBuffer.toString("base64");url=null;
+    }else if(brandComposition&&brandComposition.enabled===true){
+      try{
+        const imageBuffer=rawImageBuffer||await generatedImageToBuffer(b64,url);
+        const finalBuffer=await composeBrandPoster({imageBuffer,platform:String(brandComposition.platform||"Instagram"),headline:String(brandComposition.headline||""),zoneText:String(brandComposition.zoneText||"")});
+        b64=finalBuffer.toString("base64");url=null;brandComposited=true;
+      }catch(compositionErr){
+        await safeSetJobStatus(store,jobId,{status:"failed",error:{message:`Composition de marque impossible : ${String(compositionErr.message||compositionErr)}`,source:"brand-compositor"},usedReference,rawResultKey,imageGenerationCallCount:1});
+        return {statusCode:200,body:JSON.stringify({ok:false,error:"Composition de marque impossible",imageGenerationCallCount:1})};
       }
     }
 
-    const resultKey = `jobs/${jobId}/result`;
-    try {
-      await store.set(resultKey, JSON.stringify({ b64, url, usedReference, brandComposited, v3Finalization }));
-    } catch (resultWriteErr) {
-      await safeSetJobStatus(store, jobId, { status: "failed", error: { message: `Échec d'écriture du résultat : ${String(resultWriteErr.message || resultWriteErr)}`, source: "storage" }, usedReference, referenceFallbackReason });
-      return { statusCode: 200, body: JSON.stringify({ ok: false, error: "Échec d'écriture du résultat" }) };
+    const resultKey=`jobs/${jobId}/result`;
+    try{await store.set(resultKey,JSON.stringify({b64,url,usedReference,brandComposited,v3Finalization}));}
+    catch(resultWriteErr){
+      await safeSetJobStatus(store,jobId,{status:"failed",error:{message:`Échec d'écriture du résultat : ${String(resultWriteErr.message||resultWriteErr)}`,source:"storage"},usedReference,imageGenerationCallCount:1});
+      return {statusCode:200,body:JSON.stringify({ok:false,error:"Échec d'écriture du résultat",imageGenerationCallCount:1})};
     }
 
-    // usage réel OpenAI Images (tokens texte/image) : persisté dans le STATUT (léger — jamais le b64)
-    // pour l'archivage des coûts mesurés côté client. Additif, rétrocompatible.
-    const usage = data.usage ? { input_tokens: data.usage.input_tokens ?? null, output_tokens: data.usage.output_tokens ?? null, input_tokens_details: data.usage.input_tokens_details ?? null } : null;
+    const usage=data.usage?{input_tokens:data.usage.input_tokens??null,output_tokens:data.usage.output_tokens??null,input_tokens_details:data.usage.input_tokens_details??null}:null;
     const referenceImageCount=(referenceImageUrls||[]).length+(referenceImageData||[]).length;
     const costAudit=buildCostAudit({mode:costMode||"test",referenceImageCount,referenceRoles,imageUsage:usage,visionUsage:v3Plan?{}:false,retries:0,imageCalls:1,requestedQuality,requestedSize,effectiveSize});
     const referenceAudit={referenceImageCount,used:usedReference,reason:v3Plan?.psioRequired?"Étape PSiO® contractuelle":"Référence visuelle explicitement sélectionnée",stage:v3Plan?.contract.requiredCompositeStages?.find(x=>/PSiO/i.test(x))||null,roles:referenceRoles||[],estimatedInputImageCostEur:null,costDetermination:"unknown_until_billing",costIncludedInOutputEstimate:false,usage:data.usage?.input_tokens_details||null};
     const artFingerprint=v3Plan&&v3Finalization?artisticFingerprint(v3Plan,v3Finalization,v3Finalization.quality.ok?"validated":"refused"):null;
-    await safeSetJobStatus(store, jobId, { status: "completed", error: null, resultKey, rawResultKey, usedReference, referenceFallbackReason, brandComposited, v3Plan, v3Finalization,artFingerprint,referenceAudit,costAudit,requestedQuality,effectiveQuality:quality,requestedSize,effectiveSize:size,imageGenerationCallCount:1,usage });
-
-    // Nettoyage de l'entrée après usage réussi — best-effort, non bloquant si ça échoue.
-    try { await store.delete(`jobs/${jobId}/input`); } catch (deleteErr) { /* pas grave, l'entrée reste simplement, sans impact fonctionnel */ }
-
-    return { statusCode: 200, body: JSON.stringify({ ok: true }) };
-  } catch (err) {
-    // Filet de sécurité ultime : même une erreur totalement imprévue ne doit jamais sortir non
-    // interceptée. On journalise uniquement un message, jamais de secret ni de base64.
-    console.error(`[process-image-job-background] Erreur inattendue pour ${jobId} : ${String(err && err.message || err)}`);
-    try {
-      const store = openJobStore();
-      await safeSetJobStatus(store, jobId, { status: "failed", error: { message: "Erreur interne inattendue.", source: "internal" } });
-    } catch (finalErr) {
-      console.error(`[process-image-job-background] Impossible de marquer le job ${jobId} en échec.`);
-    }
-    return { statusCode: 200, body: JSON.stringify({ ok: false, error: "Erreur interne" }) };
+    await safeSetJobStatus(store,jobId,{status:"completed",error:null,resultKey,rawResultKey,usedReference,referenceFallbackReason:null,brandComposited,v3Plan,v3Finalization,artFingerprint,referenceAudit,costAudit,requestedQuality,effectiveQuality:quality,requestedSize,effectiveSize:size,imageGenerationCallCount:1,usage});
+    try{await store.delete(`jobs/${jobId}/input`);}catch(error){}
+    return {statusCode:200,body:JSON.stringify({ok:true,imageGenerationCallCount:1})};
+  }catch(err){
+    console.error(`[process-image-job-background] Erreur inattendue pour ${jobId} : ${String(err&&err.message||err)}`);
+    try{await safeSetJobStatus(openJobStore(),jobId,{status:"failed",error:{message:"Erreur interne inattendue.",source:"internal"}});}catch(error){}
+    return {statusCode:200,body:JSON.stringify({ok:false,error:"Erreur interne"})};
   }
 };
+
+exports.generateStandard=generateStandard;
+exports.generateWithReferenceImages=generateWithReferenceImages;
+exports.generatedImageToBuffer=generatedImageToBuffer;
