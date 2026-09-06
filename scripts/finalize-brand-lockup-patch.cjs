@@ -31,9 +31,4 @@ s=fs.readFileSync(p,'utf8');
 s=mustReplace(s,'assert.equal(body.compositorVersion,"3.4.0-high-quality-logo-resampling")','assert.equal(body.compositorVersion,"3.5.0-supersampled-brand-lockup")','health version test');
 s=mustReplace(s,'assert.equal(m.logoFringeDetected,false);assert.equal(m.logoRectangleOpaque,false);assert.equal(m.logoResampling,"lanczos3");assert.ok(m.logoAntialiasRatio>0&&m.logoAntialiasRatio<.18);assert.ok(m.logoDarkAntialiasRatio<.08);','assert.equal(m.logoFringeDetected,false);assert.equal(m.logoRectangleOpaque,false);assert.equal(m.logoResampling,"lanczos3");assert.equal(m.brandLockupRendering,"supersampled-block");assert.equal(m.brandLockupSupersample,4);assert.ok(m.brandLockupBounds.width>m.logoBounds.width);assert.ok(m.logoAntialiasRatio>0&&m.logoAntialiasRatio<.18);assert.ok(m.logoDarkAntialiasRatio<.08);','manifest test');
 fs.writeFileSync(p,s);
-
-p='.github/workflows/viewfinder-final-audit.yml';
-s=fs.readFileSync(p,'utf8');
-s=mustReplace(s,'assert.match(compositor,/3\\.3\\.0-full-official-medallion/);','assert.match(compositor,/3\\.5\\.0-supersampled-brand-lockup/);\n          assert.match(compositor,/BRAND_LOCKUP_SUPERSAMPLE=4/);\n          assert.match(compositor,/brandLockupRendering:\"supersampled-block\"/);','audit version');
-fs.writeFileSync(p,s);
 console.log('final brand lockup patch applied');
