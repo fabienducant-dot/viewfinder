@@ -41,12 +41,11 @@ jobs:
       - run: npm audit --audit-level=high
       - run: node --check netlify/functions/_shared/brand-compositor.js
       - run: git diff --check
-      - name: Commit validated finalization
+      - name: Push validated finalization source
         run: |
           git config user.name viewfinder-ci
           git config user.email actions@users.noreply.github.com
-          git rm .github/workflows/finalize-brand-lockup.yml scripts/finalize-brand-lockup-patch.cjs
-          git add netlify/functions/_shared/brand-compositor.js tests/v3-compositor-server-stability.test.js .github/workflows/viewfinder-final-audit.yml
+          git add netlify/functions/_shared/brand-compositor.js tests/v3-compositor-server-stability.test.js
           git commit -m "Finalize premium brand lockup supersampling"
           git push origin HEAD:audit/finalize-viewfinder-v3
-# retry 4
+# retry 5
