@@ -49,4 +49,4 @@ jobs:
           git add netlify/functions/_shared/brand-compositor.js tests/v3-compositor-server-stability.test.js .github/workflows/viewfinder-final-audit.yml
           git commit -m "Finalize premium brand lockup supersampling"
           git push origin HEAD:audit/finalize-viewfinder-v3
-# retry 3
+# retry 4
