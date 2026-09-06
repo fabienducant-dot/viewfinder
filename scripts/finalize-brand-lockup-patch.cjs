@@ -28,7 +28,7 @@ fs.writeFileSync(p,s);
 p='tests/v3-compositor-server-stability.test.js';
 s=fs.readFileSync(p,'utf8');
 s=mustReplace(s,'assert.equal(body.compositorVersion,"3.4.0-high-quality-logo-resampling")','assert.equal(body.compositorVersion,"3.5.0-supersampled-brand-lockup")','health version test');
-s=mustReplace(s,'assert.equal(m.logoFringeDetected,false);assert.equal(m.logoRectangleOpaque,false);assert.equal(m.logoResampling,"lanczos3");assert.ok(m.logoAntialiasRatio>0&&m.logoAntialiasRatio<.18,`antialias ${m.logoAntialiasRatio}`);','assert.equal(m.logoFringeDetected,false);assert.equal(m.logoRectangleOpaque,false);assert.equal(m.logoResampling,"lanczos3");assert.equal(m.brandLockupRendering,"supersampled-block");assert.equal(m.brandLockupSupersample,4);assert.ok(m.brandLockupBounds.width>m.logoBounds.width);assert.ok(m.logoAntialiasRatio>0&&m.logoAntialiasRatio<.18,`antialias ${m.logoAntialiasRatio}`);','manifest test');
+s=mustReplace(s,'assert.equal(m.logoFringeDetected,false);assert.equal(m.logoRectangleOpaque,false);assert.equal(m.logoResampling,"lanczos3");assert.ok(m.logoAntialiasRatio>0&&m.logoAntialiasRatio<.18);assert.ok(m.logoDarkAntialiasRatio<.08);','assert.equal(m.logoFringeDetected,false);assert.equal(m.logoRectangleOpaque,false);assert.equal(m.logoResampling,"lanczos3");assert.equal(m.brandLockupRendering,"supersampled-block");assert.equal(m.brandLockupSupersample,4);assert.ok(m.brandLockupBounds.width>m.logoBounds.width);assert.ok(m.logoAntialiasRatio>0&&m.logoAntialiasRatio<.18);assert.ok(m.logoDarkAntialiasRatio<.08);','manifest test');
 fs.writeFileSync(p,s);
 
 p='.github/workflows/viewfinder-final-audit.yml';
