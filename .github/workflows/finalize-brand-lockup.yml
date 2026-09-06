@@ -1,0 +1,106 @@
+name: Finalize brand lockup supersampling
+
+on:
+  push:
+    branches:
+      - audit/finalize-viewfinder-v3
+    paths:
+      - .github/workflows/finalize-brand-lockup.yml
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  finalize:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: audit/finalize-viewfinder-v3
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+      - run: npm ci
+      - name: Apply 4x supersampled brand lockup
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+
+          p=Path('netlify/functions/_shared/brand-compositor.js')
+          s=p.read_text()
+          s=s.replace('const COMPOSITOR_VERSION="3.4.0-high-quality-logo-resampling";','const COMPOSITOR_VERSION="3.5.0-supersampled-brand-lockup";\nconst BRAND_LOCKUP_SUPERSAMPLE=4;',1)
+
+          old=''' const titleNodes=t.titleLines.map((line,i)=>vectorText(DISPLAY_FONT,line,centerX,y+i*t.titleSize*1.05,t.titleSize,"title")).join("");y+=t.titleLines.length*t.titleSize*1.05+t.subtitleSize*.45;const subtitleNodes=t.subtitleLines.map((line,i)=>vectorText(TEXT_FONT,line,centerX,y+i*t.subtitleSize*1.10,t.subtitleSize,"subtitle")).join(""),headlineEnd=t.subtitleLines.length?y+t.subtitleLines.length*t.subtitleSize*1.10:y,dividerY=Math.min(layout.textArea.bottom-Math.round(height*.008),headlineEnd+Math.round(height*.012)),scrimTop=Math.max(0,layout.y-Math.round(height*.025)),scrimBottom=Math.min(height,layout.textArea.bottom+Math.round(height*.025)),brandFont=brandLockup.nameFont==="display"?DISPLAY_FONT:BRAND_FONT;
+ return Buffer.from(`<svg width="${width}" height="${height}" viewBox="0 0 ${width} ${height}" xmlns="http://www.w3.org/2000/svg"><defs><linearGradient id="scrim" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#050505" stop-opacity="0"/><stop offset="0.30" stop-color="#050505" stop-opacity="0.14"/><stop offset="0.72" stop-color="#050505" stop-opacity="0.24"/><stop offset="1" stop-color="#050505" stop-opacity="0"/></linearGradient><style>.brand,.city,.title,.subtitle{paint-order:stroke fill;stroke:#050505;stroke-opacity:.68}.brand{fill:${brandLockup.nameColor};stroke-width:2px}.city{fill:${brandLockup.locationColor};stroke-width:1px}.title{fill:${IVORY};stroke-width:3px}.subtitle{fill:${PALE_GOLD};stroke-width:2px}</style></defs><rect x="0" y="${scrimTop}" width="${width}" height="${scrimBottom-scrimTop}" fill="url(#scrim)"/><line x1="${layout.x+layout.width*.40}" y1="${dividerY}" x2="${layout.x+layout.width*.60}" y2="${dividerY}" stroke="${GOLD}" stroke-width="1" stroke-opacity=".42"/>${vectorText(brandFont,brandLockup.name,brandLockup.centerX,brandLockup.brandBaseline,brandLockup.brandSize,"brand")}${vectorText(TEXT_FONT,brandLockup.location,brandLockup.centerX,brandLockup.cityBaseline,brandLockup.citySize,"city")}${titleNodes}${subtitleNodes}</svg>`);
+}'''
+          new=''' const titleNodes=t.titleLines.map((line,i)=>vectorText(DISPLAY_FONT,line,centerX,y+i*t.titleSize*1.05,t.titleSize,"title")).join("");y+=t.titleLines.length*t.titleSize*1.05+t.subtitleSize*.45;const subtitleNodes=t.subtitleLines.map((line,i)=>vectorText(TEXT_FONT,line,centerX,y+i*t.subtitleSize*1.10,t.subtitleSize,"subtitle")).join(""),headlineEnd=t.subtitleLines.length?y+t.subtitleLines.length*t.subtitleSize*1.10:y,dividerY=Math.min(layout.textArea.bottom-Math.round(height*.008),headlineEnd+Math.round(height*.012)),scrimTop=Math.max(0,layout.y-Math.round(height*.025)),scrimBottom=Math.min(height,layout.textArea.bottom+Math.round(height*.025));
+ const brandFont=brandLockup?(brandLockup.nameFont==="display"?DISPLAY_FONT:BRAND_FONT):DISPLAY_FONT,brandNodes=brandLockup?`${vectorText(brandFont,brandLockup.name,brandLockup.centerX,brandLockup.brandBaseline,brandLockup.brandSize,"brand")}${vectorText(TEXT_FONT,brandLockup.location,brandLockup.centerX,brandLockup.cityBaseline,brandLockup.citySize,"city")}`:"";
+ return Buffer.from(`<svg width="${width}" height="${height}" viewBox="0 0 ${width} ${height}" xmlns="http://www.w3.org/2000/svg"><defs><linearGradient id="scrim" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#050505" stop-opacity="0"/><stop offset="0.30" stop-color="#050505" stop-opacity="0.14"/><stop offset="0.72" stop-color="#050505" stop-opacity="0.24"/><stop offset="1" stop-color="#050505" stop-opacity="0"/></linearGradient><style>.brand,.city,.title,.subtitle{paint-order:stroke fill;stroke:#050505;stroke-opacity:.68}.brand{fill:${brandLockup?.nameColor||GOLD};stroke-width:2px}.city{fill:${brandLockup?.locationColor||IVORY};stroke-width:1px}.title{fill:${IVORY};stroke-width:3px}.subtitle{fill:${PALE_GOLD};stroke-width:2px}</style></defs><rect x="0" y="${scrimTop}" width="${width}" height="${scrimBottom-scrimTop}" fill="url(#scrim)"/><line x1="${layout.x+layout.width*.40}" y1="${dividerY}" x2="${layout.x+layout.width*.60}" y2="${dividerY}" stroke="${GOLD}" stroke-width="1" stroke-opacity=".42"/>${brandNodes}${titleNodes}${subtitleNodes}</svg>`);
+}
+
+function buildSupersampledBrandTextSvg(blockWidth,blockHeight,brandLockup,blockLeft,blockTop,scale){
+ const brandFont=brandLockup.nameFont==="display"?DISPLAY_FONT:BRAND_FONT,centerX=(brandLockup.centerX-blockLeft)*scale,brandBaseline=(brandLockup.brandBaseline-blockTop)*scale,cityBaseline=(brandLockup.cityBaseline-blockTop)*scale;
+ return Buffer.from(`<svg width="${blockWidth*scale}" height="${blockHeight*scale}" viewBox="0 0 ${blockWidth*scale} ${blockHeight*scale}" xmlns="http://www.w3.org/2000/svg"><style>.brand,.city{paint-order:stroke fill;stroke:#050505;stroke-opacity:.68}.brand{fill:${brandLockup.nameColor};stroke-width:${2*scale}px}.city{fill:${brandLockup.locationColor};stroke-width:${1*scale}px}</style>${vectorText(brandFont,brandLockup.name,centerX,brandBaseline,brandLockup.brandSize*scale,"brand")}${vectorText(TEXT_FONT,brandLockup.location,centerX,cityBaseline,brandLockup.citySize*scale,"city")}</svg>`);
+}'''
+          assert old in s, 'overlay marker not found'
+          s=s.replace(old,new,1)
+
+          old=''' /* Le master a un alpha binaire validé au build. Un redimensionnement interpolé recréait des pixels
+    noirs semi-transparents — le voile constaté en production. Le noyau nearest conserve strictement
+    l'alpha binaire et les noirs internes officiels. */
+ const resizedLogo=await sharp(official.buffer,{failOn:"none"}).resize({width:logoWidth,withoutEnlargement:false,fit:"inside",kernel:sharp.kernel.lanczos3}).png({compressionLevel:9}).toBuffer(),resizedMeta=await sharp(resizedLogo).metadata(),finalLogoWidth=resizedMeta.width||logoWidth,finalLogoHeight=resizedMeta.height||logoHeight,resizedAudit=await auditLogoTransparency(resizedLogo,{allowAntialias:true});
+ if(!resizedAudit.integrity)throw new Error("Intégrité du logo perdue pendant le redimensionnement.");
+ const logoBottom=logoTop+finalLogoHeight,brandLockup={centerX:logoLeft+finalLogoWidth/2,brandSize,citySize,brandBaseline:logoBottom+brandTail.brandBaselineOffset,cityBaseline:logoBottom+brandTail.cityBaselineOffset,name:signature.name,location:signature.location,nameColor:signature.nameColor,locationColor:signature.locationColor,nameFont:signature.nameFont,locationFont:signature.locationFont},brandBottom=logoBottom+brandTail.tailHeight;if(brandBottom>height-minimumBottomMargin)throw new Error("Lock-up de marque hors cadre.");'''
+          new=''' /* Le bloc de marque complet est calculé en 4x : le master du médaillon reste proche de sa résolution
+    native, les textes restent vectoriels, puis logo + signature sont réduits ensemble une seule fois.
+    Cela évite l'escalier du nearest-neighbour et limite le cumul de redimensionnements. */
+ const finalLogoWidth=logoWidth,finalLogoHeight=logoHeight,logoBottom=logoTop+finalLogoHeight,brandLockup={centerX:logoLeft+finalLogoWidth/2,brandSize,citySize,brandBaseline:logoBottom+brandTail.brandBaselineOffset,cityBaseline:logoBottom+brandTail.cityBaselineOffset,name:signature.name,location:signature.location,nameColor:signature.nameColor,locationColor:signature.locationColor,nameFont:signature.nameFont,locationFont:signature.locationFont},brandBottom=logoBottom+brandTail.tailHeight;if(brandBottom>height-minimumBottomMargin)throw new Error("Lock-up de marque hors cadre.");
+ const brandBlockLeft=Math.max(0,Math.round(brandLockup.centerX-signatureSafeWidth/2)),brandBlockRight=Math.min(width,Math.round(brandLockup.centerX+signatureSafeWidth/2)),brandBlockTop=logoTop,brandBlockWidth=Math.max(1,brandBlockRight-brandBlockLeft),brandBlockHeight=Math.max(1,brandBottom-brandBlockTop),hiLogoWidth=finalLogoWidth*BRAND_LOCKUP_SUPERSAMPLE,hiLogoLeft=(logoLeft-brandBlockLeft)*BRAND_LOCKUP_SUPERSAMPLE,hiLogo=await sharp(official.buffer,{failOn:"none"}).resize({width:hiLogoWidth,withoutEnlargement:false,fit:"inside",kernel:sharp.kernel.lanczos3}).png({compressionLevel:9}).toBuffer(),hiLogoAudit=await auditLogoTransparency(hiLogo,{allowAntialias:true});
+ if(!hiLogoAudit.integrity)throw new Error("Intégrité du logo perdue pendant le suréchantillonnage.");
+ const brandTextHi=buildSupersampledBrandTextSvg(brandBlockWidth,brandBlockHeight,brandLockup,brandBlockLeft,brandBlockTop,BRAND_LOCKUP_SUPERSAMPLE),brandBlockHi=await sharp({create:{width:brandBlockWidth*BRAND_LOCKUP_SUPERSAMPLE,height:brandBlockHeight*BRAND_LOCKUP_SUPERSAMPLE,channels:4,background:{r:0,g:0,b:0,alpha:0}}}).composite([{input:hiLogo,left:hiLogoLeft,top:0},{input:brandTextHi,left:0,top:0}]).png({compressionLevel:9}).toBuffer(),brandBlock=await sharp(brandBlockHi,{failOn:"none"}).resize({width:brandBlockWidth,height:brandBlockHeight,kernel:sharp.kernel.lanczos3}).png({compressionLevel:9,adaptiveFiltering:true}).toBuffer();'''
+          assert old in s, 'logo resize marker not found'
+          s=s.replace(old,new,1)
+
+          s=s.replace('logoResampling:"lanczos3",logoAntialiasRatio:resizedAudit.semiAlphaRatio,logoDarkAntialiasRatio:resizedAudit.semiDarkRatio,logoAssetIntegrity:official.audit.integrity&&resizedAudit.integrity,logoFringeDetected:official.audit.fringeDetected||resizedAudit.fringeDetected,','logoResampling:"lanczos3",brandLockupRendering:"supersampled-block",brandLockupSupersample:BRAND_LOCKUP_SUPERSAMPLE,brandLockupBounds:{left:brandBlockLeft,top:brandBlockTop,width:brandBlockWidth,height:brandBlockHeight,right:brandBlockRight,bottom:brandBottom},logoAntialiasRatio:hiLogoAudit.semiAlphaRatio,logoDarkAntialiasRatio:hiLogoAudit.semiDarkRatio,logoAssetIntegrity:official.audit.integrity&&hiLogoAudit.integrity,logoFringeDetected:official.audit.fringeDetected||hiLogoAudit.fringeDetected,',1)
+
+          old=''' const overlay=buildOverlaySvg(width,height,layout,platform,headline,posterStrategy,brandLockup),output=await image.composite([{input:overlay,left:0,top:0},{input:resizedLogo,left:logoLeft,top:logoTop}]).png({compressionLevel:9,adaptiveFiltering:true}).toBuffer();output.compositionManifest=manifest;return output;'''
+          new=''' const overlay=buildOverlaySvg(width,height,layout,platform,headline,posterStrategy,null),output=await image.composite([{input:overlay,left:0,top:0},{input:brandBlock,left:brandBlockLeft,top:brandBlockTop}]).png({compressionLevel:9,adaptiveFiltering:true}).toBuffer();output.compositionManifest=manifest;return output;'''
+          assert old in s, 'final composite marker not found'
+          s=s.replace(old,new,1)
+
+          s=s.replace('module.exports={BRAND_TOKENS,COMPOSITOR_VERSION,','module.exports={BRAND_TOKENS,COMPOSITOR_VERSION,BRAND_LOCKUP_SUPERSAMPLE,',1)
+          p.write_text(s)
+
+          p=Path('tests/v3-compositor-server-stability.test.js')
+          s=p.read_text()
+          s=s.replace('assert.equal(body.compositorVersion,"3.4.0-high-quality-logo-resampling")','assert.equal(body.compositorVersion,"3.5.0-supersampled-brand-lockup")',1)
+          marker='''  assert.equal(m.logoFringeDetected,false);assert.equal(m.logoRectangleOpaque,false);assert.equal(m.logoResampling,"lanczos3");assert.ok(m.logoAntialiasRatio>0&&m.logoAntialiasRatio<.18,`antialias ${m.logoAntialiasRatio}`);assert.ok(m.logoDarkAntialiasRatio<.08,`dark antialias ${m.logoDarkAntialiasRatio}`);'''
+          repl='''  assert.equal(m.logoFringeDetected,false);assert.equal(m.logoRectangleOpaque,false);assert.equal(m.logoResampling,"lanczos3");assert.equal(m.brandLockupRendering,"supersampled-block");assert.equal(m.brandLockupSupersample,4);assert.ok(m.brandLockupBounds.width>m.logoBounds.width);assert.ok(m.logoAntialiasRatio>0&&m.logoAntialiasRatio<.18,`antialias ${m.logoAntialiasRatio}`);assert.ok(m.logoDarkAntialiasRatio<.08,`dark antialias ${m.logoDarkAntialiasRatio}`);'''
+          assert marker in s, 'test manifest marker not found'
+          s=s.replace(marker,repl,1)
+          p.write_text(s)
+
+          p=Path('.github/workflows/viewfinder-final-audit.yml')
+          s=p.read_text()
+          s=s.replace('assert.match(compositor,/3\\.3\\.0-full-official-medallion/);','assert.match(compositor,/3\\.5\\.0-supersampled-brand-lockup/);\n          assert.match(compositor,/BRAND_LOCKUP_SUPERSAMPLE=4/);\n          assert.match(compositor,/brandLockupRendering:\"supersampled-block\"/);',1)
+          p.write_text(s)
+          PY
+      - name: Validate complete deterministic suite
+        run: |
+          npm run verify
+          npm audit --omit=dev --audit-level=high
+          npm audit --audit-level=high
+          node --check netlify/functions/_shared/brand-compositor.js
+          git diff --check
+      - name: Commit validated finalization and remove one-shot workflow
+        run: |
+          git config user.name 'viewfinder-ci'
+          git config user.email 'actions@users.noreply.github.com'
+          git rm .github/workflows/finalize-brand-lockup.yml
+          git add netlify/functions/_shared/brand-compositor.js tests/v3-compositor-server-stability.test.js .github/workflows/viewfinder-final-audit.yml
+          git commit -m 'Finalize premium brand lockup supersampling'
+          git push origin HEAD:audit/finalize-viewfinder-v3
