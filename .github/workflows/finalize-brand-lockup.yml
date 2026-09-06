@@ -1,0 +1,41 @@
+name: Finalize brand lockup
+
+on:
+  push:
+    branches:
+      - audit/finalize-viewfinder-v3
+    paths:
+      - .github/workflows/finalize-brand-lockup.yml
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  finalize:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: audit/finalize-viewfinder-v3
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+      - run: npm ci
+      - run: node scripts/finalize-brand-lockup-patch.cjs
+      - run: npm run verify
+      - run: npm audit --omit=dev --audit-level=high
+      - run: npm audit --audit-level=high
+      - run: node --check netlify/functions/_shared/brand-compositor.js
+      - run: git diff --check
+      - name: Commit validated finalization
+        run: |
+          git config user.name viewfinder-ci
+          git config user.email actions@users.noreply.github.com
+          git rm .github/workflows/finalize-brand-lockup.yml scripts/finalize-brand-lockup-patch.cjs
+          git add netlify/functions/_shared/brand-compositor.js tests/v3-compositor-server-stability.test.js .github/workflows/viewfinder-final-audit.yml
+          git commit -m "Finalize premium brand lockup supersampling"
+          git push origin HEAD:audit/finalize-viewfinder-v3
