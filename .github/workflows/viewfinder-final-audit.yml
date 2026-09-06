@@ -64,7 +64,9 @@ jobs:
           assert.doesNotMatch(compositor,/removeBorderConnectedDarkBackground|TRANSPARENT_LOGO_CACHE|prepareLogoOverlay|buildLogoSilhouetteMask/);
           assert.match(compositor,/assets\/sdz-logo-compositor\.png/);
           assert.match(compositor,/LAMBDA_TASK_ROOT/);
-          assert.match(compositor,/3\.3\.0-full-official-medallion/);
+          assert.match(compositor,/3\.5\.0-supersampled-brand-lockup/);
+          assert.match(compositor,/BRAND_LOCKUP_SUPERSAMPLE=4/);
+          assert.match(compositor,/brandLockupRendering:"supersampled-block"/);
           assert.doesNotMatch(worker,/providerSafetyFallback|buildProviderSafeBodyworkPrompt|vf-logo-asset|openBrandStore/);
           assert.match(worker,/retries:0,imageCalls:1/);
           assert.match(pipeline,/authority:"SceneIntentV4"/);
