@@ -14,7 +14,7 @@ const extremeSubtitle="BESOIN DE SOUFFLER, DE DÉCHARGER LES TENSIONS MENTALES E
 const measure=(text,size)=>String(text).length*size*.58;
 
 test("le moteur typographique V4 conserve le texte exact et borne toutes les lignes",()=>{
-  assert.equal(VERSION,"4.0.0-matrix-safe-typography");
+  assert.equal(VERSION,"4.1.0-matrix-safe-typography");
   for(const platform of platforms){
     const policy=POLICIES[platform];assert.ok(policy,platform);
     for(const c of services){
@@ -24,6 +24,8 @@ test("le moteur typographique V4 conserve le texte exact et borne toutes les lig
       assert.ok(t.titleLines.length<=policy.titleMaxLines,`${platform}/${c.name}/title lines`);
       assert.ok(t.subtitleLines.length<=policy.subtitleMaxLines,`${platform}/${c.name}/subtitle lines`);
       assert.ok(t.usedHeight<=t.safeHeight,`${platform}/${c.name}/height`);
+      assert.ok(t.titleLines.every(line=>measure(line,t.titleSize)<=t.safeWidth),`${platform}/${c.name}/title width`);
+      assert.ok(t.subtitleLines.every(line=>measure(line,t.subtitleSize)<=t.safeWidth),`${platform}/${c.name}/subtitle width`);
     }
   }
 });
@@ -43,8 +45,9 @@ test("matrice Sharp complète 19 sujets × 7 formats : aucun texte, logo ou sign
       assert.equal(m.typographyEngineVersion,VERSION,`${platform}/${c.name}/engine`);
       assert.ok(m.titleLines.length<=policy.titleMaxLines,`${platform}/${c.name}/title lines`);
       assert.ok(m.subtitleLines.length<=policy.subtitleMaxLines,`${platform}/${c.name}/subtitle lines`);
-      if(m.titleBounds){assert.ok(m.titleBounds.left>=m.textSafeEnvelope.left-1,`${platform}/${c.name}/title left`);assert.ok(m.titleBounds.right<=m.textSafeEnvelope.right+1,`${platform}/${c.name}/title right`);assert.ok(m.titleBounds.top>=m.textSafeEnvelope.top-1,`${platform}/${c.name}/title top`);assert.ok(m.titleBounds.bottom<=m.textSafeEnvelope.bottom+1,`${platform}/${c.name}/title bottom`);}
-      if(m.subtitleBounds){assert.ok(m.subtitleBounds.left>=m.textSafeEnvelope.left-1,`${platform}/${c.name}/subtitle left`);assert.ok(m.subtitleBounds.right<=m.textSafeEnvelope.right+1,`${platform}/${c.name}/subtitle right`);assert.ok(m.subtitleBounds.top>=m.textSafeEnvelope.top-1,`${platform}/${c.name}/subtitle top`);assert.ok(m.subtitleBounds.bottom<=m.textSafeEnvelope.bottom+1,`${platform}/${c.name}/subtitle bottom`);}
+      assert.ok(m.titleWidths.every(width=>width<=m.safeWidth),`${platform}/${c.name}/title widths`);
+      assert.ok(m.subtitleWidths.every(width=>width<=m.safeWidth),`${platform}/${c.name}/subtitle widths`);
+      assert.ok(m.usedHeight<=m.safeHeight,`${platform}/${c.name}/text height`);
       assert.ok(m.brandLockup.bottom<=m.height-m.brandLockup.minimumBottomMargin,`${platform}/${c.name}/brand bottom`);
       assert.ok(m.logoBounds.left>=0&&m.logoBounds.right<=m.width&&m.logoBounds.top>=0&&m.logoBounds.bottom<=m.height,`${platform}/${c.name}/logo bounds`);
       count++;
@@ -60,6 +63,7 @@ test("stress texte long sur chaque format : réduction contrôlée, jamais de cl
     const output=await composeBrandPoster({imageBuffer:source,platform,posterStrategy}),m=output.compositionManifest;
     assert.equal(m.textWithinCanvas,true,platform);assert.equal(m.titleExact,true,platform);assert.equal(m.subtitleExact,true,platform);
     assert.ok(m.titleLines.length<=POLICIES[platform].titleMaxLines,platform);assert.ok(m.subtitleLines.length<=POLICIES[platform].subtitleMaxLines,platform);
+    assert.ok(m.titleWidths.every(width=>width<=m.safeWidth),platform);assert.ok(m.subtitleWidths.every(width=>width<=m.safeWidth),platform);assert.ok(m.usedHeight<=m.safeHeight,platform);
     assert.ok(m.brandLockup.bottom<=m.height-m.brandLockup.minimumBottomMargin,platform);
   }
 });
