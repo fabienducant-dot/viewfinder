@@ -1,6 +1,6 @@
 "use strict";
 
-const VERSION="4.1.1-matrix-safe-typography";
+const VERSION="4.1.2-matrix-safe-typography";
 const WEAK_WORDS=new Set(["DE","DU","DES","LE","LA","LES","UN","UNE","À","AU","AUX","ET","OU","POUR","DANS"]);
 const POLICIES=Object.freeze({
   "Story":Object.freeze({titleMaxLines:2,subtitleMaxLines:2,titlePreferred:48,subtitlePreferred:30,titleHardMin:26,subtitleHardMin:18}),
@@ -39,7 +39,7 @@ function renderedHeight(titleLines,subtitleLines,titleSize,subtitleSize){
   return Math.ceil(titlePart+subtitlePart);
 }
 function resolveTypographyLayout({platform,title,subtitle,textMode,safeWidth,safeHeight,scale=1,measureTitle,measureSubtitle}){
-  const policy=POLICIES[platform]||POLICIES["Instagram Portrait"],titleText=clean(title),subtitleText=textMode==="TEXT_MODE_MINIMAL"||textMode==="TEXT_MODE_NONE"?"":clean(subtitle),effectiveScale=Math.max(.82,Math.min(1.35,Number(scale)||1));
+  const policy=POLICIES[platform]||POLICIES["Instagram Portrait"],none=textMode==="TEXT_MODE_NONE",titleText=none?"":clean(title),subtitleText=(none||textMode==="TEXT_MODE_MINIMAL")?"":clean(subtitle),effectiveScale=Math.max(.82,Math.min(1.35,Number(scale)||1));
   const xGuard=Math.max(18,Math.round(safeWidth*.04)),verticalReserve=Math.max(14,Math.round(safeHeight*.12)),innerWidth=Math.max(40,safeWidth-xGuard*2),innerHeight=Math.max(24,safeHeight-verticalReserve);
   if(!titleText&&!subtitleText)return Object.freeze({story:platform==="Story",scale:effectiveScale,titleLines:[],subtitleLines:[],titleSize:0,subtitleSize:0,safeWidth:innerWidth,safeHeight:innerHeight,usedHeight:0,titleMaxLines:policy.titleMaxLines,subtitleMaxLines:policy.subtitleMaxLines,exact:true,fallbackLevel:0,policy});
   const titlePreferred=scaled(policy.titlePreferred,effectiveScale),subtitlePreferred=scaled(policy.subtitlePreferred,effectiveScale),titleHardMin=scaled(policy.titleHardMin,effectiveScale),subtitleHardMin=scaled(policy.subtitleHardMin,effectiveScale);
