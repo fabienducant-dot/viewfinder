@@ -40,4 +40,4 @@ jobs:
           git add netlify/functions/_shared/v4-brand-layout.js netlify/functions/_shared/brand-compositor.js tests/v4-brand-layout-matrix.test.js
           git commit -m "Finalize V4 typography across all services and formats"
           git push origin HEAD:audit/finalize-viewfinder-v3
-# retry 2
+# retry 3
