@@ -14,7 +14,7 @@ const extremeSubtitle="BESOIN DE SOUFFLER, DE DÉCHARGER LES TENSIONS MENTALES E
 const measure=(text,size)=>String(text).length*size*.58;
 
 test("le moteur typographique V4 conserve le texte exact et borne toutes les lignes",()=>{
-  assert.equal(VERSION,"4.1.1-matrix-safe-typography");
+  assert.equal(VERSION,"4.1.2-matrix-safe-typography");
   for(const platform of platforms){
     const policy=POLICIES[platform];assert.ok(policy,platform);
     for(const c of services){
