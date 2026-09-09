@@ -25,7 +25,7 @@ jobs:
           node-version: 20
           cache: npm
       - run: npm ci
-      - run: node scripts/finalize-v4-layout-matrix.cjs
+      - run: node scripts/apply-v4-typography.cjs
       - run: node --test tests/v4-brand-layout-matrix.test.js
       - run: npm run verify
       - run: npm audit --omit=dev --audit-level=high
@@ -40,3 +40,4 @@ jobs:
           git add netlify/functions/_shared/v4-brand-layout.js netlify/functions/_shared/brand-compositor.js tests/v4-brand-layout-matrix.test.js
           git commit -m "Finalize V4 typography across all services and formats"
           git push origin HEAD:audit/finalize-viewfinder-v3
+# retry 2
