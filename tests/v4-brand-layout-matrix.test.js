@@ -18,9 +18,9 @@ test("le moteur typographique V4 conserve le texte exact et borne toutes les lig
   for(const platform of platforms){
     const policy=POLICIES[platform];assert.ok(policy,platform);
     for(const c of services){
-      const title=c.name.toUpperCase(),subtitle=stressSubtitle;
-      const t=resolveTypographyLayout({platform,title,subtitle,textMode:platform==="Google Business"?"TEXT_MODE_MINIMAL":"TEXT_MODE_EDITORIAL",safeWidth:platform==="Bannière"?820:platform==="Blog"?760:900,safeHeight:platform==="Bannière"?180:230,scale:1,measureTitle:measure,measureSubtitle:measure});
-      assert.equal(t.titleLines.join(" "),title,`${platform}/${c.name}/title`);
+      const title=c.name.toUpperCase(),subtitle=stressSubtitle,isGoogle=platform==="Google Business";
+      const t=resolveTypographyLayout({platform,title,subtitle,textMode:isGoogle?"TEXT_MODE_NONE":"TEXT_MODE_EDITORIAL",safeWidth:platform==="Bannière"?820:platform==="Blog"?760:900,safeHeight:platform==="Bannière"?180:230,scale:1,measureTitle:measure,measureSubtitle:measure});
+      assert.equal(t.titleLines.join(" "),isGoogle?"":title,`${platform}/${c.name}/title`);
       assert.ok(t.titleLines.length<=policy.titleMaxLines,`${platform}/${c.name}/title lines`);
       assert.ok(t.subtitleLines.length<=policy.subtitleMaxLines,`${platform}/${c.name}/subtitle lines`);
       assert.ok(t.usedHeight<=t.safeHeight,`${platform}/${c.name}/height`);
@@ -56,10 +56,11 @@ test("matrice Sharp complète 19 sujets × 7 formats : aucun texte, logo ou sign
   assert.equal(count,services.length*platforms.length);assert.equal(count,133);
 });
 
-test("stress texte long sur chaque format : réduction contrôlée, jamais de clipping",async()=>{
+test("stress texte long sur chaque format premium : réduction contrôlée, jamais de clipping",async()=>{
   const source=await sharp({create:{width:1024,height:1024,channels:4,background:{r:18,g:18,b:18,alpha:1}}}).png().toBuffer();
   for(const platform of platforms){
-    const posterStrategy={textMode:platform==="Google Business"?"TEXT_MODE_MINIMAL":"TEXT_MODE_EDITORIAL",title:"RÉFLEXOLOGIE PLANTAIRE THAÏLANDAISE",subtitle:platform==="Google Business"?"":extremeSubtitle,titleLines:["RÉFLEXOLOGIE PLANTAIRE THAÏLANDAISE"],subtitleLines:[extremeSubtitle],logoScale:"prominent"};
+    const isGoogle=platform==="Google Business";
+    const posterStrategy={textMode:isGoogle?"TEXT_MODE_NONE":"TEXT_MODE_EDITORIAL",title:"RÉFLEXOLOGIE PLANTAIRE THAÏLANDAISE",subtitle:isGoogle?"":extremeSubtitle,titleLines:["RÉFLEXOLOGIE PLANTAIRE THAÏLANDAISE"],subtitleLines:isGoogle?[]:[extremeSubtitle],logoScale:"prominent"};
     const output=await composeBrandPoster({imageBuffer:source,platform,posterStrategy}),m=output.compositionManifest;
     assert.equal(m.textWithinCanvas,true,platform);assert.equal(m.titleExact,true,platform);assert.equal(m.subtitleExact,true,platform);
     assert.ok(m.titleLines.length<=POLICIES[platform].titleMaxLines,platform);assert.ok(m.subtitleLines.length<=POLICIES[platform].subtitleMaxLines,platform);
