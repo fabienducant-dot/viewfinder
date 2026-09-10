@@ -70,7 +70,7 @@ jobs:
           assert.doesNotMatch(worker,/providerSafetyFallback|buildProviderSafeBodyworkPrompt|vf-logo-asset|openBrandStore/);
           assert.match(worker,/retries:0,imageCalls:1/);
           assert.match(pipeline,/authority:"SceneIntentV4"/);
-          assert.match(scene,/4\.4\.0-scene-intent/);
+          assert.match(scene,/4\.5\.0-scene-intent-diversity/);
           assert.match(scene,/28 % inférieurs/);
           assert.match(scene,/triangle lumineux/);
           assert.match(analyzer,/brandZoneIntrusionRisk/);
