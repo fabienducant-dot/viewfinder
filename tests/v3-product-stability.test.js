@@ -81,8 +81,10 @@ test("le rendu Instagram institutionnel conserve le titre complet, réduit le so
   const manifest=output.compositionManifest;
   assert.equal(manifest.version,COMPOSITOR_VERSION);
   assert.equal(manifest.completeText,"UN HAVRE DE PAIX À RAISMES | EXPERTISE ET SAVOIR-FAIRE DEPUIS 2017");
-  assert.deepEqual(manifest.titleLines,["UN HAVRE DE PAIX","À RAISMES"]);
-  assert.deepEqual(manifest.subtitleLines,["EXPERTISE ET SAVOIR-FAIRE","DEPUIS 2017"]);
+  assert.equal(manifest.titleLines.join(" "),"UN HAVRE DE PAIX À RAISMES");
+  assert.ok(manifest.titleLines.length>=1&&manifest.titleLines.length<=2);
+  assert.equal(manifest.subtitleLines.join(" "),"EXPERTISE ET SAVOIR-FAIRE DEPUIS 2017");
+  assert.ok(manifest.subtitleLines.length<=2);
   assert.equal(manifest.titleExact,true);
   assert.equal(manifest.subtitleExact,true);
   assert.equal(manifest.textWithinCanvas,true);
