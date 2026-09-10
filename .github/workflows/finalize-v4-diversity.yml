@@ -1,0 +1,49 @@
+name: Finalize V4 visual diversity
+
+on:
+  push:
+    branches:
+      - audit/finalize-viewfinder-v3
+    paths:
+      - .github/workflows/finalize-v4-diversity.yml
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  finalize:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: audit/finalize-viewfinder-v3
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+      - run: npm ci
+      - run: node scripts/apply-v4-diversity.cjs
+      - name: Validate diversity and SceneIntent propagation
+        run: node --test tests/v4-visual-diversity.test.js tests/v4-scene-intent.test.js tests/v3-stabilization.test.js
+      - name: Full deterministic verification
+        run: npm run verify
+      - run: npm audit --omit=dev --audit-level=high
+      - run: npm audit --audit-level=high
+      - run: node --check netlify/functions/_shared/v3-art-worlds.js
+      - run: node --check netlify/functions/_shared/v3-art-direction.js
+      - run: node --check netlify/functions/_shared/v3-scene-intent.js
+      - run: git diff --check
+      - name: Commit validated visual diversity engine
+        run: |
+          git config user.name viewfinder-ci
+          git config user.email actions@users.noreply.github.com
+          git add netlify/functions/_shared/v3-art-direction.js netlify/functions/_shared/v3-scene-intent.js tests/v3-stabilization.test.js tests/v4-visual-diversity.test.js
+          if git diff --cached --quiet; then
+            echo 'No staged diversity changes to commit.'
+          else
+            git commit -m "Enforce visual diversity in SceneIntent V4"
+            git push origin HEAD:audit/finalize-viewfinder-v3
+          fi
