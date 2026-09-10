@@ -35,15 +35,17 @@ jobs:
       - run: node --check netlify/functions/_shared/v3-art-worlds.js
       - run: node --check netlify/functions/_shared/v3-art-direction.js
       - run: node --check netlify/functions/_shared/v3-scene-intent.js
+      - run: node --check netlify/functions/_shared/v3-pipeline.js
       - run: git diff --check
       - name: Commit validated visual diversity engine
         run: |
           git config user.name viewfinder-ci
           git config user.email actions@users.noreply.github.com
-          git add netlify/functions/_shared/v3-art-direction.js netlify/functions/_shared/v3-scene-intent.js tests/v3-stabilization.test.js tests/v4-visual-diversity.test.js
+          git add netlify/functions/_shared/v3-art-worlds.js netlify/functions/_shared/v3-art-direction.js netlify/functions/_shared/v3-scene-intent.js netlify/functions/_shared/v3-pipeline.js tests/v3-stabilization.test.js tests/v4-visual-diversity.test.js
           if git diff --cached --quiet; then
             echo 'No staged diversity changes to commit.'
           else
-            git commit -m "Enforce visual diversity in SceneIntent V4"
+            git commit -m "Enforce campaign-aware visual diversity in SceneIntent V4"
             git push origin HEAD:audit/finalize-viewfinder-v3
           fi
+# retry campaign-aware diversity
