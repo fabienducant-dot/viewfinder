@@ -25,7 +25,7 @@ jobs:
           node-version: 20
           cache: npm
       - run: npm ci
-      - run: node scripts/apply-v4-diversity.cjs
+      - run: node scripts/apply-v4-diversity-final.cjs
       - name: Validate diversity and SceneIntent propagation
         run: node --test tests/v4-visual-diversity.test.js tests/v4-scene-intent.test.js tests/v3-stabilization.test.js
       - name: Full deterministic verification
@@ -48,4 +48,4 @@ jobs:
             git commit -m "Enforce campaign-aware visual diversity in SceneIntent V4"
             git push origin HEAD:audit/finalize-viewfinder-v3
           fi
-# retry campaign-aware diversity
+# final campaign-aware retry
