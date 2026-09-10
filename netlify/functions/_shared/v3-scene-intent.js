@@ -3,7 +3,7 @@
 const crypto=require("crypto");
 const {normalizePlatform}=require("./v3-layout-engine");
 
-const VERSION="4.4.0-scene-intent";
+const VERSION="4.5.0-scene-intent-diversity";
 const BODYWORK_RE=/massage|drainage|réflexologie/i;
 const PRODUCT_NAMES=new Set(["Luminothérapie PSIO®","Biorésonance quantique"]);
 const COMPOSITE_NAMES=new Set(["Offre Gold","Offre Sylver"]);
@@ -76,17 +76,35 @@ function peoplePolicyFor(contract,mode,subjectBrief={}){
  return "Adultes entièrement vêtus, contexte professionnel explicite, postures neutres et dignes.";
 }
 
+function visualVariationDirective(artDirection={},exactUserRequest=""){
+ const art=artDirection?.artistic||{},exact=normalized(exactUserRequest);
+ const axes=[
+  art.locationFamily&&`lieu : ${art.locationFamily}`,
+  art.narrativeVariant&&`mise en scène : ${art.narrativeVariant}`,
+  art.cinematicTreatment&&`perspective : ${art.cinematicTreatment}`,
+  art.focalLength&&`focale : ${art.focalLength}`,
+  art.cameraAngle&&`angle : ${art.cameraAngle}`,
+  art.cameraHeight&&`hauteur : ${art.cameraHeight}`,
+  art.cameraDistance&&`distance : ${art.cameraDistance}`,
+  art.lightingNarrative&&`lumière : ${art.lightingNarrative}`,
+  Array.isArray(art.dominantMaterials)&&art.dominantMaterials.length&&`matières : ${art.dominantMaterials.join(", ")}`,
+ ].filter(value=>value&&(!exact||!normalized(value).includes(exact)));
+ const continuity=art.campaignContinuity?" Cette combinaison appartient à la même campagne : conserver son monde visuel entre les formats.":" Cette combinaison est choisie pour différencier cette création des précédentes : la respecter réellement, sans la remplacer par un décor générique déjà vu.";
+ return axes.length?`VARIATION VISUELLE IMPOSÉE — ${axes.join(" ; ")}.${continuity}`:"";
+}
+
 function environmentFor({subjectBrief,artDirection,registers,platform}){
- const authority=subjectBrief.spatialAuthority?.description||subjectBrief.explicitSceneRequest?.description||null,exact=clean(subjectBrief.exactUserRequest||""),art=artDirection?.artistic||{};
+ const authority=subjectBrief.spatialAuthority?.description||subjectBrief.explicitSceneRequest?.description||null,exact=clean(subjectBrief.exactUserRequest||""),art=artDirection?.artistic||{},variation=visualVariationDirective(artDirection,exact);
  if(authority){
   const safe=withoutExact(authority,exact),fallback=withoutExact(art.architectureDescription||art.locationFamily||"",exact);
-  return `Le décor décrit dans DEMANDE EXACTE gouverne la scène. ${safe&&safe!=="le sujet demandé"?safe:fallback&&fallback!=="le sujet demandé"?fallback:"Respecter strictement ses éléments spatiaux, son ouverture et sa profondeur."}`;
+  return `Le décor décrit dans DEMANDE EXACTE gouverne la scène. ${safe&&safe!=="le sujet demandé"?safe:fallback&&fallback!=="le sujet demandé"?fallback:"Respecter strictement ses éléments spatiaux, son ouverture et sa profondeur."}${variation?` ${variation}`:""}`;
  }
- if(normalizePlatform(platform)==="Google Business")return "Lieu crédible, simple et premium, immédiatement lisible, sans effet spectaculaire qui ferait croire à un faux cabinet.";
+ if(normalizePlatform(platform)==="Google Business")return `Lieu crédible, simple et premium, immédiatement lisible, sans effet spectaculaire qui ferait croire à un faux cabinet.${variation?` ${variation}`:""}`;
  const pieces=[];
  if(registers.architectural){const architecture=clean(art.architectureDescription||art.locationFamily||"architecture noire et or crédible, avec profondeur réelle et ouverture spatiale");pieces.push(`Architecture : ${architecture}.`);}
  if(registers.fantastic)pieces.push("Fantastique adulte et crédible : l’étrangeté vient de l’échelle, de la profondeur, de la brume, du paysage et de la lumière, jamais d’un effet magique gratuit ou d’un symbole occulte.");
  if(!pieces.length)pieces.push("Environnement SDZ réel ou métaphorique, noir profond et matières sombres détaillées, jamais cabine de spa générique.");
+ if(variation)pieces.push(variation);
  return pieces.join(" ");
 }
 

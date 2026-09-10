@@ -113,5 +113,5 @@ function validatePreparedPlan(plan){
  return plan;
 }
 function finalizeV3(plan,imageAnalysis,composition){const analysis=analyzeActualImage(imageAnalysis);const layout=chooseLayout({platform:plan.artDirection.platform,contract:plan.contract,analysis});const quality=assessQuality({contract:plan.contract,sceneIntent:plan.sceneIntent,analysis,composition});return {analysis,layout,quality};}
-function artisticFingerprint(plan,finalization,status){return makeArtFingerprint({service:plan.contract.name,platform:plan.artDirection.platform,layout:finalization?.layout,selection:plan.artSelection,artDirection:plan.artDirection,status});}
+function artisticFingerprint(plan,finalization,status){return makeArtFingerprint({service:plan.contract.name,platform:plan.artDirection.platform,layout:finalization?.layout,selection:plan.artSelection,artDirection:plan.artDirection,creativeSeed:plan.artDirection.creativeSeed,status});}
 module.exports={planV3,withPsioReferenceStatus,planIdentity,validatePreparedPlan,finalizeV3,artisticFingerprint};
