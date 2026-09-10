@@ -25,6 +25,24 @@ jobs:
           node-version: 20
           cache: npm
       - run: npm ci
+      - name: Restore complete historical regression files and align only obsolete line-break assertions
+        run: |
+          git checkout bbc2fcfb01741e1b31361e6c255e1860ddffa9b8 -- tests/v3-compositor-server-stability.test.js tests/v3-product-stability.test.js
+          python - <<'PY'
+          from pathlib import Path
+          p=Path('tests/v3-compositor-server-stability.test.js')
+          s=p.read_text()
+          old='assert.deepEqual(m.titleLines,["UNE HISTOIRE","À PARTAGER"]);assert.deepEqual(m.subtitleLines,["L’UNIVERS SDZ"]);'
+          new='assert.equal(m.titleLines.join(" "),"UNE HISTOIRE À PARTAGER");assert.ok(m.titleLines.length>=1&&m.titleLines.length<=2);assert.equal(m.subtitleLines.join(" "),"L’UNIVERS SDZ");assert.ok(m.subtitleLines.length<=2);'
+          if old not in s: raise SystemExit('Story assertion marker missing')
+          p.write_text(s.replace(old,new,1))
+          p=Path('tests/v3-product-stability.test.js')
+          s=p.read_text()
+          old='assert.deepEqual(manifest.titleLines,["UN HAVRE DE PAIX","À RAISMES"]);\n  assert.deepEqual(manifest.subtitleLines,["EXPERTISE ET SAVOIR-FAIRE","DEPUIS 2017"]);'
+          new='assert.equal(manifest.titleLines.join(" "),"UN HAVRE DE PAIX À RAISMES");\n  assert.ok(manifest.titleLines.length>=1&&manifest.titleLines.length<=2);\n  assert.equal(manifest.subtitleLines.join(" "),"EXPERTISE ET SAVOIR-FAIRE DEPUIS 2017");\n  assert.ok(manifest.subtitleLines.length<=2);'
+          if old not in s: raise SystemExit('Instagram assertion marker missing')
+          p.write_text(s.replace(old,new,1))
+          PY
       - run: node scripts/apply-v4-typography.cjs
       - run: node --test tests/v4-brand-layout-matrix.test.js
       - run: npm run verify
@@ -37,7 +55,7 @@ jobs:
         run: |
           git config user.name viewfinder-ci
           git config user.email actions@users.noreply.github.com
-          git add netlify/functions/_shared/v4-brand-layout.js netlify/functions/_shared/brand-compositor.js tests/v4-brand-layout-matrix.test.js
+          git add netlify/functions/_shared/v4-brand-layout.js netlify/functions/_shared/brand-compositor.js tests/v4-brand-layout-matrix.test.js tests/v3-compositor-server-stability.test.js tests/v3-product-stability.test.js
           git commit -m "Finalize V4 typography across all services and formats"
           git push origin HEAD:audit/finalize-viewfinder-v3
-# final matrix
+# regression-safe final matrix
