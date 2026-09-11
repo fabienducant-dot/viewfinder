@@ -5068,7 +5068,8 @@ async function finalizeGeneratedImage(flow){
   const isHealyFlow = flow.inputs.prestation==="Biorésonance quantique";
   const serverBrandPath = flow.serverBrandCompositionUsed===true;
   const logoInScene = serverBrandPath && flow.brandComposited===true;
-  if(serverBrandPath && !logoInScene) throw new Error("Composition serveur Sharp absente : aucun fallback Canvas n’est autorisé pour une génération V4.");
+  const finalCompositionEngine = flow.finalCompositionEngine || flow.v3Finalization?.compositionManifest?.finalCompositionEngine || null;
+  if(flow.v3Plan && (!serverBrandPath || !logoInScene || finalCompositionEngine!=="sharp-server")) throw new Error("Composition serveur Sharp absente ou non prouvée : aucun fallback Canvas n’est autorisé pour une génération V4.");
   /* Une identité composée par le serveur provient du fichier logo officiel et de chaînes exactes
      rendues en tracés vectoriels. Elle ne peut donc pas être requalifiée en overlay IA interdit
      par un contrôle vision probabiliste, notamment après un recontrôle manuel. Le contrôle des
@@ -5421,7 +5422,7 @@ async function confirmAndGenerateImage(prepared, onStatus, cancelToken){
   }
 
   return { ...prepared, phase:"completed", ok:true, dataUrl, usedReference, referenceFallbackReason, logoSentAsReference,
-    serverBrandCompositionUsed:true, brandComposited, imageUsage,
+    serverBrandCompositionUsed:true, brandComposited, finalCompositionEngine: providerResult.finalCompositionEngine || providerResult.v3Finalization?.compositionManifest?.finalCompositionEngine || null, imageUsage,
     analysis, analysisError, content, textError, v3Plan:prepared.v3Plan||null, v3Finalization:prepared.v3Finalization||null };
 }
 
@@ -5729,6 +5730,7 @@ async function pollImageJob(jobId, onStatus, cancelToken){
       return { dataUrl, jobId, usedReference: !!statusData.result.usedReference,
         referenceFallbackReason: statusData.result.referenceFallbackReason || null,
         brandComposited: statusData.result.brandComposited===true,
+        finalCompositionEngine: statusData.result.finalCompositionEngine || statusData.result.v3Finalization?.compositionManifest?.finalCompositionEngine || null,
         v3Plan: statusData.result.v3Plan || null,
         v3Finalization: statusData.result.v3Finalization || null,
         costAudit: statusData.result.costAudit || null,
@@ -8206,17 +8208,20 @@ async function generateImageForCampaignItem(item, onStatus, cancelToken){
   const v3Rejected=!!(item.v3Finalization&&item.v3Finalization.quality&&item.v3Finalization.quality.ok===false);
   /* Post-traitement : MÊME fonction que la génération unitaire (format officiel, accroche,
      logo) — aucun code dupliqué, aucun chemin parallèle. */
-  const finalizedItem = v3Rejected ? {dataUrl:phaseB.dataUrl,logoApplied:false,headlineApplied:false,layoutReport:item.v3Finalization.layout||null,overlayWarning:"Image V3 refusée par le contrôle qualité — photographie brute conservée."} : await finalizeGeneratedImage({
+  const finalizedItem = await finalizeGeneratedImage({
     inputs:{ platform:item.platform, prestation:state.prestationName }, dataUrl: phaseB.dataUrl,
     logoSentAsReference:false, usedReference, content: phaseB.content || item.contentData || null,
     brief:item.creativeBrief, analysis:phaseB.analysis||null,
     aiLogoIntegrationUsed:false, serverBrandCompositionUsed:true,
     brandComposited:phaseB.brandComposited===true,
+    finalCompositionEngine:phaseB.finalCompositionEngine||phaseB.v3Finalization?.compositionManifest?.finalCompositionEngine||null,
+    v3Plan:phaseB.v3Plan||item.v3Plan||null,
+    v3Finalization:phaseB.v3Finalization||item.v3Finalization||null,
   });
   const dataUrl = finalizedItem.dataUrl;
   const logoApplied = finalizedItem.logoApplied;
   item.imageDataUrl = dataUrl; item.logoApplied = logoApplied; item.usedReference = usedReference; item.referenceFallbackReason = referenceFallbackReason;
-  item.serverBrandCompositionUsed = true; item.brandComposited = phaseB.brandComposited===true;
+  item.serverBrandCompositionUsed = true; item.brandComposited = phaseB.brandComposited===true; item.finalCompositionEngine=phaseB.finalCompositionEngine||phaseB.v3Finalization?.compositionManifest?.finalCompositionEngine||null;
   item.layoutReport = finalizedItem.layoutReport||null;
   item.analysis = phaseB.analysis || null; item.analysisError = phaseB.analysisError || null;
   item.contentData = phaseB.content || item.contentData || null; item.textError = phaseB.textError || null;
@@ -8238,8 +8243,7 @@ async function generateImageForCampaignItem(item, onStatus, cancelToken){
   return (!saved ? "Générée, mais échec d'enregistrement (stockage plein ?)."
     : logoRequiredFor(item.platform) ? (logoApplied ? "Image générée, logo réel appliqué ✓" : "Image générée — aucun logo marqué comme actif de marque, rien n'a été ajouté.")
     : "Image générée ✓") + " — " + referenceLabel +
-    (finalizedItem.layoutReport&&!finalizedItem.layoutReport.skipped
-      ? ` — Canvas premium ✓ (${finalizedItem.layoutReport.textZone||"sans texte"} / ${finalizedItem.layoutReport.logoZone||"sans logo"})` : "") +
+    (item.finalCompositionEngine==="sharp-server" ? " — Sharp serveur ✓" : "") +
     (finalizedItem.overlayWarning ? ` — ⚠ ${finalizedItem.overlayWarning}` : "");
 }
 /* Génération de texte pour un post de campagne — même extraction, même principe. */

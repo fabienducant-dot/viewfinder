@@ -147,7 +147,7 @@ exports.handler=async event=>{
           return composeBrandPoster({imageBuffer:buffer,platform:String(composition.platform||"Instagram"),headline:String(composition.headline||""),zoneText:String(composition.zoneText||""),selectedLayout,posterStrategy:v3Plan.posterStrategy});
         }
       });
-      v3Finalization=executed.finalization;brandComposited=executed.brandComposited;b64=executed.imageBuffer.toString("base64");url=null;
+      v3Finalization=executed.finalization;brandComposited=executed.brandComposited;const finalCompositionEngine=executed.finalCompositionEngine||v3Finalization?.compositionManifest?.finalCompositionEngine||null;if(!brandComposited||finalCompositionEngine!=="sharp-server"||!executed.imageBuffer)throw new Error("Autorité finale Sharp serveur non prouvée.");b64=executed.imageBuffer.toString("base64");url=null;
     }else if(brandComposition&&brandComposition.enabled===true){
       try{
         const imageBuffer=rawImageBuffer||await generatedImageToBuffer(b64,url);
@@ -159,8 +159,10 @@ exports.handler=async event=>{
       }
     }
 
+    const finalCompositionEngine=v3Finalization?.compositionManifest?.finalCompositionEngine||(brandComposited?"sharp-server":null);
+    if(v3Plan&&finalCompositionEngine!=="sharp-server")throw new Error("Résultat premium sans moteur Sharp serveur.");
     const resultKey=`jobs/${jobId}/result`;
-    try{await store.set(resultKey,JSON.stringify({b64,url,usedReference,brandComposited,v3Finalization}));}
+    try{await store.set(resultKey,JSON.stringify({b64,url,usedReference,brandComposited,finalCompositionEngine,v3Finalization}));}
     catch(resultWriteErr){
       await safeSetJobStatus(store,jobId,{status:"failed",error:{message:`Échec d'écriture du résultat : ${String(resultWriteErr.message||resultWriteErr)}`,source:"storage"},usedReference,imageGenerationCallCount:1});
       return {statusCode:200,body:JSON.stringify({ok:false,error:"Échec d'écriture du résultat",imageGenerationCallCount:1})};
@@ -171,7 +173,7 @@ exports.handler=async event=>{
     const costAudit=buildCostAudit({mode:costMode||"test",referenceImageCount,referenceRoles,imageUsage:usage,visionUsage:v3Plan?{}:false,retries:0,imageCalls:1,requestedQuality,requestedSize,effectiveSize});
     const referenceAudit={referenceImageCount,used:usedReference,reason:v3Plan?.psioRequired?"Étape PSiO® contractuelle":"Référence visuelle explicitement sélectionnée",stage:v3Plan?.contract.requiredCompositeStages?.find(x=>/PSiO/i.test(x))||null,roles:referenceRoles||[],estimatedInputImageCostEur:null,costDetermination:"unknown_until_billing",costIncludedInOutputEstimate:false,usage:data.usage?.input_tokens_details||null};
     const artFingerprint=v3Plan&&v3Finalization?artisticFingerprint(v3Plan,v3Finalization,v3Finalization.quality.ok?"validated":"refused"):null;
-    await safeSetJobStatus(store,jobId,{status:"completed",error:null,resultKey,rawResultKey,usedReference,referenceFallbackReason:null,brandComposited,v3Plan,v3Finalization,artFingerprint,referenceAudit,costAudit,requestedQuality,effectiveQuality:quality,requestedSize,effectiveSize:size,imageGenerationCallCount:1,usage});
+    await safeSetJobStatus(store,jobId,{status:"completed",error:null,resultKey,rawResultKey,usedReference,referenceFallbackReason:null,brandComposited,finalCompositionEngine,v3Plan,v3Finalization,artFingerprint,referenceAudit,costAudit,requestedQuality,effectiveQuality:quality,requestedSize,effectiveSize:size,imageGenerationCallCount:1,usage});
     try{await store.delete(`jobs/${jobId}/input`);}catch(error){}
     return {statusCode:200,body:JSON.stringify({ok:true,imageGenerationCallCount:1})};
   }catch(err){

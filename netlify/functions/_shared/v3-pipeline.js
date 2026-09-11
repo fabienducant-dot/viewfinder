@@ -6,7 +6,8 @@ const {analyzeActualImage,chooseLayout}=require("./v3-layout-engine");
 const {assessQuality}=require("./v3-quality");
 const {makeArtFingerprint}=require("./v3-art-worlds");
 const {psioRequiredForContract,statusFromRecords}=require("./v3-psio-references");
-const {inferSubjectBrief,buildPosterStrategy,buildLegacyProjection,relevanceScores,buildPostCopyStrategy,buildCampaignCreativeDirection}=require("./v3-creative-strategy");
+const {inferSubjectBrief,buildPosterStrategy,buildLegacyProjection,relevanceScores,buildPostCopyStrategy,buildCampaignCreativeDirection,semanticLines}=require("./v3-creative-strategy");
+const {buildImageCopyStrategy}=require("./v4-image-copy-strategy");
 const {buildConsistencyReport}=require("./v3-consistency-control");
 const {buildSceneIntent,auditSceneIntent}=require("./v3-scene-intent");
 
@@ -20,6 +21,7 @@ function planIdentity(plan){
   subjectBrief:plan.subjectBrief,
   sceneIntent:plan.sceneIntent,
   posterStrategy:plan.posterStrategy,
+  imageCopyStrategy:plan.imageCopyStrategy,
   legacyProjection:plan.legacyProjection,
   postCopyStrategy:plan.postCopyStrategy,
   campaignCreativeDirection:plan.campaignCreativeDirection,
@@ -47,7 +49,10 @@ function planV3(input){
  const sceneAudit=auditSceneIntent(sceneIntent);
  if(!sceneAudit.ok)throw new Error(`SceneIntent invalide — reconstruction gratuite requise : ${sceneAudit.errors.join(", ")}`);
 
- const posterStrategy=buildPosterStrategy({subjectBrief,contract,artDirection,platform:input.platform,textChoice:input.textChoice});
+ const imageCopyStrategy=buildImageCopyStrategy({subjectBrief,contract,platform:input.platform,textChoice:input.textChoice});
+ const basePosterStrategy=buildPosterStrategy({subjectBrief,contract,artDirection,platform:input.platform,textChoice:input.textChoice});
+ const copyTitle=imageCopyStrategy.headline,copySubtitle=imageCopyStrategy.subheadline,titleLines=input.platform==="Story"?semanticLines(copyTitle,4,18):semanticLines(copyTitle,3,22),subtitleLines=semanticLines(copySubtitle,2,28);
+ const posterStrategy=Object.freeze({...basePosterStrategy,title:copyTitle,subtitle:copySubtitle,titleLines,subtitleLines,imageCopyStrategy,metrics:{...basePosterStrategy.metrics,titleWordCount:copyTitle.split(/\s+/).filter(Boolean).length,titleLineCount:titleLines.length,subtitleWordCount:copySubtitle.split(/\s+/).filter(Boolean).length,subtitleLineCount:subtitleLines.length,textDensityRatio:(copyTitle.length+copySubtitle.length)/(input.platform==="Story"?360:260)}});
  const legacyProjection=buildLegacyProjection({subjectBrief,posterStrategy,artDirection,contract});
  const freeScores=relevanceScores(subjectBrief,posterStrategy,contract);
  if(!freeScores.ready)throw new Error("Plan visuel trop générique ou sujet insuffisamment incarné — reconstruction gratuite requise.");
@@ -95,9 +100,9 @@ function planV3(input){
  const required=psioRequiredForContract(contract),psio=statusFromRecords({},required);
  const plan={
   version:4,
-  contract,subjectBrief,sceneIntent,posterStrategy,legacyProjection,postCopyStrategy,
+  contract,subjectBrief,sceneIntent,posterStrategy,imageCopyStrategy,legacyProjection,postCopyStrategy,
   campaignCreativeDirection,consistencyReport,freeScores,artDirection,photoBrief,
-  preflight:{...publicPreflight(artDirection),subjectBrief,sceneIntent,posterStrategy,postCopyStrategy,campaignCreativeDirection,consistencyReport,freeScores},
+  preflight:{...publicPreflight(artDirection),subjectBrief,sceneIntent,posterStrategy,imageCopyStrategy,postCopyStrategy,campaignCreativeDirection,consistencyReport,freeScores},
   artSelection:artDirection.artistic,
   costMode:input.costMode||"test",
   ...psio,

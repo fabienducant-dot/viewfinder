@@ -10,13 +10,16 @@ function solidPng(width,height){return sharp({create:{width,height,channels:3,ba
 test("une photographie V4 refusée reste sous autorité Sharp au lieu de retomber dans Canvas",()=>{
   const executor=fs.readFileSync("netlify/functions/_shared/v3-executor.js","utf8");
   assert.doesNotMatch(executor,/if\(!finalization\.quality\.ok\)return \{imageBuffer:rawImageBuffer,brandComposited:false/);
-  assert.match(executor,/le rendu de contrôle reste composé par Sharp/);
+  assert.match(executor,/V4_ANALYSIS_FAILED/);
+  assert.match(executor,/V4_SHARP_COMPOSITION_FAILED/);
+  assert.match(executor,/finalCompositionEngine:"sharp-server"/);
 });
 
 test("le navigateur interdit explicitement tout fallback Canvas après passage par le compositor serveur",()=>{
   const index=fs.readFileSync("index.html","utf8");
   assert.match(index,/const serverBrandPath = flow\.serverBrandCompositionUsed===true/);
-  assert.match(index,/if\(serverBrandPath && !logoInScene\) throw new Error\("Composition serveur Sharp absente/);
+  assert.match(index,/finalCompositionEngine!=="sharp-server"/);
+  assert.match(index,/aucun fallback Canvas n’est autorisé/);
 });
 
 test("le cas Story exact qui a débordé reste couvert par la matrice Sharp, jamais par Canvas",()=>{
@@ -43,6 +46,7 @@ test("régression du visuel réel : MASSAGE DOS ZONE et douleurs dorsales resten
   assert.equal(manifest.marginsValid,true,JSON.stringify(manifest));
   assert.equal(manifest.zonesDisjoint,true,JSON.stringify(manifest));
   assert.equal(manifest.logoRectangleOpaque,false,JSON.stringify(manifest));
+  assert.equal(manifest.finalCompositionEngine,"sharp-server");
   const meta=await sharp(output).metadata();
   assert.equal(meta.width,1080);
   assert.equal(meta.height,1920);

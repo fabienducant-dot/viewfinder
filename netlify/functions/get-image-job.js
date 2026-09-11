@@ -63,6 +63,7 @@ function createHandler(openStore = openJobStore){
             usedReference: !!job.usedReference,
             referenceFallbackReason: job.referenceFallbackReason || null,
             brandComposited: job.brandComposited === true,
+            finalCompositionEngine: job.finalCompositionEngine || job.v3Finalization?.compositionManifest?.finalCompositionEngine || null,
             v3Plan: job.v3Plan || null,
             v3Finalization: job.v3Finalization || null,
             rawResultAvailable: !!job.rawResultKey,

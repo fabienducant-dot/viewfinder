@@ -8,48 +8,19 @@ async function executeV3Pipeline({plan,rawImageBuffer,analyzeImage,composeImage,
  try{
   const actual=await analyzeImage(rawImageBuffer,plan);
   const lowerProtected=plan.artDirection.platform==="Story"&&(actual.protectedZones||[]).some(zone=>/bottom|inférieur|bas/i.test(String(zone)))&&!(actual.calmZones||[]).some(zone=>/bottom|inférieur|bas/i.test(String(zone)));
-  // Avant Sharp, on ne prétend plus connaître l'état du logo : seuls les pixels de la scène sont évalués.
-  finalization=finalizeV3(plan,actual,{
-   imageExists:true,
-   paletteDrift:actual.paletteDrift,
-   contrastValid:actual.availableContrast>=.25,
-   gazeHierarchyValid:true,
-   thumbnailImpact:actual.density<.92,
-   protectedCollision:lowerProtected,
-  });
+  finalization=finalizeV3(plan,actual,{imageExists:true,paletteDrift:actual.paletteDrift,contrastValid:actual.availableContrast>=.25,gazeHierarchyValid:true,thumbnailImpact:actual.density<.92,protectedCollision:lowerProtected});
  }catch(error){
-  return {imageBuffer:rawImageBuffer,brandComposited:false,finalization:{analysis:null,layout:null,quality:{ok:false,mode:plan.sceneIntent?.mode||"legacy",technical:{ok:false,errors:["analyse_image_indisponible"]},business:{ok:false,errors:["conformite_visuelle_non_verifiee"]},artistic:{ok:false,errors:[]},warnings:[],preserveRawImage:true,preservePostText:true},error:String(error.message||error)}};
+  const failure=new Error("Analyse image V4 impossible : "+String(error.message||error));failure.code="V4_ANALYSIS_FAILED";throw failure;
  }
- /* Même lorsqu'une photographie échoue au contrôle artistique/métier, le rendu de contrôle reste composé par Sharp.
-    Le statut qualité reste refusé, mais on ne renvoie jamais un brut au navigateur pour qu'un ancien Canvas reprenne la main. */
  try{
   const imageBuffer=await composeImage(rawImageBuffer,finalization.layout,brandComposition);
   const manifest=imageBuffer?.compositionManifest||null;
-  const measured=manifest||{};
-  finalization={...finalization,compositionManifest:manifest,quality:assessQuality({
-   contract:plan.contract,
-   sceneIntent:plan.sceneIntent,
-   analysis:finalization.analysis,
-   composition:{
-    imageExists:true,
-    paletteDrift:finalization.analysis.paletteDrift,
-    contrastValid:finalization.analysis.availableContrast>=.25,
-    gazeHierarchyValid:measured.hierarchyValid!==false,
-    thumbnailImpact:finalization.analysis.density<.92,
-    logoIntegrity:measured.logoWithinCanvas!==false,
-    logoAssetIntegrity:measured.logoAssetIntegrity!==false,
-    logoFringeDetected:measured.logoFringeDetected===true,
-    logoScaleValid:measured.logoScaleValid!==false,
-    marginsValid:measured.marginsValid!==false,
-    textWithinCanvas:measured.textWithinCanvas!==false&&measured.titleExact!==false&&measured.subtitleExact!==false,
-    protectedCollision:measured.zonesDisjoint===false,
-    logoRectangleOpaque:measured.logoRectangleOpaque===true,
-   }
-  })};
-  return {imageBuffer,brandComposited:true,finalization};
+  if(!manifest||manifest.finalCompositionEngine!=="sharp-server")throw new Error("Manifeste Sharp serveur absent.");
+  const measured=manifest;
+  finalization={...finalization,compositionManifest:manifest,quality:assessQuality({contract:plan.contract,sceneIntent:plan.sceneIntent,analysis:finalization.analysis,composition:{imageExists:true,paletteDrift:finalization.analysis.paletteDrift,contrastValid:finalization.analysis.availableContrast>=.25,gazeHierarchyValid:measured.hierarchyValid!==false,thumbnailImpact:finalization.analysis.density<.92,logoIntegrity:measured.logoWithinCanvas!==false,logoAssetIntegrity:measured.logoAssetIntegrity!==false,logoFringeDetected:measured.logoFringeDetected===true,logoScaleValid:measured.logoScaleValid!==false,marginsValid:measured.marginsValid!==false,textWithinCanvas:measured.textWithinCanvas!==false&&measured.titleExact!==false&&measured.subtitleExact!==false,protectedCollision:measured.zonesDisjoint===false,logoRectangleOpaque:measured.logoRectangleOpaque===true}})};
+  return {imageBuffer,brandComposited:true,finalCompositionEngine:"sharp-server",finalization};
  }catch(error){
-  finalization={...finalization,quality:{...finalization.quality,ok:false,technical:{ok:false,errors:[...finalization.quality.technical.errors,"composition_sharp"]}},error:String(error.message||error)};
-  return {imageBuffer:rawImageBuffer,brandComposited:false,finalization};
+  const failure=new Error("Composition Sharp V4 impossible : "+String(error.message||error));failure.code="V4_SHARP_COMPOSITION_FAILED";failure.finalization=finalization;throw failure;
  }
 }
 module.exports={executeV3Pipeline};
