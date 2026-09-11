@@ -1,0 +1,66 @@
+name: Hotfix V4 server brand authority
+
+on:
+  push:
+    branches:
+      - audit/finalize-viewfinder-v3
+    paths:
+      - .github/workflows/hotfix-v4-server-brand-authority.yml
+
+permissions:
+  contents: write
+
+jobs:
+  hotfix:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: audit/finalize-viewfinder-v3
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+      - run: npm ci
+      - name: Remove the legacy Canvas fallback from V4 server flows
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+
+          executor=Path('netlify/functions/_shared/v3-executor.js')
+          s=executor.read_text()
+          old=' if(!finalization.quality.ok)return {imageBuffer:rawImageBuffer,brandComposited:false,finalization};\n try{'
+          new=' /* Même lorsqu\'une photographie échoue au contrôle artistique/métier, le rendu de contrôle reste composé par Sharp.\n    Le statut qualité reste refusé, mais on ne renvoie jamais un brut au navigateur pour qu\'un ancien Canvas reprenne la main. */\n try{'
+          if old not in s: raise SystemExit('executor early-return marker missing')
+          s=s.replace(old,new,1)
+          executor.write_text(s)
+
+          index=Path('index.html')
+          s=index.read_text()
+          old='  const logoInScene = flow.serverBrandCompositionUsed===true && flow.brandComposited===true;'
+          new='  const serverBrandPath = flow.serverBrandCompositionUsed===true;\n  const logoInScene = serverBrandPath && flow.brandComposited===true;\n  if(serverBrandPath && !logoInScene) throw new Error("Composition serveur Sharp absente : aucun fallback Canvas n’est autorisé pour une génération V4.");'
+          if old not in s: raise SystemExit('finalizeGeneratedImage brand marker missing')
+          s=s.replace(old,new,1)
+          index.write_text(s)
+
+          test=Path('tests/v4-server-brand-authority.test.js')
+          test.write_text('''"use strict";\nconst test=require("node:test");\nconst assert=require("node:assert/strict");\nconst fs=require("node:fs");\n\ntest("une photographie V4 refusée reste sous autorité Sharp au lieu de retomber dans Canvas",()=>{\n  const executor=fs.readFileSync("netlify/functions/_shared/v3-executor.js","utf8");\n  assert.doesNotMatch(executor,/if\\(!finalization\\.quality\\.ok\\)return \\{imageBuffer:rawImageBuffer,brandComposited:false/);\n  assert.match(executor,/le rendu de contrôle reste composé par Sharp/);\n});\n\ntest("le navigateur interdit explicitement tout fallback Canvas après passage par le compositor serveur",()=>{\n  const index=fs.readFileSync("index.html","utf8");\n  assert.match(index,/const serverBrandPath = flow\\.serverBrandCompositionUsed===true/);\n  assert.match(index,/if\\(serverBrandPath && !logoInScene\\) throw new Error\\("Composition serveur Sharp absente/);\n});\n\ntest("le cas Story exact qui a débordé reste couvert par la matrice Sharp, jamais par Canvas",()=>{\n  const matrix=fs.readFileSync("tests/v4-brand-layout-matrix.test.js","utf8");\n  const compositor=fs.readFileSync("netlify/functions/_shared/brand-compositor.js","utf8");\n  assert.match(matrix,/19 sujets × 7 formats/);\n  assert.match(compositor,/Story:Object\\.freeze\\(\\{family:"premium-story"/);\n  assert.match(compositor,/textWithinCanvas/);\n  assert.match(compositor,/logoWithinCanvas/);\n});\n''')
+          PY
+      - name: Targeted regression
+        run: node --test tests/v4-server-brand-authority.test.js tests/v4-brand-layout-matrix.test.js tests/v3-compositor-server-stability.test.js tests/v3-product-stability.test.js
+      - name: Full deterministic verification
+        run: npm run verify
+      - name: Syntax checks
+        run: |
+          node --check netlify/functions/_shared/v3-executor.js
+          node scripts/verify-index-integrity.js
+          git diff --check
+      - name: Commit only the validated hotfix
+        run: |
+          git config user.name viewfinder-ci
+          git config user.email actions@users.noreply.github.com
+          git add index.html netlify/functions/_shared/v3-executor.js tests/v4-server-brand-authority.test.js
+          git commit -m "Keep V4 branding under server Sharp authority"
+          git push origin HEAD:audit/finalize-viewfinder-v3
