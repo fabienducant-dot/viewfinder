@@ -56,4 +56,4 @@ jobs:
           git add index.html netlify/functions/_shared/v4-image-copy-strategy.js netlify/functions/_shared/v3-pipeline.js netlify/functions/_shared/v3-executor.js netlify/functions/_shared/v3-layout-engine.js netlify/functions/_shared/brand-compositor.js netlify/functions/process-image-job-background.js netlify/functions/get-image-job.js netlify/functions/recompose-image-job.js tests/v4-image-copy-strategy.test.js tests/v4-server-brand-authority.test.js
           git commit -m "Finalize V4 copy, Sharp authority and adaptive layout"
           git push origin HEAD:audit/finalize-viewfinder-v3
-# retry 2
+# retry 3
