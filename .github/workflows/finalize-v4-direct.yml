@@ -1,0 +1,54 @@
+name: Finalize V4 direct
+
+on:
+  push:
+    branches:
+      - audit/finalize-viewfinder-v3
+    paths:
+      - .github/workflows/finalize-v4-direct.yml
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  finalize:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: audit/finalize-viewfinder-v3
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+      - run: npm ci
+      - name: Apply direct finalization patch
+        run: node scripts/finalize-v4-direct.cjs
+      - name: Full verification
+        run: npm run verify
+      - name: Security audits
+        run: |
+          npm audit --omit=dev --audit-level=high
+          npm audit --audit-level=high
+      - name: Syntax checks
+        run: |
+          node --check netlify/functions/_shared/v4-image-copy-strategy.js
+          node --check netlify/functions/_shared/v3-pipeline.js
+          node --check netlify/functions/_shared/v3-executor.js
+          node --check netlify/functions/_shared/v3-layout-engine.js
+          node --check netlify/functions/_shared/brand-compositor.js
+          node --check netlify/functions/process-image-job-background.js
+          node --check netlify/functions/get-image-job.js
+          node --check netlify/functions/recompose-image-job.js
+          git diff --check
+      - name: Commit validated code changes
+        run: |
+          git config user.name viewfinder-ci
+          git config user.email actions@users.noreply.github.com
+          git rm scripts/finalize-v4-direct.cjs
+          git add index.html netlify/functions/_shared/v4-image-copy-strategy.js netlify/functions/_shared/v3-pipeline.js netlify/functions/_shared/v3-executor.js netlify/functions/_shared/v3-layout-engine.js netlify/functions/_shared/brand-compositor.js netlify/functions/process-image-job-background.js netlify/functions/get-image-job.js netlify/functions/recompose-image-job.js tests/v4-image-copy-strategy.test.js tests/v4-server-brand-authority.test.js
+          git commit -m "Finalize V4 copy, Sharp authority and adaptive layout"
+          git push origin HEAD:audit/finalize-viewfinder-v3
