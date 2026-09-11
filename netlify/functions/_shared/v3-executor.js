@@ -20,7 +20,8 @@ async function executeV3Pipeline({plan,rawImageBuffer,analyzeImage,composeImage,
  }catch(error){
   return {imageBuffer:rawImageBuffer,brandComposited:false,finalization:{analysis:null,layout:null,quality:{ok:false,mode:plan.sceneIntent?.mode||"legacy",technical:{ok:false,errors:["analyse_image_indisponible"]},business:{ok:false,errors:["conformite_visuelle_non_verifiee"]},artistic:{ok:false,errors:[]},warnings:[],preserveRawImage:true,preservePostText:true},error:String(error.message||error)}};
  }
- if(!finalization.quality.ok)return {imageBuffer:rawImageBuffer,brandComposited:false,finalization};
+ /* Même lorsqu'une photographie échoue au contrôle artistique/métier, le rendu de contrôle reste composé par Sharp.
+    Le statut qualité reste refusé, mais on ne renvoie jamais un brut au navigateur pour qu'un ancien Canvas reprenne la main. */
  try{
   const imageBuffer=await composeImage(rawImageBuffer,finalization.layout,brandComposition);
   const manifest=imageBuffer?.compositionManifest||null;

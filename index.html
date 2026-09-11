@@ -5066,7 +5066,9 @@ async function prepareCreativeBrief(inputs){
 async function finalizeGeneratedImage(flow){
   const platform = flow.inputs.platform;
   const isHealyFlow = flow.inputs.prestation==="Biorésonance quantique";
-  const logoInScene = flow.serverBrandCompositionUsed===true && flow.brandComposited===true;
+  const serverBrandPath = flow.serverBrandCompositionUsed===true;
+  const logoInScene = serverBrandPath && flow.brandComposited===true;
+  if(serverBrandPath && !logoInScene) throw new Error("Composition serveur Sharp absente : aucun fallback Canvas n’est autorisé pour une génération V4.");
   /* Une identité composée par le serveur provient du fichier logo officiel et de chaînes exactes
      rendues en tracés vectoriels. Elle ne peut donc pas être requalifiée en overlay IA interdit
      par un contrôle vision probabiliste, notamment après un recontrôle manuel. Le contrôle des
