@@ -2,6 +2,10 @@
 const test=require("node:test");
 const assert=require("node:assert/strict");
 const fs=require("node:fs");
+const sharp=require("sharp");
+const {composeBrandPoster}=require("../netlify/functions/_shared/brand-compositor");
+
+function solidPng(width,height){return sharp({create:{width,height,channels:3,background:{r:20,g:20,b:20}}}).png().toBuffer();}
 
 test("une photographie V4 refusée reste sous autorité Sharp au lieu de retomber dans Canvas",()=>{
   const executor=fs.readFileSync("netlify/functions/_shared/v3-executor.js","utf8");
@@ -22,4 +26,24 @@ test("le cas Story exact qui a débordé reste couvert par la matrice Sharp, jam
   assert.match(compositor,/Story:Object\.freeze\(\{family:"premium-story"/);
   assert.match(compositor,/textWithinCanvas/);
   assert.match(compositor,/logoWithinCanvas/);
+});
+
+test("régression du visuel réel : MASSAGE DOS ZONE et douleurs dorsales restent intégralement dans le cadre Story",async()=>{
+  const imageBuffer=await solidPng(1080,1920);
+  const output=await composeBrandPoster({
+    imageBuffer,
+    platform:"Story",
+    headline:"MASSAGE DOS/ZONE | DOULEURS DORSALES, BLOCAGE, SENSATIONS DE LOURDEUR",
+    zoneText:"",
+    posterStrategy:{title:"MASSAGE DOS/ZONE",subtitle:"DOULEURS DORSALES, BLOCAGE, SENSATIONS DE LOURDEUR"}
+  });
+  const manifest=output.compositionManifest||{};
+  assert.equal(manifest.textWithinCanvas,true,JSON.stringify(manifest));
+  assert.equal(manifest.logoWithinCanvas,true,JSON.stringify(manifest));
+  assert.equal(manifest.marginsValid,true,JSON.stringify(manifest));
+  assert.equal(manifest.zonesDisjoint,true,JSON.stringify(manifest));
+  assert.equal(manifest.logoRectangleOpaque,false,JSON.stringify(manifest));
+  const meta=await sharp(output).metadata();
+  assert.equal(meta.width,1080);
+  assert.equal(meta.height,1920);
 });
