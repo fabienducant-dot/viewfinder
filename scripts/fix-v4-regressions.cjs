@@ -19,6 +19,10 @@ patch('netlify/functions/_shared/v4-image-copy-strategy.js',
 ' let subheadline="";\n if(contract&&!contract.generic&&contract.name){const service=upper(contract.name);if(service!==headline&&service.length<=30)subheadline=service;}',
 ' let subheadline="";\n const editorialSub=safe(subjectBrief.editorialSubtitle||"");\n if(subjectBrief.editorialKind==="institutional"&&editorialSub&&editorialSub.length<=48)subheadline=upper(editorialSub);\n else if(contract&&!contract.generic&&contract.name){const service=upper(contract.name);if(service!==headline&&service.length<=30)subheadline=service;}',
 'institutional subtitle precedence');
+patch('netlify/functions/_shared/v4-image-copy-strategy.js',
+' return Object.freeze({version:VERSION,headline,subheadline,rewritten:normalizedRaw!==headline&&normalizedRaw!==[headline,subheadline].filter(Boolean).join(" | "),reason:"emotional-marketing-rewrite",sourceSubject:raw});',
+' const effectiveSubheadline=textChoice==="title"?"":subheadline;\n return Object.freeze({version:VERSION,headline,subheadline:effectiveSubheadline,rewritten:normalizedRaw!==headline&&normalizedRaw!==[headline,effectiveSubheadline].filter(Boolean).join(" | "),reason:"emotional-marketing-rewrite",sourceSubject:raw});',
+'title-only mode');
 
 patch('tests/v3-pipeline.test.js',
 'composeImage:async(buffer,layout)=>{composedLayout=layout;return buffer;},brandComposition:{enabled:true}});assert.equal(preserved,true);assert.equal(result.finalization.quality.ok,true);assert.ok(composedLayout);assert.equal(result.brandComposited,true);',
