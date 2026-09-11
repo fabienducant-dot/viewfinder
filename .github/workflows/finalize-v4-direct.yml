@@ -30,7 +30,9 @@ jobs:
           node scripts/fix-finalize-v4-direct.cjs
           node --check scripts/finalize-v4-direct.cjs
       - name: Apply direct finalization patch
-        run: node scripts/finalize-v4-direct.cjs
+        run: |
+          node scripts/finalize-v4-direct.cjs
+          node scripts/fix-v4-regressions.cjs
       - name: Full verification
         run: npm run verify
       - name: Security audits
@@ -52,8 +54,8 @@ jobs:
         run: |
           git config user.name viewfinder-ci
           git config user.email actions@users.noreply.github.com
-          git rm scripts/finalize-v4-direct.cjs scripts/fix-finalize-v4-direct.cjs
-          git add index.html netlify/functions/_shared/v4-image-copy-strategy.js netlify/functions/_shared/v3-pipeline.js netlify/functions/_shared/v3-executor.js netlify/functions/_shared/v3-layout-engine.js netlify/functions/_shared/brand-compositor.js netlify/functions/process-image-job-background.js netlify/functions/get-image-job.js netlify/functions/recompose-image-job.js tests/v4-image-copy-strategy.test.js tests/v4-server-brand-authority.test.js
+          git rm scripts/finalize-v4-direct.cjs scripts/fix-finalize-v4-direct.cjs scripts/fix-v4-regressions.cjs
+          git add index.html netlify/functions/_shared/v4-image-copy-strategy.js netlify/functions/_shared/v3-pipeline.js netlify/functions/_shared/v3-executor.js netlify/functions/_shared/v3-layout-engine.js netlify/functions/_shared/brand-compositor.js netlify/functions/process-image-job-background.js netlify/functions/get-image-job.js netlify/functions/recompose-image-job.js tests/v3-pipeline.test.js tests/v4-image-copy-strategy.test.js tests/v4-server-brand-authority.test.js
           git commit -m "Finalize V4 copy, Sharp authority and adaptive layout"
           git push origin HEAD:audit/finalize-viewfinder-v3
-# retry 3
+# retry 4
