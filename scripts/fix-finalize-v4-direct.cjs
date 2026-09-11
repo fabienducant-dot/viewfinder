@@ -7,5 +7,8 @@ const fixes=[
   ['const failure=new Error(`Composition Sharp V4 impossible : ${String(error.message||error)}`);','const failure=new Error("Composition Sharp V4 impossible : "+String(error.message||error));']
 ];
 for(const [from,to] of fixes){if(!s.includes(from))throw new Error('quoting marker missing: '+from);s=s.replace(from,to);}
+const doubleSlashN=String.raw`\\n`;
+const singleSlashN=String.raw`\n`;
+s=s.split(doubleSlashN).join(singleSlashN);
 fs.writeFileSync(path,s);
-console.log('one-shot patch script quoting fixed');
+console.log('one-shot patch script quoting/newline markers fixed');
