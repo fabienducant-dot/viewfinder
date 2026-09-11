@@ -64,9 +64,13 @@ test("SceneIntent transmet réellement la variation de décor, caméra et lumiè
   assert.ok(history.every((entry,i)=>entry.creativeSeed==="vraie-generation-"+i));
 });
 
-test("l'historique réel de l'application utilise un seed neuf par création puis mémorise l'empreinte artistique",()=>{
+test("l'historique réel inclut aussi les tentatives refusées et récupère les plans V4 récents",()=>{
   const html=fs.readFileSync(path.join(__dirname,"../index.html"),"utf8");
-  assert.match(html,/artHistory:\(state\.imageHistory\|\|\[\]\)\.map\(x=>x\.artFingerprint\)\.filter\(Boolean\)\.slice\(-10\)/);
+  assert.match(html,/function v4ArtHistory\(\)/);
+  assert.match(html,/for\(const img of \(state\.images\|\|\[\]\)\)/);
+  assert.match(html,/rememberV4ArtAttempt\(prepared\.v3Plan,prepared\.clientRequestId\)/);
+  assert.match(html,/artHistory:v4ArtHistory\(\)/);
+  assert.doesNotMatch(html,/artHistory:\(state\.imageHistory\|\|\[\]\)\.map\(x=>x\.artFingerprint\)/);
   assert.match(html,/creativeSeed:`\$\{prestation\}-\$\{topic\}-\$\{Date\.now\(\)\}`/);
   assert.match(html,/historyEntry\.artFingerprint=flow\.artFingerprint\|\|null/);
 });

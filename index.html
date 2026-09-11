@@ -5318,6 +5318,7 @@ async function confirmAndGenerateImage(prepared, onStatus, cancelToken){
   const MAX_SAFETY_RETRIES = 0; // V3 : aucun retry payant silencieux.
     // le même prompt peut donner un rendu différent d'une tentative à l'autre. Plafonné pour
     // maîtriser le coût — jamais de relance illimitée, et seulement pour ce type de rejet précis.
+  rememberV4ArtAttempt(prepared.v3Plan,prepared.clientRequestId);
   while(true){
     try{
       const genResult = await callProviderImage(prepared.imagePrompt, size, undefined, onStatus, cancelToken, {
@@ -5327,7 +5328,7 @@ async function confirmAndGenerateImage(prepared, onStatus, cancelToken){
           platform: prepared.v3Plan.artDirection.platform,
           marketingObjective: prepared.v3Plan.artDirection.marketingObjective,
           audience: prepared.v3Plan.artDirection.audience,
-          artHistory:(state.imageHistory||[]).map(x=>x.artFingerprint).filter(Boolean).slice(-10),
+          artHistory:v4ArtHistory(),
           creativeSeed:prepared.v3Plan.artDirection.creativeSeed,
         } : undefined,
         smartReferenceDataUrls,
@@ -5903,12 +5904,59 @@ function applyAuthoritativeV3Plan(prepared, plan){
 /* Chemin produit unique : un seul plan V3 autoritaire, sans Creative Planner V2 ni Rédacteur DA
    concurrents. Le plan déterministe prépare la photographie, l'affiche et le texte ; un unique
    appel texte rédige ensuite la légende. Aucun appel Images n'a lieu ici. */
+function v4ArtHistory(){
+  const candidates=[];
+  const add=fp=>{ if(fp&&typeof fp==="object") candidates.push(fp); };
+  for(const entry of (state.imageHistory||[])) add(entry&&entry.artFingerprint);
+  for(const img of (state.images||[])){
+    if(img&&img.artFingerprint){ add(img.artFingerprint); continue; }
+    const plan=img&&img.v3Plan, selection=plan&&plan.artSelection, art=plan&&plan.artDirection;
+    if(!selection||!art) continue;
+    add({
+      createdAt:Number(img.createdAt)||0,status:"legacy-recovered",service:plan.contract&&plan.contract.name,
+      platform:art.platform,creativeSeed:art.creativeSeed||selection.creativeSeed||null,
+      artWorld:selection.artWorldFamily,artWorldFamily:selection.artWorldFamily,sceneKey:selection.sceneKey,
+      locationFamily:selection.locationFamily,narrativeSignature:selection.narrativeVariant,
+      architectureType:selection.architectureDescription,lightType:selection.lightingNarrative,
+      cameraAngle:art.cameraAngle||selection.cameraAngle,cameraHeight:art.cameraHeight||selection.cameraHeight,
+      cameraDistance:art.cameraDistance||selection.cameraDistance,focalLength:art.focalLength||selection.focalLength,
+      composition:selection.cinematicTreatment
+    });
+  }
+  const seen=new Set(),deduped=[];
+  for(const fp of candidates){
+    const key=String(fp.fingerprint||[fp.sceneKey,fp.locationFamily,fp.narrativeSignature,fp.cameraAngle,fp.focalLength].filter(Boolean).join("|"));
+    if(!key||seen.has(key)) continue;
+    seen.add(key);deduped.push(fp);
+  }
+  return deduped.slice(-12);
+}
+function rememberV4ArtAttempt(plan,clientRequestId){
+  if(!plan||!plan.artSelection||!plan.artDirection||!clientRequestId)return;
+  const attemptKey=`v4-attempt:${clientRequestId}`;
+  if((state.imageHistory||[]).some(entry=>entry&&entry.v4AttemptKey===attemptKey))return;
+  const selection=plan.artSelection,art=plan.artDirection;
+  const artFingerprint={createdAt:Date.now(),status:"attempted",service:plan.contract&&plan.contract.name,platform:art.platform,
+    creativeSeed:art.creativeSeed||selection.creativeSeed||null,artWorld:selection.artWorldFamily,artWorldFamily:selection.artWorldFamily,
+    sceneKey:selection.sceneKey,locationFamily:selection.locationFamily,narrativeSignature:selection.narrativeVariant,
+    architectureType:selection.architectureDescription,primarySymbol:selection.symbolicAmplifiers&&selection.symbolicAmplifiers[0],
+    secondarySymbol:selection.symbolicAmplifiers&&selection.symbolicAmplifiers[1],dominantMaterial:(selection.dominantMaterials||[]).join(", "),
+    lightType:selection.lightingNarrative,cameraAngle:art.cameraAngle||selection.cameraAngle,cameraHeight:art.cameraHeight||selection.cameraHeight,
+    cameraDistance:art.cameraDistance||selection.cameraDistance,focalLength:art.focalLength||selection.focalLength,
+    composition:selection.cinematicTreatment,depth:selection.spatialDepth};
+  state.imageHistory.push({id:uid(),createdAt:Date.now(),platform:art.platform,mission:art.marketingObjective||null,
+    prestation:plan.contract&&plan.contract.name,topic:plan.subjectBrief&&plan.subjectBrief.rawSubject||"",imageId:null,
+    promptImage:plan.photoBrief&&plan.photoBrief.prompt||"",attemptOnly:true,v4AttemptKey:attemptKey,artFingerprint});
+  if(state.imageHistory.length>80)state.imageHistory=state.imageHistory.slice(-80);
+  LS.set("vf-image-history",state.imageHistory);
+}
+
 async function prepareAuthoritativeV3(inputs){
   const {mission,platform,prestation,topic,registres}=inputs;
   const normalizedPlatform=platform==="Article Blog Wix"?"Blog":platform;
   const planResponse=await fetch("/.netlify/functions/plan-v3",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({
     service:prestation,platform:normalizedPlatform,marketingObjective:mission||"Faire réserver",
-    audience:"clientèle La Santé des Zèbres",artHistory:(state.imageHistory||[]).map(x=>x.artFingerprint).filter(Boolean).slice(-10),
+    audience:"clientèle La Santé des Zèbres",artHistory:v4ArtHistory(),
     creativeSeed:`${prestation}-${topic}-${Date.now()}`,subject:topic,selectedRegisters:[...(registres||[])],
     textChoice:state.textOnImageChoice||"automatic",costMode:state.costMode||"test",
     requestedSize:inputs.size||API_IMAGE_SIZE_BY_PLATFORM[platform]||"1024x1024"
