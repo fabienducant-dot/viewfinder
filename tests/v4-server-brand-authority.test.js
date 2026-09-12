@@ -51,3 +51,11 @@ test("régression du visuel réel : MASSAGE DOS ZONE et douleurs dorsales resten
   assert.equal(meta.width,1080);
   assert.equal(meta.height,1920);
 });
+
+test("la génération et la récupération propagent la preuve Sharp sans variable hors portée",()=>{
+  const index=fs.readFileSync("index.html","utf8");
+  assert.doesNotMatch(index,/providerResult\.finalCompositionEngine/);
+  assert.match(index,/finalCompositionEngine = genResult\.finalCompositionEngine/);
+  assert.match(index,/compositionManifest:data\.compositionManifest\|\|null/);
+  assert.match(index,/finalCompositionEngine:data\.finalCompositionEngine\|\|data\.compositionManifest\?\.finalCompositionEngine\|\|null/);
+});

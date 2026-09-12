@@ -5145,8 +5145,8 @@ function storeFinalizedCreativeFlow(flow, finalized){
     usedReference:flow.usedReference, referenceFallbackReason:flow.referenceFallbackReason,
     creativeBrief:flow.brief, creativeContent:flow.content, layoutReport:finalized.layoutReport||null,
     altText:flow.content ? flow.content.altText : (flow.analysis&&flow.analysis.altText),sourceImageJobId:flow.sourceImageJobId||null,
-    v3Plan:flow.v3Plan||null,v3Finalization:flow.v3Finalization||null,rawResultAvailable:!!flow.sourceImageJobId,
-    costAudit:flow.costAudit||null,artFingerprint:flow.artFingerprint||null });
+    v3Plan:flow.v3Plan||null,v3Finalization:flow.v3Finalization||null,finalCompositionEngine:flow.finalCompositionEngine||flow.v3Finalization?.compositionManifest?.finalCompositionEngine||null,
+    rawResultAvailable:!!flow.sourceImageJobId,costAudit:flow.costAudit||null,artFingerprint:flow.artFingerprint||null });
   LS.set("vf-images",state.images);
   updateCount();
   state.selectedId=id;
@@ -5243,9 +5243,10 @@ async function recoverAndRecomposeImageJob(record,onStatus){
   const data=await fetchJsonOrThrowRaw(response,"recomposition gratuite");
   if(!response.ok||data.error){const error=new Error(data.error||"Recomposition impossible.");error.code=data.errorCode||null;throw error;}
   const flow={phase:"completed",ok:true,inputs:sourceInputs,brief:record.brief||sourcePlan.legacyProjection||{},content:record.content||null,
-    v3Plan:sourcePlan,v3Finalization:{analysis:sourceFinalization.analysis,layout:data.layout,quality:data.quality},
+    v3Plan:sourcePlan,v3Finalization:{analysis:sourceFinalization.analysis,layout:data.layout,quality:data.quality,compositionManifest:data.compositionManifest||null},
     dataUrl:await fetchImageAsDataUrl(data.resultUrl),usedReference:false,referenceFallbackReason:null,serverBrandCompositionUsed:true,
-    brandComposited:true,sourceImageJobId:data.jobId,costAudit:data.costAudit||null,imageUsage:null,artFingerprint:null};
+    brandComposited:true,finalCompositionEngine:data.finalCompositionEngine||data.compositionManifest?.finalCompositionEngine||null,
+    sourceImageJobId:data.jobId,costAudit:data.costAudit||null,imageUsage:null,artFingerprint:null};
   flow.analysis=analysisFromServer(flow);
   if(flow.content)flow.content={...flow.content,altText:flow.analysis?.altText||flow.content.altText};
   else if(!record.serverDiscovered)try{flow.content=await generateContentFromBrief(flow.brief,flow.analysis,flow.inputs.platform,flow.inputs.mission);}
@@ -5314,7 +5315,7 @@ async function confirmAndGenerateImage(prepared, onStatus, cancelToken){
   const expectedHeadline = (PLATFORM_OVERLAY[platform]==="accroche" || PLATFORM_OVERLAY[platform]==="fort")
     ? String(brief.texteImage||"").trim() : "";
   let dataUrl, usedReference = false, referenceFallbackReason = null, logoSentAsReference = false,
-    brandComposited = false, imageUsage = null;
+    brandComposited = false, finalCompositionEngine = null, imageUsage = null;
   let safetyRetryCount = 0;
   const MAX_SAFETY_RETRIES = 0; // V3 : aucun retry payant silencieux.
     // le même prompt peut donner un rendu différent d'une tentative à l'autre. Plafonné pour
@@ -5350,7 +5351,9 @@ async function confirmAndGenerateImage(prepared, onStatus, cancelToken){
         resumeJobId: safetyRetryCount===0 ? prepared.resumeJobId : undefined,
       });
       dataUrl = genResult.dataUrl; usedReference = genResult.usedReference; referenceFallbackReason = genResult.referenceFallbackReason;
-      logoSentAsReference = false; brandComposited = genResult.brandComposited===true; imageUsage = genResult.imageUsage || null;
+      logoSentAsReference = false; brandComposited = genResult.brandComposited===true;
+      finalCompositionEngine = genResult.finalCompositionEngine || genResult.v3Finalization?.compositionManifest?.finalCompositionEngine || null;
+      imageUsage = genResult.imageUsage || null;
       prepared.v3Plan=genResult.v3Plan||prepared.v3Plan||null;
       prepared.v3Finalization=genResult.v3Finalization||null;
       prepared.sourceImageJobId=genResult.jobId||prepared.sourceImageJobId||null;
@@ -5422,7 +5425,7 @@ async function confirmAndGenerateImage(prepared, onStatus, cancelToken){
   }
 
   return { ...prepared, phase:"completed", ok:true, dataUrl, usedReference, referenceFallbackReason, logoSentAsReference,
-    serverBrandCompositionUsed:true, brandComposited, finalCompositionEngine: providerResult.finalCompositionEngine || providerResult.v3Finalization?.compositionManifest?.finalCompositionEngine || null, imageUsage,
+    serverBrandCompositionUsed:true, brandComposited, finalCompositionEngine, imageUsage,
     analysis, analysisError, content, textError, v3Plan:prepared.v3Plan||null, v3Finalization:prepared.v3Finalization||null };
 }
 
@@ -8947,7 +8950,7 @@ function buildApiTab(){
 ============================================================ */
 
 /* ---- Versionnage ---- */
-const VF_VERSION = "3.2.1-index-integrity";
+const VF_VERSION = "3.2.2-v4-recovery";
 /* Hash déterministe de l'état des règles : deux runs au même hash = strictement les mêmes règles.
    Couvre : modules (contenu+état), UNIVERS_SDZ, charte condensée, garde-fou sécurité. */
 function computeModulesHash(){
