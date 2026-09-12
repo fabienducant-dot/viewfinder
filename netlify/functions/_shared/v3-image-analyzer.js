@@ -57,6 +57,8 @@ async function analyzeImageWithOpenAI({key,imageBuffer,plan,fetchImpl=fetch}){
     {role:"system",content:[
      "Analyse uniquement les pixels de la photographie brute. N'infère jamais un élément invisible.",
      "Évalue d'abord si l'image raconte réellement le sujet demandé et non si elle contient littéralement une séance de soin.",
+     "Pour un sujet dorsal, une personne simplement vue de dos ne prouve ni douleur, ni blocage, ni allègement : subjectMatchesRequest et transformationReadable valent false si aucune posture ou relation spatiale spécifique ne le montre. Une silhouette immobile dans une forêt sombre ne suffit pas.",
+     "availableContrast évalue la lisibilité du sujet principal sur téléphone, pas le contraste global entre quelques reflets et le noir. Si dos, épaules ou action restent indiscernables dans les ombres, attribue une valeur inférieure à 0.25. Une dominante bleue visible compte dans paletteDrift.",
      "dramaticMomentPresent=true seulement si l'image capture un instant décisif avec un avant/après implicite. transformationReadable=true seulement si une évolution de tension, d'espace, de posture, de lumière ou de relation se lit visuellement.",
      "cinematicPosterRead=true seulement si l'image ressemble à un photogramme/affiche de film premium avec hiérarchie, lumière directionnelle, profondeur et atmosphère ; une photo de cabinet ou de banque d'images générique vaut false.",
      "threePlaneDepth=true seulement si premier plan, plan principal et arrière-plan sont réellement distincts. genericSpaRisk et literalTreatmentSceneRisk sont compris entre 0 et 1.",
