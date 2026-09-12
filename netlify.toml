@@ -1,15 +1,37 @@
 [build]
-  command = "node scripts/verify-index-integrity.js"
+  command = "node scripts/build-sdz-logo-asset.js && node scripts/verify-index-integrity.js"
   publish = "."
   functions = "netlify/functions"
 
 [functions]
   node_bundler = "esbuild"
 
-# Sharp contient un module natif : Netlify doit le copier sans l'inliner dans l'artefact de la
-# Background Function qui réalise la composition exacte du logo et des textes.
+# Sharp contient un module natif : Netlify doit le copier sans l'inliner. Le logo officiel est
+# construit UNE FOIS pendant le build puis embarqué tel quel ; aucune segmentation n'est exécutée
+# dans les fonctions de production.
 [functions."process-image-job-background"]
-  external_node_modules = ["sharp", "opentype.js", "@fontsource/cinzel"]
+  external_node_modules = ["sharp", "opentype.js", "@fontsource/cormorant-garamond", "@fontsource/manrope"]
+  included_files = [
+    "assets/sdz-logo-compositor.png",
+    "node_modules/@fontsource/cormorant-garamond/files/cormorant-garamond-latin-600-normal.woff",
+    "node_modules/@fontsource/cormorant-garamond/files/cormorant-garamond-latin-ext-600-normal.woff",
+    "node_modules/@fontsource/manrope/files/manrope-latin-500-normal.woff",
+    "node_modules/@fontsource/manrope/files/manrope-latin-ext-500-normal.woff",
+    "node_modules/@fontsource/manrope/files/manrope-latin-600-normal.woff",
+    "node_modules/@fontsource/manrope/files/manrope-latin-ext-600-normal.woff"
+  ]
+
+[functions."recompose-image-job"]
+  external_node_modules = ["sharp", "opentype.js", "@fontsource/cormorant-garamond", "@fontsource/manrope"]
+  included_files = [
+    "assets/sdz-logo-compositor.png",
+    "node_modules/@fontsource/cormorant-garamond/files/cormorant-garamond-latin-600-normal.woff",
+    "node_modules/@fontsource/cormorant-garamond/files/cormorant-garamond-latin-ext-600-normal.woff",
+    "node_modules/@fontsource/manrope/files/manrope-latin-500-normal.woff",
+    "node_modules/@fontsource/manrope/files/manrope-latin-ext-500-normal.woff",
+    "node_modules/@fontsource/manrope/files/manrope-latin-600-normal.woff",
+    "node_modules/@fontsource/manrope/files/manrope-latin-ext-600-normal.woff"
+  ]
 
 [functions."check-scheduled-posts"]
   schedule = "*/15 * * * *"
