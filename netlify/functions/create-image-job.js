@@ -14,6 +14,8 @@ const { resolveInvocationBaseUrl } = require("./_shared/netlify-invocation-url")
 const { planV3, validatePreparedPlan } = require("./_shared/v3-pipeline");
 const {costMode,selectedReferenceRoles,buildCostAudit}=require("./_shared/v3-cost-control");
 const {getPsioStatus,getPsioReferencesForRoles}=require("./_shared/v3-psio-references");
+const {reserveOnce}=require("./_shared/v4-job-claims");
+const {prepareAnalysisRecovery}=require("./_shared/v4-analysis-recovery");
 
 function openJobStore(){
   const opts = { consistency: "strong" }; // écriture puis relecture quasi immédiate du statut : la
@@ -55,8 +57,8 @@ exports.handler = async (event) => {
     return { statusCode: 400, headers: { "Content-Type": "application/json" }, body: JSON.stringify({ error: "Corps de requête invalide" }) };
   }
   let input;
-  try{input=buildJobInput(payload);}catch(error){return {statusCode:400,headers:{"Content-Type":"application/json"},body:JSON.stringify({error:String(error.message||error)})};}
-  if(input.v3Plan?.psioRequired){let status,persistent;try{status=await getPsioStatus(true);const roles=selectedReferenceRoles(input.costMode,status.psioReferenceRoles.filter(x=>x.available).map(x=>x.role));persistent=await getPsioReferencesForRoles(roles);input.referenceRoles=roles;}catch(error){return {statusCode:503,headers:{"Content-Type":"application/json"},body:JSON.stringify({error:`Stockage PSiO® inaccessible : ${String(error.message||error)}`,imageGenerationCallCount:0})};}if(!status.psioReferenceReady||!persistent.length)return {statusCode:409,headers:{"Content-Type":"application/json"},body:JSON.stringify({error:"Références officielles PSiO® incomplètes — aucun job créé.",psioReferenceReady:false,psioReferenceCount:status.psioReferenceCount,imageGenerationCallCount:0})};input.referenceImageUrls=[];input.referenceImageData=persistent.map(x=>x.dataUrl);input.referenceRequired=true;input.costAudit=buildCostAudit({mode:input.costMode,referenceImageCount:persistent.length,referenceRoles:input.referenceRoles,requestedQuality:input.requestedQuality,requestedSize:input.requestedSize,effectiveSize:input.effectiveSize});if(input.costAudit.requiresAdditionalConfirmation&&payload.costCeilingConfirmed!==true)return {statusCode:428,headers:{"Content-Type":"application/json"},body:JSON.stringify({error:`Confirmation supplémentaire requise : total prudent maximal ${input.costAudit.estimatedTotalMax.toFixed(3)} €.`,costAudit:input.costAudit,imageGenerationCallCount:0})};}
+  try{input=payload.recoverAnalysisFor?await prepareAnalysisRecovery(openJobStore(),payload):buildJobInput(payload);}catch(error){return {statusCode:400,headers:{"Content-Type":"application/json"},body:JSON.stringify({error:String(error.message||error)})};}
+  if(!input.analysisOnly&&input.v3Plan?.psioRequired){let status,persistent;try{status=await getPsioStatus(true);const roles=selectedReferenceRoles(input.costMode,status.psioReferenceRoles.filter(x=>x.available).map(x=>x.role));persistent=await getPsioReferencesForRoles(roles);input.referenceRoles=roles;}catch(error){return {statusCode:503,headers:{"Content-Type":"application/json"},body:JSON.stringify({error:`Stockage PSiO® inaccessible : ${String(error.message||error)}`,imageGenerationCallCount:0})};}if(!status.psioReferenceReady||!persistent.length)return {statusCode:409,headers:{"Content-Type":"application/json"},body:JSON.stringify({error:"Références officielles PSiO® incomplètes — aucun job créé.",psioReferenceReady:false,psioReferenceCount:status.psioReferenceCount,imageGenerationCallCount:0})};input.referenceImageUrls=[];input.referenceImageData=persistent.map(x=>x.dataUrl);input.referenceRequired=true;input.costAudit=buildCostAudit({mode:input.costMode,referenceImageCount:persistent.length,referenceRoles:input.referenceRoles,requestedQuality:input.requestedQuality,requestedSize:input.requestedSize,effectiveSize:input.effectiveSize});if(input.costAudit.requiresAdditionalConfirmation&&payload.costCeilingConfirmed!==true)return {statusCode:428,headers:{"Content-Type":"application/json"},body:JSON.stringify({error:`Confirmation supplémentaire requise : total prudent maximal ${input.costAudit.estimatedTotalMax.toFixed(3)} €.`,costAudit:input.costAudit,imageGenerationCallCount:0})};}
   const {prompt,size,model,quality,referenceImageUrls,referenceImageData,referenceRequired,brandComposition,v3Plan}=input;
 
   try {
@@ -64,9 +66,8 @@ exports.handler = async (event) => {
     const now = Date.now();
     const store = openJobStore();
     const idempotencyKey=input.clientRequestId||crypto.createHash("sha256").update(JSON.stringify({prompt:input.prompt,size:input.size,costMode:input.costMode,brandComposition:input.brandComposition})).digest("hex");
-    const existingRaw=await store.get(`idempotency/${idempotencyKey}`);
-    if(existingRaw){const existing=JSON.parse(existingRaw);return {statusCode:200,headers:{"Content-Type":"application/json"},body:JSON.stringify({ok:true,jobId:existing.jobId,status:existing.status||"queued",deduplicated:true})};}
-    await store.set(`idempotency/${idempotencyKey}`,JSON.stringify({jobId,status:"queued",createdAt:now}));
+    const reservation=await reserveOnce(store,`idempotency/${idempotencyKey}`,{jobId,status:"queued",createdAt:now});
+    if(!reservation.created)return {statusCode:200,headers:{"Content-Type":"application/json"},body:JSON.stringify({ok:true,jobId:reservation.record.jobId,status:reservation.record.status||"queued",deduplicated:true})};
 
     // Entrée complète (peut contenir jusqu'à 4 images en base64) écrite en Blobs — jamais transmise
     // telle quelle au déclenchement de la Background Function.
