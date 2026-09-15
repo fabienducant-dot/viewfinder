@@ -1,6 +1,7 @@
 /* Fonction serveur SDZ App — consultation du statut d'un travail de génération d'image.
    Appelée par le client toutes les 2-3 secondes pendant le polling. Ne fait jamais d'appel OpenAI. */
 const { getStore } = require("@netlify/blobs");
+const {buildCostAudit}=require("./_shared/v3-cost-control");
 
 const JOB_MAX_AGE_MS = 24 * 60 * 60 * 1000; // Protection du polling des jobs queued uniquement.
 const PROCESSING_TIMEOUT_MS = 16 * 60 * 1000; // Background Function plafonnée à 15 min (doc Netlify) —
@@ -16,7 +17,8 @@ function openJobStore(){
 
 function failedResponse(job){
   const recoverable=!!(job.rawResultKey&&job.v3Plan&&job.v3Finalization?.analysis);
-  return {statusCode:200,headers:{"Content-Type":"application/json"},body:JSON.stringify({ok:false,jobId:job.jobId,status:"failed",error:job.error,costAudit:job.costAudit||null,imageGenerationCallCount:job.imageGenerationCallCount||0,recoverable,recovery:recoverable?{v3Plan:job.v3Plan,v3Finalization:job.v3Finalization,rawResultAvailable:true}:null})};
+  const analysisRequired=!!(job.rawResultKey&&job.v3Plan&&!job.v3Finalization?.analysis);
+  return {statusCode:200,headers:{"Content-Type":"application/json"},body:JSON.stringify({ok:false,jobId:job.jobId,status:"failed",error:job.error,costAudit:job.costAudit||null,imageGenerationCallCount:job.imageGenerationCallCount||0,recoverable,analysisRequired,analysisRecoveryEstimate:analysisRequired?buildCostAudit({mode:"test",imageCalls:0,visionUsage:{}}):null,recovery:recoverable?{v3Plan:job.v3Plan,v3Finalization:job.v3Finalization,rawResultAvailable:true}:null})};
 }
 function createHandler(openStore = openJobStore){
   return async (event) => {

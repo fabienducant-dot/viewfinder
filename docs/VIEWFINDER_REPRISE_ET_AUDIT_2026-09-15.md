@@ -1,5 +1,21 @@
 # Viewfinder — reprise et audit du 15 septembre 2026
 
+## Mise à jour suivante — 3.2.5-atomic-recovery
+
+Les deux travaux restant ouverts dans le bilan 3.2.4 ci-dessous sont maintenant implémentés :
+
+- `@netlify/blobs` est fixé à 10.7.13, compatible avec Node 20 de la CI et Node 22 de Netlify. La version 7 ne proposait pas les écritures conditionnelles nécessaires ; la version 11 exigeait un runtime plus récent que la CI.
+- La réservation d'une demande utilise `onlyIfNew:true`. Les réponses sont contrôlées puis relues avec un jeton propriétaire unique. Une réponse ambiguë bloque l'opération. La même demande ne peut pas désigner deux jobs, même si elle arrive simultanément sur plusieurs instances.
+- Le worker réserve aussi son exécution avant de modifier le statut ou d'appeler un fournisseur. Cette réservation n'expire pas automatiquement : un travail ancien ne constitue pas une autorisation de refacturer. Un incident d'initialisation peut donc nécessiter une intervention, plutôt qu'un nouvel appel silencieux.
+- Le même post de campagne non encore lancé reçoit un identifiant déterministe sur les appareils qui le possèdent. Cela ne fusionne pas des campagnes ou des posts distincts créés séparément.
+- Une photo conservée sans analyse devient découvrable par le bouton de récupération. Le navigateur propose une analyse seule, avec son estimation et une confirmation explicite. Il conserve l'identifiant de cette demande après une interruption réseau.
+- Cette reprise utilise le worker asynchrone existant, le brut et le plan stockés. Elle n'appelle aucune fonction de génération Images. L'analyse est enregistrée avant la composition pour ne pas être refacturée si seule cette dernière échoue. Aucun secours Canvas, aucun changement du modèle d'image ou du compositor.
+- Tests ajoutés : vingt créations concurrentes, vingt invocations du worker, réponse atomique ambiguë, vraie sérialisation HTTP du SDK (`If-None-Match`), refus d'analyse sans confirmation, reprise du brut sans Images, interruption du navigateur pendant la reprise. Fournisseurs simulés uniquement.
+
+Référence vérifiée : https://docs.netlify.com/build/data-and-storage/netlify-blobs/ — écritures conditionnelles `onlyIfNew`, résultat `modified` et `etag`.
+
+Le bilan 3.2.4 qui suit est conservé comme historique. Ses deux risques ouverts sont remplacés par les comportements et limites ci-dessus. Le prochain jalon reste un Golden Test réel explicitement confirmé ; les tests de code ne valident pas à eux seuls le rendu artistique ni Make.
+
 Ce document conserve l'état utile du travail et ses limites. Ce n'est pas une transcription intégrale des conversations, ni une preuve de qualité artistique des futures images.
 
 ## Objectif et autorisations

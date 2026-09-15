@@ -4,10 +4,10 @@ const {isRecoverableOriginal,findLatestRecoverableJob}=require("../netlify/funct
 test("une panne de composition conserve la photo payée, le plan et l'analyse pour récupération gratuite",async()=>{
  const plan={version:4},analysis={availableContrast:.7};let imageCalls=0;
  const records=new Map([["jobs/paid",JSON.stringify({jobId:"paid",status:"queued",createdAt:1})],["jobs/paid/input",JSON.stringify({prompt:"fixture",quality:"low",costMode:"test",v3Plan:plan,brandComposition:{enabled:true}})]]);
- const store={get:async k=>records.get(k)||null,set:async(k,v)=>records.set(k,v),list:async()=>({blobs:[{key:"jobs/paid"}]})};
+ const store={get:async k=>records.get(k)||null,set:async(k,v,o)=>{if(o?.onlyIfNew&&records.has(k))return {modified:false};records.set(k,v);return {modified:true};},list:async()=>({blobs:[{key:"jobs/paid"}]})};
  const exports={};const ctx=vm.createContext({exports,Buffer,Date,console:{error:()=>{}},process:{env:{IMAGE_JOB_SECRET:"fixture",OPENAI_API_KEY:"fixture"}},
   fetch:async()=>{imageCalls++;return {ok:true,json:async()=>({data:[{b64_json:Buffer.from("fixture-image").toString("base64")} ]})};},
-  require:name=>{if(name==="@netlify/blobs")return {getStore:()=>store};if(name.endsWith("v3-executor"))return {executeV3Pipeline:async()=>{const e=Error("Composition Sharp V4 impossible : fixture");e.code="V4_SHARP_COMPOSITION_FAILED";e.finalization={analysis};throw e;}};return {};}});
+  require:name=>{if(name==="@netlify/blobs")return {getStore:()=>store};if(name.endsWith("v4-job-claims"))return require("../netlify/functions/_shared/v4-job-claims");if(name.endsWith("v3-executor"))return {executeV3Pipeline:async()=>{const e=Error("Composition Sharp V4 impossible : fixture");e.code="V4_SHARP_COMPOSITION_FAILED";e.finalization={analysis};throw e;}};return {};}});
  vm.runInContext(fs.readFileSync("netlify/functions/process-image-job-background.js","utf8"),ctx);
  await exports.handler({headers:{"x-image-job-secret":"fixture"},body:JSON.stringify({jobId:"paid"})});
  const job=JSON.parse(records.get("jobs/paid"));assert.equal(imageCalls,1);assert.equal(job.status,"failed");assert.equal(job.imageGenerationCallCount,1);

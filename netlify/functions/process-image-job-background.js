@@ -8,6 +8,8 @@ const {analyzeImageWithOpenAI}=require("./_shared/v3-image-analyzer");
 const {executeV3Pipeline}=require("./_shared/v3-executor");
 const {buildCostAudit}=require("./_shared/v3-cost-control");
 const {artisticFingerprint}=require("./_shared/v3-pipeline");
+const {reserveOnce}=require("./_shared/v4-job-claims");
+const {runAnalysisRecovery}=require("./_shared/v4-analysis-recovery");
 
 const PROCESSING_RECENT_THRESHOLD_MS=14*60*1000;
 
@@ -81,6 +83,7 @@ exports.handler=async event=>{
   try{jobId=JSON.parse(event.body||"{}").jobId;}catch(error){return {statusCode:400,body:"Corps de requête invalide"};}
   if(!jobId)return {statusCode:400,body:"jobId manquant"};
 
+  let ownsExecution=false;
   try{
     const store=openJobStore();
     let job;
@@ -88,6 +91,9 @@ exports.handler=async event=>{
     if(!job)return {statusCode:200,body:JSON.stringify({ok:false,error:"Job introuvable"})};
     if(job.status==="completed"||job.status==="failed")return {statusCode:200,body:JSON.stringify({ok:true,skipped:job.status})};
     if(job.status==="processing"&&(Date.now()-(job.updatedAt||0))<PROCESSING_RECENT_THRESHOLD_MS)return {statusCode:200,body:JSON.stringify({ok:true,skipped:"already-processing"})};
+    const execution=await reserveOnce(store,`execution/${jobId}`,{jobId,createdAt:Date.now()});
+    if(!execution.created)return {statusCode:200,body:JSON.stringify({ok:true,skipped:"already-claimed"})};
+    ownsExecution=true;
     await safeSetJobStatus(store,jobId,{status:"processing",error:null});
 
     let input;
@@ -109,6 +115,10 @@ exports.handler=async event=>{
       return {statusCode:200,body:JSON.stringify({ok:false,error:"Configuration manquante",imageGenerationCallCount:0})};
     }
 
+    if(input.analysisOnly){
+      await safeSetJobStatus(store,jobId,{rawResultKey:input.rawResultKey,v3Plan:input.v3Plan,recomposedFrom:input.sourceJobId,costAudit:input.costAudit,imageGenerationCallCount:0});
+      return await runAnalysisRecovery({store,jobId,input,key,analyzeImage:analyzeImageWithOpenAI,composeImage:composeBrandPoster});
+    }
     const hasUrls=Array.isArray(referenceImageUrls)&&referenceImageUrls.length>0,hasData=Array.isArray(referenceImageData)&&referenceImageData.length>0,usedReference=hasUrls||hasData;
     let data;
     try{
@@ -182,7 +192,7 @@ exports.handler=async event=>{
     return {statusCode:200,body:JSON.stringify({ok:true,imageGenerationCallCount:1})};
   }catch(err){
     console.error(`[process-image-job-background] Erreur inattendue pour ${jobId} : ${String(err&&err.message||err)}`);
-    try{await safeSetJobStatus(openJobStore(),jobId,{status:"failed",...(err.finalization?{v3Finalization:err.finalization}:{}),error:{message:String(err.message||"Erreur interne inattendue.").slice(0,500),source:err.code||"internal"}});}catch(error){}
+    if(ownsExecution)try{await safeSetJobStatus(openJobStore(),jobId,{status:"failed",...(err.finalization?{v3Finalization:err.finalization}:{}),error:{message:String(err.message||"Erreur interne inattendue.").slice(0,500),source:err.code||"internal"}});}catch(error){}
     return {statusCode:200,body:JSON.stringify({ok:false,error:"Erreur interne"})};
   }
 };

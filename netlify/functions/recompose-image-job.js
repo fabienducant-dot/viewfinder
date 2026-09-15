@@ -44,7 +44,7 @@ async function findLatestRecoverableJob(jobs){
   for(let i=0;i<rootKeys.length;i+=BATCH_SIZE){
     const batch=rootKeys.slice(i,i+BATCH_SIZE);
     const loaded=await Promise.all(batch.map(async key=>{
-      try{const raw=await jobs.get(key);if(!raw)return null;const job=typeof raw==="string"?JSON.parse(raw):raw;return isRecoverableOriginal(job)?job:null;}catch(error){return null;}
+      try{const raw=await jobs.get(key);if(!raw)return null;const job=typeof raw==="string"?JSON.parse(raw):raw;return isRecoverableOriginal(job)||(job?.status==="failed"&&job.rawResultKey&&job.v3Plan&&!job.recomposedFrom)?job:null;}catch(error){return null;}
     }));
     for(const job of loaded)if(job)candidates.push(job);
   }

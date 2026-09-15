@@ -59,8 +59,8 @@ test("latest choisit l'original payé récupérable le plus récent sans scanner
   const valid=(jobId,createdAt,extra={})=>({jobId,createdAt,status:"completed",rawResultKey:`jobs/${jobId}/raw-result`,v3Plan:{artDirection:{platform:"Story"}},v3Finalization:{analysis:{}},imageGenerationCallCount:1,...extra});
   const records={"jobs/old":valid("old",100),"jobs/new":valid("new",300),"jobs/dead":valid("dead",400),"jobs/derived":valid("derived",500,{recomposedFrom:"old",imageGenerationCallCount:0}),"jobs/failed":{...valid("failed",600),status:"failed",v3Finalization:null},"jobs/no-raw":{...valid("no-raw",700),rawResultKey:null},"jobs/new/result":JSON.stringify({b64:"ne doit jamais être lu"})};
   const readKeys=[],jobs={list:async options=>{assert.deepEqual(options,{prefix:"jobs/",directories:true});return {blobs:Object.keys(records).filter(key=>/^jobs\/[^/]+$/.test(key)).map(key=>({key})),directories:["jobs/new"]};},get:async key=>{readKeys.push(key);return typeof records[key]==="string"?records[key]:JSON.stringify(records[key]);},getMetadata:async key=>key!=="jobs/dead/raw-result"?{etag:"ok",metadata:{}}:null};
-  assert.equal((await findLatestRecoverableJob(jobs)).jobId,"new");assert.equal(readKeys.includes("jobs/new/result"),false);
-  const response=await latestRecoverableJob(jobs),body=JSON.parse(response.body);assert.equal(response.statusCode,200);assert.equal(body.jobId,"new");assert.equal(body.imageGenerationCalls,0);
+  assert.equal((await findLatestRecoverableJob(jobs)).jobId,"failed");assert.equal(readKeys.includes("jobs/new/result"),false);
+  const response=await latestRecoverableJob(jobs),body=JSON.parse(response.body);assert.equal(response.statusCode,200);assert.equal(body.jobId,"failed");assert.equal(body.imageGenerationCalls,0);
 });
 
 test("latest retourne found false gratuitement sans original récupérable",async()=>{

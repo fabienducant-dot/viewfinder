@@ -5227,6 +5227,31 @@ async function recoverAndRecomposeImageJob(record,onStatus){
   let sourceResult=null;
   const statusResponse=await fetch(`/.netlify/functions/get-image-job?jobId=${encodeURIComponent(record.jobId)}`);
   const status=await fetchJsonOrThrowRaw(statusResponse,"récupération du travail");
+  if(statusResponse.ok&&status.analysisRequired){
+    const key=`vf-analysis-recovery:${record.jobId}`;
+    let pending=LS.get(key,null);
+    if(!pending){
+      const estimate=status.analysisRecoveryEstimate;
+      if(!estimate)throw new Error("Estimation d'analyse indisponible.");
+      if(!confirm(`La photo payée est conservée, mais son analyse a échoué. Relancer uniquement l'analyse et la composition ? Analyse estimée à ${Number(estimate.estimatedTotalMax).toFixed(3)} € (pas une facture). Aucune nouvelle génération d'image.`))throw new Error("Reprise d'analyse annulée.");
+      pending={clientRequestId:uid()};
+      if(!LS.set(key,pending))throw new Error("Impossible de sauvegarder la demande de reprise.");
+    }
+    if(!pending.jobId){
+      const response=await fetch("/.netlify/functions/create-image-job",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({recoverAnalysisFor:record.jobId,analysisConfirmed:true,clientRequestId:pending.clientRequestId})});
+      const data=await fetchJsonOrThrowRaw(response,"reprise d'analyse");
+      if(!response.ok||data.error)throw new Error(data.error||"Reprise indisponible.");
+      pending.jobId=data.jobId;LS.set(key,pending);
+    }
+    try{
+      await pollImageJob(pending.jobId,onStatus,null);
+      return await recoverAndRecomposeImageJob({...record,jobId:pending.jobId},onStatus);
+    }catch(error){
+      // Only a confirmed terminal failure allows another explicitly approved analysis.
+      try{const r=await fetch(`/.netlify/functions/get-image-job?jobId=${encodeURIComponent(pending.jobId)}`);const d=await fetchJsonOrThrowRaw(r,"statut de reprise");if(d.status==="failed")LS.set(key,null);}catch(ignore){}
+      throw error;
+    }
+  }
   if(!statusResponse.ok||(status.error&&!status.recoverable))throw new Error(status.error?.message||status.error||"Travail source introuvable.");
   if(status.status==="failed"&&status.recoverable)sourceResult=status.recovery;
   else if(status.status==="completed")sourceResult=status.result;
@@ -8200,7 +8225,7 @@ async function generateImageForCampaignItem(item, onStatus, cancelToken){
 }
 async function runImageForCampaignItem(item, onStatus, cancelToken){
   if(!item.pendingImageJobId && item.blockingError) throw new Error("Génération bloquée : " + item.blockingError);
-  item.clientRequestId=item.clientRequestId||uid();
+  item.clientRequestId=item.clientRequestId||(item.id?`campaign-image:${item.id}`:uid());
   if(!LS.set("vf-scheduled",state.scheduled)&&!item.pendingImageJobId)throw new Error("Stockage indisponible : impossible de sécuriser la reprise. Libérez de la place avant de générer.");
   const estimate=item.v3Plan?.preflightCostAudit;
   let costCeilingConfirmed=false;
@@ -8986,7 +9011,7 @@ function buildApiTab(){
 ============================================================ */
 
 /* ---- Versionnage ---- */
-const VF_VERSION = "3.2.4-campaign-resilience";
+const VF_VERSION = "3.2.5-atomic-recovery";
 /* Hash déterministe de l'état des règles : deux runs au même hash = strictement les mêmes règles.
    Couvre : modules (contenu+état), UNIVERS_SDZ, charte condensée, garde-fou sécurité. */
 function computeModulesHash(){
