@@ -102,7 +102,7 @@ test("le navigateur utilise un plan unique, réemploie l'analyse serveur et gard
   const production=html.slice(html.indexOf("prepareBtn.addEventListener"),html.indexOf("// --- Phase B"));
   assert.match(production,/prepareAuthoritativeV3/);
   assert.doesNotMatch(production,/prepareCreativeBrief/);
-  assert.match(html,/const serverAnalysis=productReferenceRequired\?null:analysisFromServer/);
+  assert.match(html,/const serverAnalysis=productReferenceRequired&&!prepared\.resumeJobId\?null:analysisFromServer/);
   assert.match(html,/vf-recoverable-image-jobs-v1/);
   assert.match(html,/Récupérer la dernière image payée/);
   assert.match(html,/recompose-image-job/);

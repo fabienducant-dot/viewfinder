@@ -26,7 +26,7 @@ test("le parcours navigateur prépare les sept formats avec une graine commune e
 test("un suivi interrompu conserve le job payant et réutilise son ID au prochain essai",async()=>{
  const seen=[];const item={platform:"Instagram",mission:"Faire réserver",topic:"dos",referenceSelectionIds:[],v3Plan:{contract:{name:"Massage dos/zone"}}};
  item.contentData={caption:"Texte déjà préparé"};
- const ctx=vm.createContext({Date,state:{scheduled:[item],prestationName:"Reiki"},API_IMAGE_SIZE_BY_PLATFORM:{},PLATFORM_ASPECT:{},
+ const ctx=vm.createContext({Date,uid:()=>"request-fixture",state:{scheduled:[item],prestationName:"Reiki"},API_IMAGE_SIZE_BY_PLATFORM:{},PLATFORM_ASPECT:{},
   LS:{set:()=>true},resolveReferenceSelectionsByIds:async()=>[],
   confirmAndGenerateImage:async prepared=>{seen.push(prepared);prepared.onImageJobCreated("paid-job");return {ok:false,error:"interruption réseau"};}});
  vm.runInContext(section("async function generateImageForCampaignItem(","/* Génération de texte pour un post de campagne"),ctx);

@@ -29,7 +29,7 @@ function runtimeFailure(error){return json(500,{ok:false,errorType:String(error?
 function healthcheck(){try{const {compositor}=loadCompositorRuntime();return json(200,{ok:true,recomposeVersion:RECOMPOSE_VERSION,compositorVersion:compositor.COMPOSITOR_VERSION,logoAsset:"assets/sdz-logo-compositor.png",fonts:{cormorant600:true,manrope500:true,manrope600:true},imageGenerationCalls:0});}catch(error){return runtimeFailure(error);}}
 
 function store(name){const opts={consistency:"strong"};if(process.env.BLOBS_SITE_ID&&process.env.BLOBS_TOKEN)return getStore({name,siteID:process.env.BLOBS_SITE_ID,token:process.env.BLOBS_TOKEN,...opts});return getStore({name,...opts});}
-function isRecoverableOriginal(job){return job?.status==="completed"&&Boolean(job.rawResultKey)&&Boolean(job.v3Plan)&&Boolean(job.v3Finalization?.analysis)&&!job.recomposedFrom;}
+function isRecoverableOriginal(job){return ["completed","failed"].includes(job?.status)&&Boolean(job.rawResultKey)&&Boolean(job.v3Plan)&&Boolean(job.v3Finalization?.analysis)&&!job.recomposedFrom;}
 
 /* Recherche de récupération : l'ancienne version listait récursivement TOUS les blobs sous jobs/
    puis relisait chaque job séquentiellement. Sur un store historique cela dépassait la limite de

@@ -129,7 +129,10 @@ exports.handler=async event=>{
     }
 
     const rawResultKey=`jobs/${jobId}/raw-result`;
-    try{await store.set(rawResultKey,JSON.stringify({b64,url,preserved:true}));}
+    try{
+      await store.set(rawResultKey,JSON.stringify({b64,url,preserved:true}));
+      if(!await safeSetJobStatus(store,jobId,{rawResultKey,v3Plan,usedReference,imageGenerationCallCount:1}))throw new Error("Métadonnées de récupération non enregistrées.");
+    }
     catch(rawWriteErr){
       await safeSetJobStatus(store,jobId,{status:"failed",error:{message:`Conservation de la photographie brute impossible : ${String(rawWriteErr.message||rawWriteErr)}`,source:"storage"},imageGenerationCallCount:1});
       return {statusCode:200,body:JSON.stringify({ok:false,error:"Conservation de la photographie brute impossible",imageGenerationCallCount:1})};
@@ -161,6 +164,7 @@ exports.handler=async event=>{
 
     const finalCompositionEngine=v3Finalization?.compositionManifest?.finalCompositionEngine||(brandComposited?"sharp-server":null);
     if(v3Plan&&finalCompositionEngine!=="sharp-server")throw new Error("Résultat premium sans moteur Sharp serveur.");
+    if(v3Finalization&&!await safeSetJobStatus(store,jobId,{v3Finalization}))throw new Error("Analyse de récupération non enregistrée.");
     const resultKey=`jobs/${jobId}/result`;
     try{await store.set(resultKey,JSON.stringify({b64,url,usedReference,brandComposited,finalCompositionEngine,v3Finalization}));}
     catch(resultWriteErr){
@@ -178,7 +182,7 @@ exports.handler=async event=>{
     return {statusCode:200,body:JSON.stringify({ok:true,imageGenerationCallCount:1})};
   }catch(err){
     console.error(`[process-image-job-background] Erreur inattendue pour ${jobId} : ${String(err&&err.message||err)}`);
-    try{await safeSetJobStatus(openJobStore(),jobId,{status:"failed",error:{message:"Erreur interne inattendue.",source:"internal"}});}catch(error){}
+    try{await safeSetJobStatus(openJobStore(),jobId,{status:"failed",...(err.finalization?{v3Finalization:err.finalization}:{}),error:{message:String(err.message||"Erreur interne inattendue.").slice(0,500),source:err.code||"internal"}});}catch(error){}
     return {statusCode:200,body:JSON.stringify({ok:false,error:"Erreur interne"})};
   }
 };

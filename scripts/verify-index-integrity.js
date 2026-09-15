@@ -50,7 +50,7 @@ for (const marker of [
   "renderNav();",
   "renderMain();",
   "updateCount();",
-  'const VF_VERSION = "3.2.3-campaign-coherence"',
+  'const VF_VERSION = "3.2.4-campaign-resilience"',
 ]) {
   if (!inlineScripts[0].includes(marker)) {
     throw new Error(`Marqueur de démarrage absent de index.html : ${marker}`);

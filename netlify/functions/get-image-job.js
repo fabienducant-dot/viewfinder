@@ -14,6 +14,10 @@ function openJobStore(){
   return getStore({ name: "viewfinder-image-jobs", ...opts });
 }
 
+function failedResponse(job){
+  const recoverable=!!(job.rawResultKey&&job.v3Plan&&job.v3Finalization?.analysis);
+  return {statusCode:200,headers:{"Content-Type":"application/json"},body:JSON.stringify({ok:false,jobId:job.jobId,status:"failed",error:job.error,costAudit:job.costAudit||null,imageGenerationCallCount:job.imageGenerationCallCount||0,recoverable,recovery:recoverable?{v3Plan:job.v3Plan,v3Finalization:job.v3Finalization,rawResultAvailable:true}:null})};
+}
 function createHandler(openStore = openJobStore){
   return async (event) => {
   if (event.httpMethod !== "GET") {
@@ -43,11 +47,11 @@ function createHandler(openStore = openJobStore){
         error: { message: "La génération a dépassé la durée maximale autorisée.", source: "timeout" },
       };
       try { await store.set(`jobs/${jobId}`, JSON.stringify(timedOutJob)); } catch (e) { /* on répond quand même avec le statut calculé */ }
-      return { statusCode: 200, headers: { "Content-Type": "application/json" }, body: JSON.stringify({ ok: false, jobId, status: "failed", error: timedOutJob.error }) };
+      return failedResponse(timedOutJob);
     }
 
     if (job.status === "failed") {
-      return { statusCode: 200, headers: { "Content-Type": "application/json" }, body: JSON.stringify({ ok: false, jobId, status: "failed", error: job.error, costAudit:job.costAudit||null, imageGenerationCallCount:job.imageGenerationCallCount||0 }) };
+      return failedResponse(job);
     }
 
     if (job.status === "completed") {

@@ -725,6 +725,8 @@ function normalizeScheduledPost(p){
     headlineApplied: !!p.headlineApplied,
     overlayWarning: p.overlayWarning || null,
     pendingImageJobId: p.pendingImageJobId || null, // permet de reprendre un job payant après fermeture/interruption Android
+    clientRequestId: p.clientRequestId || null,
+    finalCompositionEngine: p.finalCompositionEngine || p.v3Finalization?.compositionManifest?.finalCompositionEngine || null,
     aiLogoIntegrationUsed: !!p.aiLogoIntegrationUsed,
     serverBrandCompositionUsed: !!p.serverBrandCompositionUsed,
     brandComposited: !!p.brandComposited,
@@ -790,7 +792,7 @@ function normalizeState(){
   state.apiProviders = Array.isArray(state.apiProviders) ? state.apiProviders : [];
   state.productionModes = Array.isArray(state.productionModes) ? state.productionModes : [];
   state.campaign = Array.isArray(state.campaign) ? state.campaign : [];
-  state.scheduled = Array.isArray(state.scheduled) ? state.scheduled.map(normalizeScheduledPost).filter(Boolean) : [];
+  state.scheduled = Array.isArray(state.scheduled) ? state.scheduled.map(p=>{const normalized=normalizeScheduledPost(p);return normalized?Object.assign(p,normalized):null;}).filter(Boolean) : [];
   state.packHistory = Array.isArray(state.packHistory) ? state.packHistory.map(normalizeCampaignHistoryEntry).filter(Boolean) : [];
   state.packVersions = (state.packVersions && typeof state.packVersions==="object" && !Array.isArray(state.packVersions)) ? state.packVersions : {};
   state.qualityScores = (state.qualityScores && typeof state.qualityScores==="object" && !Array.isArray(state.qualityScores))
@@ -5225,8 +5227,9 @@ async function recoverAndRecomposeImageJob(record,onStatus){
   let sourceResult=null;
   const statusResponse=await fetch(`/.netlify/functions/get-image-job?jobId=${encodeURIComponent(record.jobId)}`);
   const status=await fetchJsonOrThrowRaw(statusResponse,"récupération du travail");
-  if(!statusResponse.ok||status.error)throw new Error(status.error||"Travail source introuvable.");
-  if(status.status==="completed")sourceResult=status.result;
+  if(!statusResponse.ok||(status.error&&!status.recoverable))throw new Error(status.error?.message||status.error||"Travail source introuvable.");
+  if(status.status==="failed"&&status.recoverable)sourceResult=status.recovery;
+  else if(status.status==="completed")sourceResult=status.result;
   else sourceResult=await pollImageJob(record.jobId,onStatus,null);
   const sourceFinalization=sourceResult.v3Finalization||null;
   if(!sourceFinalization?.analysis)throw new Error("L'analyse serveur de la photographie brute n'est pas disponible.");
@@ -5266,28 +5269,28 @@ async function confirmAndGenerateImage(prepared, onStatus, cancelToken){
   const productReferenceRequired = psioReferenceRequired || healyReferenceRequired;
   const brandReferenceRequired = logoRequiredFor(platform);
 
-  if(prepared.blockingError){
+  if(!prepared.resumeJobId && prepared.blockingError){
     return {
       ...prepared, phase:"image_failed", ok:false, stage:"preflight",
       error:`Génération bloquée avant l'appel image : ${prepared.blockingError} Aucun crédit image n'a été consommé.`,
     };
   }
   const psioReferenceCount=(referenceSelections||[]).filter(r=>OFFICIAL_PSIO_REFERENCE_IDS.has(r.id)&&r.dataUrl).length;
-  if(psioReferenceRequired && psioReferenceCount!==OFFICIAL_PSIO_REFERENCES.length){
+  if(!prepared.resumeJobId && psioReferenceRequired && psioReferenceCount!==OFFICIAL_PSIO_REFERENCES.length){
     return {
       ...prepared, phase:"image_failed", ok:false, stage:"preflight",
       error:"Référence produit officielle PSiO® absente : génération bloquée avant l'appel image. Aucun crédit image n'a été consommé.",
     };
   }
   const healyReferenceCount=(referenceSelections||[]).filter(r=>OFFICIAL_HEALY_REFERENCE_IDS.has(r.id)&&r.dataUrl).length;
-  if(healyReferenceRequired && healyReferenceCount!==OFFICIAL_HEALY_REFERENCES.length){
+  if(!prepared.resumeJobId && healyReferenceRequired && healyReferenceCount!==OFFICIAL_HEALY_REFERENCES.length){
     return {
       ...prepared, phase:"image_failed", ok:false, stage:"preflight",
       error:"Référence produit officielle Healy absente : génération bloquée avant l'appel image. Aucun crédit image n'a été consommé.",
     };
   }
 
-  if(brandReferenceRequired){
+  if(!prepared.resumeJobId && brandReferenceRequired){
     onStatus && onStatus("Vérification du logo officiel...");
     const officialLogo = await getOfficialLogoAsset();
     if(!officialLogo){
@@ -5306,8 +5309,8 @@ async function confirmAndGenerateImage(prepared, onStatus, cancelToken){
   }
 
   onStatus && onStatus("Génération de l'image...");
-  const brandReferenceDataUrl = prepared.brandReferenceDataUrl || (await getOfficialLogoAsset())?.dataUrl || null;
-  if(brandReferenceRequired && !brandReferenceDataUrl){
+  const brandReferenceDataUrl = prepared.resumeJobId ? null : prepared.brandReferenceDataUrl || (await getOfficialLogoAsset())?.dataUrl || null;
+  if(!prepared.resumeJobId && brandReferenceRequired && !brandReferenceDataUrl){
     return { ...prepared, phase:"image_failed", ok:false, stage:"preflight",
       error:"Fichier du logo officiel absent : génération bloquée avant l'appel image. Aucun crédit image n'a été consommé." };
   }
@@ -5342,8 +5345,8 @@ async function confirmAndGenerateImage(prepared, onStatus, cancelToken){
           zoneText: String(brief.zoneTexte || brief.zoneLogo || ""),
         },
         model: "gpt-image-2",
-        quality: (state.costMode||"test")==="production" ? "high" : "low",
-        costMode: state.costMode||"test",
+        quality: (prepared.v3Plan?.costMode||state.costMode||"test")==="production" ? "high" : "low",
+        costMode: prepared.v3Plan?.costMode||state.costMode||"test",
         costConfirmed: true,
         costCeilingConfirmed: prepared.costCeilingConfirmed===true,
         clientRequestId: prepared.clientRequestId||uid(),
@@ -5390,7 +5393,7 @@ async function confirmAndGenerateImage(prepared, onStatus, cancelToken){
   // spécialisée avec les références officielles. Pour les autres prestations,
   // l'analyse V3 déjà réalisée côté serveur est réutilisée afin d'éviter deux
   // appels de vision supplémentaires et d'accélérer le rendu.
-  const serverAnalysis=productReferenceRequired?null:analysisFromServer({...prepared,brandComposited});
+  const serverAnalysis=productReferenceRequired&&!prepared.resumeJobId?null:analysisFromServer({...prepared,brandComposited});
   if(serverAnalysis){analysis=serverAnalysis;}
   else try{
     const productReferences=(referenceSelections||[]).filter(r=>(OFFICIAL_PSIO_REFERENCE_IDS.has(r.id)||OFFICIAL_HEALY_REFERENCE_IDS.has(r.id))&&r.dataUrl);
@@ -8172,6 +8175,9 @@ function buildPostTab(){
    ONGLET CALENDRIER — programmation et archive des publications
 ============================================================ */
 const SCHEDULE_STATUS_LABEL = { "brouillon":"📝 Brouillon", "validé":"☑️ Validé", "programmé":"⏳ Programmé", "envoyé":"✅ Envoyé", "erreur":"⚠️ Erreur" };
+function selectCampaignMaster(items){
+  return items.find(it=>it.masterRawImageJobId&&it.v3Finalization?.analysis)||items.find(it=>it.pendingImageJobId)||items.find(it=>it.clientRequestId&&!it.imageDataUrl)||items.find(it=>it.platform==="Instagram")||items[0];
+}
 async function recomposeCampaignItemFromMaster(item,master,onStatus){
   if(!master?.masterRawImageJobId)throw new Error("Photographie brute maîtresse indisponible.");
   onStatus&&onStatus("Recomposition Sharp gratuite — 0 appel Images...");
@@ -8185,10 +8191,26 @@ async function recomposeCampaignItemFromMaster(item,master,onStatus){
 /* Génération d'image pour un post de campagne — chaque plateforme suit son template V3 propre.
    Retourne un message de statut, ou lève une erreur (jamais de génération payante relancée automatiquement). */
 async function generateImageForCampaignItem(item, onStatus, cancelToken){
-  if(item.blockingError) throw new Error("Génération bloquée : " + item.blockingError);
+  const active=generateImageForCampaignItem.active||(generateImageForCampaignItem.active=new Map());
+  const key=item.id||item;
+  if(active.has(key))return active.get(key);
+  const task=runImageForCampaignItem(item,onStatus,cancelToken);
+  active.set(key,task);
+  try{return await task;}finally{active.delete(key);}
+}
+async function runImageForCampaignItem(item, onStatus, cancelToken){
+  if(!item.pendingImageJobId && item.blockingError) throw new Error("Génération bloquée : " + item.blockingError);
+  item.clientRequestId=item.clientRequestId||uid();
+  if(!LS.set("vf-scheduled",state.scheduled)&&!item.pendingImageJobId)throw new Error("Stockage indisponible : impossible de sécuriser la reprise. Libérez de la place avant de générer.");
+  const estimate=item.v3Plan?.preflightCostAudit;
+  let costCeilingConfirmed=false;
+  if(!item.pendingImageJobId && estimate?.estimatedTotalMax>.30){
+    costCeilingConfirmed=confirm(`CONFIRMATION SUPPLÉMENTAIRE — une photographie maîtresse, mode ${estimate.effectiveMode}, qualité ${estimate.effectiveQuality}. Total estimé : ${Number(estimate.estimatedTotalMin).toFixed(3)} € à ${Number(estimate.estimatedTotalMax).toFixed(3)} € (estimation, pas facture). La borne haute dépasse 0,30 €. Continuer ?`);
+    if(!costCeilingConfirmed)throw new Error("Génération annulée avant création du job.");
+  }
   const t0 = Date.now();
   const size = API_IMAGE_SIZE_BY_PLATFORM[item.platform] || "1024x1024";
-  const referenceSelections = await resolveReferenceSelectionsByIds(item.referenceSelectionIds||[]);
+  const referenceSelections = item.pendingImageJobId ? [] : await resolveReferenceSelectionsByIds(item.referenceSelectionIds||[]);
   let phaseB;
   try{
     phaseB = await confirmAndGenerateImage({
@@ -8197,6 +8219,8 @@ async function generateImageForCampaignItem(item, onStatus, cancelToken){
         topic:item.topic, size, aspectKey:PLATFORM_ASPECT[item.platform], isCampaign:true },
       brief:item.creativeBrief, imagePrompt:item.imagePrompt, referenceSelections,v3Plan:item.v3Plan||null,content:item.contentData||null,
       resumeJobId: item.pendingImageJobId || undefined,
+      clientRequestId:item.clientRequestId,
+      costCeilingConfirmed,
       // Persisté en localStorage DÈS la création du job, avant même le premier sondage : si Android
       // tue l'app en arrière-plan pendant la génération, resumePendingCampaignJobs() (appelée au
       // démarrage) retrouve ce jobId et reprend le suivi — le job continue de toute façon côté
@@ -8216,7 +8240,7 @@ async function generateImageForCampaignItem(item, onStatus, cancelToken){
   /* Post-traitement : MÊME fonction que la génération unitaire (format officiel, accroche,
      logo) — aucun code dupliqué, aucun chemin parallèle. */
   const finalizedItem = await finalizeGeneratedImage({
-    inputs:{ platform:item.platform, prestation:state.prestationName }, dataUrl: phaseB.dataUrl,
+    inputs:{ platform:item.platform, prestation:item.v3Plan?.contract?.name||state.prestationName }, dataUrl: phaseB.dataUrl,
     logoSentAsReference:false, usedReference, content: phaseB.content || item.contentData || null,
     brief:item.creativeBrief, analysis:phaseB.analysis||null,
     aiLogoIntegrationUsed:false, serverBrandCompositionUsed:true,
@@ -8654,7 +8678,7 @@ function buildCalendarTab(){
       /* Une campagne compatible paie une photographie maîtresse au maximum. Toutes les autres
          plateformes sont dérivées séquentiellement par Sharp, sans appel Images ni rafale API. */
       try{
-        const master=items.find(it=>it.masterRawImageJobId&&it.v3Finalization?.analysis)||items.find(it=>it.platform==="Instagram")||items[0];
+        const master=selectCampaignMaster(items);
         if(!master.imageDataUrl)await processItem(master,null);
         if(cancelToken.cancelled)throw new Error("Campagne interrompue ; le travail déjà lancé reste récupérable.");
         if(!master.masterRawImageJobId)throw new Error(master.error||"Photographie maîtresse indisponible ; réessayez pour reprendre le suivi du même travail.");
@@ -8962,7 +8986,7 @@ function buildApiTab(){
 ============================================================ */
 
 /* ---- Versionnage ---- */
-const VF_VERSION = "3.2.3-campaign-coherence";
+const VF_VERSION = "3.2.4-campaign-resilience";
 /* Hash déterministe de l'état des règles : deux runs au même hash = strictement les mêmes règles.
    Couvre : modules (contenu+état), UNIVERS_SDZ, charte condensée, garde-fou sécurité. */
 function computeModulesHash(){
