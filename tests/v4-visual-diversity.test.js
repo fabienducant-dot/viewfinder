@@ -71,6 +71,6 @@ test("l'historique réel inclut aussi les tentatives refusées et récupère les
   assert.match(html,/rememberV4ArtAttempt\(prepared\.v3Plan,prepared\.clientRequestId\)/);
   assert.match(html,/artHistory:v4ArtHistory\(\)/);
   assert.doesNotMatch(html,/artHistory:\(state\.imageHistory\|\|\[\]\)\.map\(x=>x\.artFingerprint\)/);
-  assert.match(html,/creativeSeed:`\$\{prestation\}-\$\{topic\}-\$\{Date\.now\(\)\}`/);
+  assert.match(html,/creativeSeed:inputs\.creativeSeed\|\|`\$\{prestation\}-\$\{topic\}-\$\{Date\.now\(\)\}`/);
   assert.match(html,/historyEntry\.artFingerprint=flow\.artFingerprint\|\|null/);
 });

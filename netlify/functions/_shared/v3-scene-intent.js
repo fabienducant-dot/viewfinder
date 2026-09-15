@@ -103,7 +103,7 @@ function environmentFor({subjectBrief,artDirection,registers,platform}){
  if(normalizePlatform(platform)==="Google Business")return `Lieu crédible, simple et premium, immédiatement lisible, sans effet spectaculaire qui ferait croire à un faux cabinet.${variation?` ${variation}`:""}`;
  const pieces=[];
  if(registers.architectural){const architecture=clean(art.architectureDescription||art.locationFamily||"architecture noire et or crédible, avec profondeur réelle et ouverture spatiale");pieces.push(`Architecture : ${architecture}.`);}
- if(registers.fantastic)pieces.push("Fantastique adulte et crédible : l’étrangeté vient de l’échelle, de la profondeur, de la brume, du paysage et de la lumière, jamais d’un effet magique gratuit ou d’un symbole occulte.");
+ if(registers.fantastic)pieces.push("Fantastique adulte et crédible : un espace extraordinaire s’ouvre dans la profondeur, reliefs ou volumes à une échelle saisissante, lumière accueillante. Un reflet doré ou de la brume seuls ne suffisent pas. Matières photoréalistes, aucun symbole occulte.");
  if(!pieces.length)pieces.push("Environnement SDZ réel ou métaphorique, noir profond et matières sombres détaillées, jamais cabine de spa générique.");
  if(variation)pieces.push(variation);
  return pieces.join(" ");

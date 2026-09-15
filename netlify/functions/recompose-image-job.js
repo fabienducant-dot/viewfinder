@@ -7,6 +7,7 @@ const {chooseLayout,analyzeActualImage,normalizePlatform}=require("./_shared/v3-
 const {compatibilityMatrix,cropPosition}=require("./_shared/v3-campaign");
 const {assessQuality}=require("./_shared/v3-quality");
 const {buildCostAudit}=require("./_shared/v3-cost-control");
+const {targetCampaignPlan}=require("./_shared/v4-campaign-plan");
 
 const RECOMPOSE_VERSION="3.1.0-fast-recovery";
 const EXPECTED_FONTS=Object.freeze(["Cormorant Garamond 600","Manrope 500","Manrope 600"]);
@@ -82,16 +83,17 @@ exports.handler=async event=>{
     const rawRecord=await jobs.get(source.rawResultKey);
     if(!rawRecord)return recoveryFailure(410,"RAW_SOURCE_MISSING","La photographie originale n'est plus disponible sur le serveur. Aucune nouvelle génération n'a été lancée.");
     let image;try{image=await rawBuffer(typeof rawRecord==="string"?JSON.parse(rawRecord):rawRecord);}catch(error){return recoveryFailure(410,"RAW_SOURCE_MISSING","La photographie originale n'est plus disponible sur le serveur. Aucune nouvelle génération n'a été lancée.");}
-    const analysis=analyzeActualImage(source.v3Finalization.analysis),layout=chooseLayout({platform,contract:source.v3Plan.contract,analysis});layout.cropPosition=cropPosition(analysis);
-    const final=await composeBrandPoster({imageBuffer:image,platform,headline:String(body.headline||""),zoneText:String(body.zoneText||""),selectedLayout:layout,posterStrategy:source.v3Plan.posterStrategy});
+    const targetPlan=targetCampaignPlan(source.v3Plan,platform,body.targetPlan);
+    const analysis=analyzeActualImage(source.v3Finalization.analysis),layout=chooseLayout({platform,contract:targetPlan.contract,analysis});layout.cropPosition=cropPosition(analysis);
+    const final=await composeBrandPoster({imageBuffer:image,platform,headline:String(body.headline||""),zoneText:String(body.zoneText||""),selectedLayout:layout,posterStrategy:targetPlan.posterStrategy});
     const compositionManifest=final.compositionManifest||null;
-    const quality=assessQuality({contract:source.v3Plan.contract,sceneIntent:source.v3Plan.sceneIntent||null,analysis,composition:{imageExists:true,logoIntegrity:compositionManifest?.logoWithinCanvas!==false,logoAssetIntegrity:compositionManifest?.logoAssetIntegrity!==false,logoFringeDetected:compositionManifest?.logoFringeDetected===true,logoScaleValid:compositionManifest?.logoScaleValid!==false,marginsValid:compositionManifest?.marginsValid!==false,textWithinCanvas:compositionManifest?.textWithinCanvas!==false&&compositionManifest?.titleExact!==false&&compositionManifest?.subtitleExact!==false,protectedCollision:compositionManifest?.zonesDisjoint===false,logoRectangleOpaque:compositionManifest?.logoRectangleOpaque===true,contrastValid:true,gazeHierarchyValid:compositionManifest?.hierarchyValid!==false,thumbnailImpact:true}});
+    const quality=assessQuality({contract:source.v3Plan.contract,sceneIntent:source.v3Plan.sceneIntent||null,analysis,composition:{imageExists:true,logoIntegrity:compositionManifest?.logoWithinCanvas!==false,logoAssetIntegrity:compositionManifest?.logoAssetIntegrity!==false,logoFringeDetected:compositionManifest?.logoFringeDetected===true,logoScaleValid:compositionManifest?.logoScaleValid!==false,marginsValid:compositionManifest?.marginsValid!==false,textWithinCanvas:compositionManifest?.textWithinCanvas!==false&&compositionManifest?.titleExact!==false&&compositionManifest?.subtitleExact!==false,protectedCollision:compositionManifest?.zonesDisjoint===false,logoRectangleOpaque:compositionManifest?.logoRectangleOpaque===true,contrastValid:analysis.availableContrast>=.25,gazeHierarchyValid:compositionManifest?.hierarchyValid!==false,thumbnailImpact:analysis.density<.92}});
     const derivedJobId=crypto.randomUUID(),resultKey=`jobs/${derivedJobId}/result`;
     const finalCompositionEngine=compositionManifest?.finalCompositionEngine||"sharp-server";
     await jobs.set(resultKey,JSON.stringify({b64:final.toString("base64"),url:null,brandComposited:true,finalCompositionEngine,recomposedFrom:recoverySourceJobId,compositionManifest}));
-    await jobs.set(`jobs/${derivedJobId}`,JSON.stringify({jobId:derivedJobId,status:"completed",createdAt:Date.now(),updatedAt:Date.now(),resultKey,rawResultKey:source.rawResultKey,brandComposited:true,finalCompositionEngine,v3Plan:source.v3Plan,v3Finalization:{analysis,layout,quality,compositionManifest},recomposedFrom:recoverySourceJobId,costAudit:buildCostAudit({mode:"recompose",visionUsage:false,imageCalls:0})}));
+    await jobs.set(`jobs/${derivedJobId}`,JSON.stringify({jobId:derivedJobId,status:"completed",createdAt:Date.now(),updatedAt:Date.now(),resultKey,rawResultKey:source.rawResultKey,brandComposited:true,finalCompositionEngine,v3Plan:targetPlan,v3Finalization:{analysis,layout,quality,compositionManifest},recomposedFrom:recoverySourceJobId,costAudit:buildCostAudit({mode:"recompose",visionUsage:false,imageCalls:0})}));
     await jobs.set(`jobs/${recoverySourceJobId}`,JSON.stringify({...source,derivedVersions:[...(source.derivedVersions||[]),derivedJobId],updatedAt:Date.now()}));
-    return json(200,{ok:true,jobId:derivedJobId,recoverySourceJobId,resultUrl:`/.netlify/functions/get-image-result?jobId=${derivedJobId}`,platform,layout,quality,compositionManifest,brandComposited:true,finalCompositionEngine,costAudit:buildCostAudit({mode:"recompose",visionUsage:false,imageCalls:0}),imageGenerationCalls:0});
+    return json(200,{ok:true,jobId:derivedJobId,recoverySourceJobId,resultUrl:`/.netlify/functions/get-image-result?jobId=${derivedJobId}`,platform,v3Plan:targetPlan,layout,quality,compositionManifest,brandComposited:true,finalCompositionEngine,costAudit:buildCostAudit({mode:"recompose",visionUsage:false,imageCalls:0}),imageGenerationCalls:0});
   }catch(error){return json(500,{error:String(error.message||error),recomposeVersion:RECOMPOSE_VERSION,imageGenerationCalls:0});}
 };
 

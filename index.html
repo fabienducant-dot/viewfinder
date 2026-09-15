@@ -5961,8 +5961,8 @@ async function prepareAuthoritativeV3(inputs){
   const normalizedPlatform=platform==="Article Blog Wix"?"Blog":platform;
   const planResponse=await fetch("/.netlify/functions/plan-v3",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({
     service:prestation,platform:normalizedPlatform,marketingObjective:mission||"Faire réserver",
-    audience:"clientèle La Santé des Zèbres",artHistory:v4ArtHistory(),
-    creativeSeed:`${prestation}-${topic}-${Date.now()}`,subject:topic,selectedRegisters:[...(registres||[])],
+    audience:"clientèle La Santé des Zèbres",artHistory:inputs.artHistory||v4ArtHistory(),
+    creativeSeed:inputs.creativeSeed||`${prestation}-${topic}-${Date.now()}`,subject:topic,selectedRegisters:[...(registres||[])],
     textChoice:state.textOnImageChoice||"automatic",costMode:state.costMode||"test",
     requestedSize:inputs.size||API_IMAGE_SIZE_BY_PLATFORM[platform]||"1024x1024"
   })});
@@ -6020,13 +6020,15 @@ async function prepareAuthoritativeV3(inputs){
 async function generateCampaignPosts(topic, missionKey, onProgress){
   /* Pipeline produit unique : chaque item reçoit directement son plan V3 autoritaire. */
   const campaignId = uid();
+  const campaignSeed = `campaign-${campaignId}`;
+  const campaignHistory = v4ArtHistory();
   const posts = [];
   for(let i=0; i<CAMPAIGN_ITEMS.length; i++){
     const item = CAMPAIGN_ITEMS[i];
     const aspect = item.aspectOverride || PLATFORM_ASPECT[item.platform];
     const isStory = item.platform === "Story";
     if(onProgress) onProgress(`${i+1}/${CAMPAIGN_ITEMS.length} — ${item.label}`);
-    const prepared = await prepareAuthoritativeV3({ mission: missionKey, platform: item.platform, prestation: state.prestationName, topic, aspectKey: aspect, size: API_IMAGE_SIZE_BY_PLATFORM[item.platform]||"1024x1024", isCampaign:true, registres: Array.isArray(state.registres) ? [...state.registres] : [], userReferenceDataUrl: state.userReferenceUpload && state.userReferenceUpload.dataUrl, userReferenceImageId: state.userReferenceUpload && state.userReferenceUpload.id, aiLogoIntegration: !!state.aiLogoIntegration });
+    const prepared = await prepareAuthoritativeV3({ mission: missionKey, platform: item.platform, prestation: state.prestationName, topic, creativeSeed:campaignSeed, artHistory:campaignHistory, aspectKey: aspect, size: API_IMAGE_SIZE_BY_PLATFORM[item.platform]||"1024x1024", isCampaign:true, registres: Array.isArray(state.registres) ? [...state.registres] : [], userReferenceDataUrl: state.userReferenceUpload && state.userReferenceUpload.dataUrl, userReferenceImageId: state.userReferenceUpload && state.userReferenceUpload.id, aiLogoIntegration: !!state.aiLogoIntegration });
     posts.push({
       id: uid(), campaignId, campaignTopic: topic, campaignLabel: item.label,
       platform: item.platform, mission: missionKey, topic,
@@ -8174,9 +8176,11 @@ async function recomposeCampaignItemFromMaster(item,master,onStatus){
   if(!master?.masterRawImageJobId)throw new Error("Photographie brute maîtresse indisponible.");
   onStatus&&onStatus("Recomposition Sharp gratuite — 0 appel Images...");
   const headline=(PLATFORM_OVERLAY[item.platform]==="accroche"||PLATFORM_OVERLAY[item.platform]==="fort")?[item.v3Plan?.posterStrategy?.title,item.v3Plan?.posterStrategy?.subtitle].filter(Boolean).join(" | "):"";
-  const res=await fetch("/.netlify/functions/recompose-image-job",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({sourceJobId:master.masterRawImageJobId,platform:item.platform,headline,zoneText:item.creativeBrief?.zoneTexte||""})});
+  const res=await fetch("/.netlify/functions/recompose-image-job",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({sourceJobId:master.masterRawImageJobId,platform:item.platform,targetPlan:item.v3Plan,headline,zoneText:item.creativeBrief?.zoneTexte||""})});
   const data=await fetchJsonOrThrowRaw(res,"recomposition gratuite");if(!res.ok||data.error)throw new Error(data.error||`Erreur ${res.status}`);
-  item.imageDataUrl=await fetchImageAsDataUrl(data.resultUrl);item.masterRawImageJobId=master.masterRawImageJobId;item.sourceImageJobId=data.jobId;item.v3Plan=master.v3Plan;item.artFingerprint=master.artFingerprint||null;item.v3Finalization={analysis:master.v3Finalization?.analysis,layout:data.layout,quality:data.quality};item.v3Quality=data.quality;item.platformCrop=data.layout?.cropPosition||null;item.platformLayout=data.layout;item.platformComposition={recomposedFrom:master.masterRawImageJobId,imageGenerationCalls:0};item.platformQualityReport=data.quality;item.costAudit=data.costAudit;item.logoApplied=true;item.headlineApplied=!!headline;LS.set("vf-scheduled",state.scheduled);return "Recomposition terminée ✓ — 0 appel de génération d’image";
+  if(data.finalCompositionEngine!=="sharp-server"||!data.compositionManifest)throw new Error("Preuve de composition Sharp absente.");
+  item.imageDataUrl=await fetchImageAsDataUrl(data.resultUrl);item.masterRawImageJobId=master.masterRawImageJobId;item.sourceImageJobId=data.jobId;item.v3Plan=data.v3Plan||item.v3Plan;item.artFingerprint=master.artFingerprint||null;item.v3Finalization={analysis:master.v3Finalization?.analysis,layout:data.layout,quality:data.quality,compositionManifest:data.compositionManifest};item.v3Quality=data.quality;item.finalCompositionEngine=data.finalCompositionEngine;item.brandComposited=true;item.serverBrandCompositionUsed=true;item.platformCrop=data.layout?.cropPosition||null;item.platformLayout=data.layout;item.platformComposition={recomposedFrom:master.masterRawImageJobId,imageGenerationCalls:0};item.platformQualityReport=data.quality;item.costAudit=data.costAudit;item.logoApplied=true;item.headlineApplied=!!data.compositionManifest.title;item.status=data.quality?.ok===false?"refusé":"brouillon";LS.set("vf-scheduled",state.scheduled);
+  return data.quality?.ok===false?"Recomposition disponible — qualité à revoir, 0 génération d’image":"Recomposition terminée ✓ — 0 appel de génération d’image";
 }
 /* Génération d'image pour un post de campagne — chaque plateforme suit son template V3 propre.
    Retourne un message de statut, ou lève une erreur (jamais de génération payante relancée automatiquement). */
@@ -8189,9 +8193,9 @@ async function generateImageForCampaignItem(item, onStatus, cancelToken){
   try{
     phaseB = await confirmAndGenerateImage({
       phase:"prepared",
-      inputs:{ mission:item.mission, platform:item.platform, prestation:state.prestationName,
+      inputs:{ mission:item.mission, platform:item.platform, prestation:item.v3Plan?.contract?.name||state.prestationName,
         topic:item.topic, size, aspectKey:PLATFORM_ASPECT[item.platform], isCampaign:true },
-      brief:item.creativeBrief, imagePrompt:item.imagePrompt, referenceSelections,v3Plan:item.v3Plan||null,
+      brief:item.creativeBrief, imagePrompt:item.imagePrompt, referenceSelections,v3Plan:item.v3Plan||null,content:item.contentData||null,
       resumeJobId: item.pendingImageJobId || undefined,
       // Persisté en localStorage DÈS la création du job, avant même le premier sondage : si Android
       // tue l'app en arrière-plan pendant la génération, resumePendingCampaignJobs() (appelée au
@@ -8200,7 +8204,7 @@ async function generateImageForCampaignItem(item, onStatus, cancelToken){
       onImageJobCreated: (jobId)=>{ item.pendingImageJobId = jobId; LS.set("vf-scheduled", state.scheduled); },
     }, onStatus, cancelToken);
   } finally {
-    item.pendingImageJobId = null; // le suivi est arrivé à son terme, quelle que soit l'issue
+    // A timeout or cancellation does not stop the paid server job. Keep its ID for recovery.
     LS.set("vf-scheduled", state.scheduled);
   }
   if(!phaseB.ok) throw new Error(phaseB.error || "Échec de la génération");
@@ -8223,7 +8227,7 @@ async function generateImageForCampaignItem(item, onStatus, cancelToken){
   });
   const dataUrl = finalizedItem.dataUrl;
   const logoApplied = finalizedItem.logoApplied;
-  item.imageDataUrl = dataUrl; item.logoApplied = logoApplied; item.usedReference = usedReference; item.referenceFallbackReason = referenceFallbackReason;
+  item.imageDataUrl = dataUrl; item.pendingImageJobId = null; item.logoApplied = logoApplied; item.usedReference = usedReference; item.referenceFallbackReason = referenceFallbackReason;
   item.serverBrandCompositionUsed = true; item.brandComposited = phaseB.brandComposited===true; item.finalCompositionEngine=phaseB.finalCompositionEngine||phaseB.v3Finalization?.compositionManifest?.finalCompositionEngine||null;
   item.layoutReport = finalizedItem.layoutReport||null;
   item.analysis = phaseB.analysis || null; item.analysisError = phaseB.analysisError || null;
@@ -8238,7 +8242,7 @@ async function generateImageForCampaignItem(item, onStatus, cancelToken){
   item.v3Quality=item.v3Finalization&&item.v3Finalization.quality||null;
   if(v3Rejected)item.status="refusé";
   const saved = LS.set("vf-scheduled", state.scheduled);
-  logToLab({ provider:"OpenAI", model:"gpt-image-2", type:"image", prompt:item.imagePrompt, promptHash:hashPrompt(item.imagePrompt), cost:null, durationMs:Date.now()-t0, status:"accepted" });
+  logToLab({ provider:"OpenAI", model:"gpt-image-2", type:"image", prompt:item.imagePrompt, promptHash:hashPrompt(item.imagePrompt), cost:null, durationMs:Date.now()-t0, status:v3Rejected?"rejected":"accepted" });
   let referenceLabel;
   if(usedReference) referenceLabel = "Référence visuelle utilisée ✓";
   else if(referenceFallbackReason) referenceLabel = "Référence non utilisée — génération standard de secours.";
@@ -8605,6 +8609,7 @@ function buildCalendarTab(){
     let batchCancelToken = null;
     function renderBatchStatus(){
       batchStatusBox.innerHTML = "";
+      if(statusLines._all)batchStatusBox.appendChild(el("div",{},statusLines._all));
       items.map(item=>item.platform).forEach(p=>{
         if(statusLines[p]) batchStatusBox.appendChild(el("div",{}, `${p} : ${statusLines[p]}`));
       });
@@ -8625,6 +8630,7 @@ function buildCalendarTab(){
          individuel. Chaque post a sa propre ligne de statut, mise à jour en direct. */
       async function processItem(it,master){
         try{
+          if(cancelToken.cancelled)throw new Error("__CANCELLED__");
           if(!it.imageDataUrl){
             if(master&&it!==master)statusLines[it.platform]=await recomposeCampaignItemFromMaster(it,master,(label)=>{statusLines[it.platform]=label;renderBatchStatus();});
             else await generateImageForCampaignItem(it, (label)=>{ statusLines[it.platform] = label; renderBatchStatus(); }, cancelToken);
@@ -8633,7 +8639,7 @@ function buildCalendarTab(){
             statusLines[it.platform] = "génération du texte..."; renderBatchStatus();
             await generateTextForCampaignItem(it);
           }
-          statusLines[it.platform] = "terminé ✓";
+          statusLines[it.platform] = it.v3Quality?.ok===false?"image disponible — qualité à revoir":"terminé ✓";
           it.error = null; // efface une éventuelle erreur d'une tentative précédente
           LS.set("vf-scheduled", state.scheduled);
         }catch(err){
@@ -8647,13 +8653,19 @@ function buildCalendarTab(){
 
       /* Une campagne compatible paie une photographie maîtresse au maximum. Toutes les autres
          plateformes sont dérivées séquentiellement par Sharp, sans appel Images ni rafale API. */
-      let master=items.find(it=>it.masterRawImageJobId&&it.v3Finalization?.analysis)||items.find(it=>it.platform==="Instagram")||items[0];
-      if(!master.imageDataUrl)await processItem(master,null);
-      if(!master.masterRawImageJobId)throw new Error("Le job maître n'a pas exposé son raw-result ; aucune adaptation payante automatique n'est autorisée.");
-      for(const it of items){if(it!==master&&needsWork(it))await processItem(it,master);}
-
-      batchBtn.disabled = false; batchCancelBtn.style.display = "none"; batchCancelToken = null;
-      renderMain();
+      try{
+        const master=items.find(it=>it.masterRawImageJobId&&it.v3Finalization?.analysis)||items.find(it=>it.platform==="Instagram")||items[0];
+        if(!master.imageDataUrl)await processItem(master,null);
+        if(cancelToken.cancelled)throw new Error("Campagne interrompue ; le travail déjà lancé reste récupérable.");
+        if(!master.masterRawImageJobId)throw new Error(master.error||"Photographie maîtresse indisponible ; réessayez pour reprendre le suivi du même travail.");
+        if(master.v3Quality?.ok===false)throw new Error("La photographie maîtresse est disponible mais refusée par le contrôle qualité. Aucune autre image payante n'a été lancée.");
+        for(const it of items){if(cancelToken.cancelled)break;if(it!==master&&needsWork(it))await processItem(it,master);}
+      }catch(error){statusLines._all=String(error.message||error);}
+      finally{
+        batchBtn.disabled = false; batchCancelBtn.style.display = "none"; batchCancelToken = null;
+        LS.set("vf-scheduled",state.scheduled);renderBatchStatus();
+        if(!statusLines._all&&!cancelToken.cancelled)renderMain();
+      }
     });
     frag.appendChild(batchBtn); frag.appendChild(batchCancelBtn); frag.appendChild(batchStatusBox);
 
@@ -8950,7 +8962,7 @@ function buildApiTab(){
 ============================================================ */
 
 /* ---- Versionnage ---- */
-const VF_VERSION = "3.2.2-v4-recovery";
+const VF_VERSION = "3.2.3-campaign-coherence";
 /* Hash déterministe de l'état des règles : deux runs au même hash = strictement les mêmes règles.
    Couvre : modules (contenu+état), UNIVERS_SDZ, charte condensée, garde-fou sécurité. */
 function computeModulesHash(){

@@ -10,6 +10,7 @@ const {inferSubjectBrief,buildPosterStrategy,buildLegacyProjection,relevanceScor
 const {buildImageCopyStrategy}=require("./v4-image-copy-strategy");
 const {buildConsistencyReport}=require("./v3-consistency-control");
 const {buildSceneIntent,auditSceneIntent}=require("./v3-scene-intent");
+const {projectNarrativePlan}=require("./v4-plan-projection");
 
 function planIdentity(plan){
  return crypto.createHash("sha256").update(JSON.stringify({
@@ -98,11 +99,13 @@ function planV3(input){
  if(!consistencyReport.ready)throw new Error(`Plan V4 incohérent — recomposition gratuite requise : ${consistencyReport.blockingReasons.join(", ")}`);
 
  const required=psioRequiredForContract(contract),psio=statusFromRecords({},required);
+ const projected=projectNarrativePlan({subjectBrief,posterStrategy,legacyProjection,artDirection,sceneIntent,contract});
+ const projectedCampaign=buildCampaignCreativeDirection({posterStrategy:projected.posterStrategy,postCopyStrategy,contract});
  const plan={
   version:4,
-  contract,subjectBrief,sceneIntent,posterStrategy,imageCopyStrategy,legacyProjection,postCopyStrategy,
-  campaignCreativeDirection,consistencyReport,freeScores,artDirection,photoBrief,
-  preflight:{...publicPreflight(artDirection),subjectBrief,sceneIntent,posterStrategy,imageCopyStrategy,postCopyStrategy,campaignCreativeDirection,consistencyReport,freeScores},
+  contract,...projected,sceneIntent,imageCopyStrategy,postCopyStrategy,
+  campaignCreativeDirection:projectedCampaign,consistencyReport,freeScores:{...freeScores,heuristic:true,validationStage:"before-image-generation"},photoBrief:{...photoBrief,primarySubject:projected.artDirection.primarySubject,secondarySubject:projected.artDirection.secondarySubject,primaryAction:projected.artDirection.primaryAction,story:projected.artDirection.story,tensionResolution:projected.artDirection.tensionResolution},
+  preflight:{...publicPreflight(projected.artDirection),subjectBrief:projected.subjectBrief,sceneIntent,posterStrategy:projected.posterStrategy,imageCopyStrategy,postCopyStrategy,campaignCreativeDirection:projectedCampaign,consistencyReport,freeScores:{...freeScores,heuristic:true,validationStage:"before-image-generation"}},
   artSelection:artDirection.artistic,
   costMode:input.costMode||"test",
   ...psio,
