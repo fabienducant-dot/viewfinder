@@ -49,6 +49,9 @@ test("matrice Sharp complète 19 sujets × 7 formats : aucun texte, logo ou sign
       assert.ok(m.subtitleWidths.every(width=>width<=m.safeWidth),`${platform}/${c.name}/subtitle widths`);
       assert.ok(m.usedHeight<=m.safeHeight,`${platform}/${c.name}/text height`);
       assert.ok(m.brandLockup.bottom<=m.height-m.brandLockup.minimumBottomMargin,`${platform}/${c.name}/brand bottom`);
+      assert.equal(m.brandLockup.city,"RAISMES");assert.equal(m.brandLockup.flankingRules,true);
+      assert.ok(m.brandLockup.ruleOuter*2<=m.brandLockup.signatureSafeWidth);
+      if(platform==="Story")assert.ok(m.brandLockup.bottom<=m.height*.88);
       assert.ok(m.logoBounds.left>=0&&m.logoBounds.right<=m.width&&m.logoBounds.top>=0&&m.logoBounds.bottom<=m.height,`${platform}/${c.name}/logo bounds`);
       count++;
     }

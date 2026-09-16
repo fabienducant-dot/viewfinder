@@ -56,6 +56,11 @@ function assessQuality({contract,sceneIntent=null,analysis={},composition={},non
  const brandTelemetryPresent=analysis.brandSafeZoneClean!==undefined||analysis.brandZoneIntrusionRisk!==undefined||analysis.brandZoneHighContrastGeometry!==undefined||analysis.brandZoneBrightGoldIntrusion!==undefined;
  if(validation.requireCinematicPoster&&brandTelemetryPresent&&(analysis.brandSafeZoneClean===false||Number(analysis.brandZoneIntrusionRisk||0)>.22||analysis.brandZoneHighContrastGeometry===true||analysis.brandZoneBrightGoldIntrusion===true))artistic.push("zone_branding_polluee");
 
+ if(validation.requireLuminousGold){
+  if(analysis.exposureReadable===false||(analysis.availableContrast!==undefined&&Number(analysis.availableContrast)<.25))artistic.push("scene_trop_sombre");
+  if(typeof analysis.goldPresence==="number"&&analysis.goldPresence<.5)artistic.push("or_insuffisant_dans_la_scene");
+  if(analysis.exposureReadable===undefined||analysis.goldPresence===undefined)warnings.push("lumiere_et_or_non_evalues_ancienne_analyse");
+ }
  const paletteDrift=Number(composition.paletteDrift??analysis.paletteDrift??0);
  if(paletteDrift>.45)artistic.push("derive_palette_importante");else if(paletteDrift>.15)warnings.push("derive_palette_moderee_corrigeable");
  if(composition.contrastValid===false)artistic.push("contraste_insuffisant");
