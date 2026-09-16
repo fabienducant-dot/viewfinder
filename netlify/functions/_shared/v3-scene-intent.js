@@ -3,7 +3,7 @@
 const crypto=require("crypto");
 const {normalizePlatform}=require("./v3-layout-engine");
 
-const VERSION="4.6.0-luminous-fantasy-gold";
+const VERSION="4.6.1-budgeted-scene-intent";
 const BODYWORK_RE=/massage|drainage|réflexologie/i;
 const PRODUCT_NAMES=new Set(["Luminothérapie PSIO®","Biorésonance quantique"]);
 const COMPOSITE_NAMES=new Set(["Offre Gold","Offre Sylver"]);
@@ -22,8 +22,15 @@ function resolveRegisters(subjectBrief={}){
  return Object.freeze({cinematic:true,fantastic:!realistic,architectural:includesAny(raw,["architecture","architectural","architecturale"])});
 }
 
+function affirmativeSceneRequest(value){
+ // Negated instructions describe what must NOT become a demonstration.
+ return clean(value).replace(/\b(?:sans|ne\s+pas|pas\s+de|aucun(?:e)?)\b[^.!?;]*(?=[.!?;]|$)/gi,clause=>{
+  const contrast=/\b(?:mais|cependant)\b/i.exec(clause);
+  return contrast?clause.slice(contrast.index):"";
+ });
+}
 function explicitDemonstrationRequested(subjectBrief={}){
- const raw=clean(subjectBrief.exactUserRequest||subjectBrief.rawSubject||"");
+ const raw=affirmativeSceneRequest(subjectBrief.exactUserRequest||subjectBrief.rawSubject||"");
  return /\b(montrer|montre|voir|visualiser|illustrer|filmer|photographier)\b[\s\S]{0,48}\b(séance|geste|technique|pression|étirement|mouvement|massage|réflexologie|appareil|dispositif|lunettes|futon|table)\b/i.test(raw)
   ||/\b(séance|geste|technique|massage en cours|réflexologie en cours|pression manuelle|étirement assisté|mouvement de massage)\b/i.test(raw);
 }
@@ -99,8 +106,9 @@ function visualVariationDirective(artDirection={},exactUserRequest=""){
 function environmentFor({subjectBrief,artDirection,registers,platform}){
  const authority=subjectBrief.spatialAuthority?.description||subjectBrief.explicitSceneRequest?.description||null,exact=clean(subjectBrief.exactUserRequest||""),art=artDirection?.artistic||{},variation=visualVariationDirective(artDirection,exact);
  if(authority){
-  const safe=withoutExact(authority,exact),fallback=withoutExact(art.architectureDescription||art.locationFamily||"",exact);
-  return `Le décor décrit dans DEMANDE EXACTE gouverne la scène. ${safe&&safe!=="le sujet demandé"?safe:fallback&&fallback!=="le sujet demandé"?fallback:"Respecter strictement ses éléments spatiaux, son ouverture et sa profondeur."}${registers.fantastic?" Fantastique visible dans ce même lieu : profondeur et échelle extraordinaires, paysage féerique lumineux ; conserver les éléments explicitement demandés.":""}${variation?` ${variation}`:""}`;
+  // The request already contains the full setting. Never inject a competing preset location.
+  const camera=[art.focalLength,art.cameraAngle,art.cameraHeight,art.cameraDistance].filter(Boolean).join(" ; ");
+  return `Architecture : le décor décrit dans DEMANDE EXACTE gouverne la scène ; conserver ses éléments spatiaux, son ouverture et sa profondeur. ${registers.fantastic?"Fantastique visible dans ce même lieu : échelle extraordinaire et paysage féerique lumineux.":""}${camera?` Caméra : ${camera}.`:""}`;
  }
 
  const pieces=[];
@@ -133,7 +141,21 @@ function productDirective(contract,mode){
 function buildProviderPrompt({contract,subjectBrief,platform,mode,registers,transformation,peoplePolicy,environment,platformPolicy}){
  const exact=clean(subjectBrief.exactUserRequest||subjectBrief.rawSubject||subjectBrief.coreTheme||""),product=productDirective(contract,mode),registerLine=[registers.cinematic&&"cinématographie",registers.fantastic&&"fantastique crédible",registers.architectural&&"architecture"].filter(Boolean).join(", ")||"socle cinématographique SDZ",narrativeRole=mode==="narrative_consequence"?"La prestation est la cause invisible de la transformation : ne pas illustrer une séance. Montrer la conséquence émotionnelle et corporelle non médicale, dans un moment décisif.":mode==="local_credibility"?"Publicité SDZ métaphorique : la prestation reste crédible dans un univers spectaculaire, sans prétendre montrer le cabinet réel.":"La prestation ou le produit peut être visible uniquement parce que ce mode exige une preuve réelle.";
  const lines=["SCÈNE / INTENTION",`Demande exacte : ${exact}`,narrativeRole,`État initial : ${transformation.before}`,`Moment dramatique : ${transformation.moment}`,`Évolution visible : ${transformation.after}`,"","ENVIRONNEMENT COMPOSÉ — DÉCOR / PROFONDEUR",environment,`Composition : ${platformPolicy.composition}.`,"Construire un premier plan sombre, un plan principal narratif et un arrière-plan profond ou une ouverture. Les détails essentiels restent lisibles. Le regard doit sentir un avant et un après hors champ. Le premier plan ne doit jamais envahir ni découper la zone de marque réservée.","","SUJET HUMAIN / SÉCURITÉ",peoplePolicy,product,"","DIRECTION PHOTOGRAPHIQUE SDZ",`Registres actifs : ${registerLine}.`,registers.cinematic||normalizePlatform(platform)!=="Google Business"?"Photographie éditoriale de luxe, photoréaliste, cadrage de film, lumière directionnelle plausible, matière de l’air et profondeur réelle.":"Photographie éditoriale premium, photoréaliste et claire.","EXPOSITION LUMINEUSE : noir profond détaillé, jamais sous-exposé ; sujet et trois plans éclairés et lisibles sur téléphone. Grande lumière latérale accueillante et lumière de remplissage dans les ombres, sans dominante bleue. OR ABONDANT : larges surfaces d’or métallique noble satiné ou poli, reliefs précieux et reflets présents au plan principal et en profondeur ; pas seulement quelques liserés. Préserver peau et produits réels. Ni orange, ambre, cuivre, jaune vif, beige, marron, bois clair, spa générique, Canva, 3D ou illustration.",mode==="narrative_consequence"&&!subjectBrief.forbidsPeople&&includesAny(exact,["dos","dorsal","dorsales"])?"Lisibilité dorsale : cadrer assez près pour lire le dos et les épaules, posture en transition, vêtement non volumineux. Montrer dans le même instant la tension résiduelle et une ouverture lumineuse accueillante ; pas une silhouette immobile perdue dans le noir.":"",registers.fantastic?"Le fantastique est assumé et visible à petite taille, comme un effet de cinéma photoréaliste ; pas de portail automatique, pas de cercle ésotérique, pas d’œil, pas de signes zodiacaux, pas de géométrie occulte, pas d’occultisme ou rituel.":"Respecter la demande explicite de réalisme, sans phénomène surnaturel.",`Branding futur : ${platformPolicy.brandingZone}. Cette réserve locale reste texturée, jamais un aplat noir ; pas de triangle lumineux ni détail narratif derrière la signature. Le reste de la scène conserve toute sa lumière et son or.`,"","SORTIE BRUTE","Générer uniquement la photographie. Aucun texte, aucune lettre, aucun logo, aucun zèbre, aucun médaillon, aucun pictogramme, aucune URL, aucun hashtag."].filter(line=>line!==undefined&&line!==null&&line!=="");
- return lines.join("\n");
+ const full=lines.join("\n");
+ if(clean(full).length<=4800)return full;
+ // Reduce generated scaffolding only: the exact request, people/product fidelity,
+ // palette, exposure, branding and output constraints remain byte-for-byte intact.
+ const compactEnvironment=environment.split("VARIATION VISUELLE IMPOSÉE")[0].trim();
+ const compact=["SCÈNE / INTENTION",`Demande exacte : ${exact}`,narrativeRole,
+  `Moment dramatique : ${transformation.moment}`,
+  "ENVIRONNEMENT COMPOSÉ — DÉCOR / PROFONDEUR",compactEnvironment,
+  `Composition : ${platformPolicy.composition}. Trois plans lisibles ; le sujet et son évolution restent immédiatement compréhensibles.`,
+  "SUJET HUMAIN / SÉCURITÉ",peoplePolicy,product,
+  "DIRECTION PHOTOGRAPHIQUE SDZ",`Registres actifs : ${registerLine}.`,
+  "Photographie éditoriale de luxe, photoréaliste, cadrage de film.",
+  ...lines.filter(line=>line.startsWith("EXPOSITION LUMINEUSE")||line.startsWith("Lisibilité dorsale")||line.startsWith("Le fantastique")||line.startsWith("Respecter la demande explicite")||line.startsWith("Branding futur")),
+  "SORTIE BRUTE",lines.at(-1)].filter(Boolean);
+ return compact.join("\n");
 }
 
 function buildSceneIntent({contract,subjectBrief,artDirection,platform}){
@@ -149,7 +171,7 @@ function auditSceneIntent(intent){
  if(intent?.validation?.requireDramaticMoment&&!/Moment dramatique/i.test(prompt))errors.push("moment_dramatique_absent");
  if(intent?.validation?.requireArchitecture&&!/Architecture/i.test(prompt))errors.push("registre_architecture_perdu");
  if(intent?.validation?.requireFantastic&&!/fantastique/i.test(prompt))errors.push("registre_fantastique_perdu");
- const literalAuditPrompt=prompt.replace(/aucun geste métier/gi,"");
+ const literalAuditPrompt=prompt.replace(intent?.exactUserRequest||"", "").replace(/aucun geste métier/gi,"");
  if(intent?.mode==="narrative_consequence"&&/geste précis sur la zone|praticien et bénéficiaire tous deux visibles|séance de massage|table de massage|L’action centrale reste|geste métier/i.test(literalAuditPrompt))errors.push("retour_illustration_litterale");
  if(prompt.length>4800)errors.push("prompt_trop_long");
  if(!/Aucun texte, aucune lettre, aucun logo/i.test(prompt))errors.push("interdit_branding_absent");
