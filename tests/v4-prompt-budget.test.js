@@ -11,6 +11,9 @@ test('le texte réel communiqué à Fabien prépare 133 variantes sans perte de 
  for(const service of [...Object.keys(SERVICE_REGISTRY),'Tous sujets'])for(const platform of Object.keys(PLATFORM_TEMPLATES)){
   const p=planV3({service,platform,subject,selectedRegisters:['Fantastique','Architecture','Cinématographie'],creativeSeed:'real-user-regression'});
   assert.equal(p.consistencyReport.sceneIntentAudit.ok,true,`${service}/${platform}`);
+  assert.match(p.artDirection.artistic.architectureDescription,/terrasse monumentale/);
+  assert.match(p.artDirection.artistic.locationFamily,/cascades suspendues/);
+  assert.deepEqual(p.artDirection.artistic.antiRepetitionElements,[]);
   assert.ok(p.photoBrief.prompt.length<=4800,`${service}/${platform}`);
   assert.equal(p.photoBrief.prompt.split(exact).length-1,1);
   assert.match(p.photoBrief.prompt,/EXPOSITION LUMINEUSE/);assert.match(p.photoBrief.prompt,/OR ABONDANT/);
